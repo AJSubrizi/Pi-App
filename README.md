@@ -75,19 +75,27 @@ It is a **sister project** to [pi.dev](https://pi.dev) — community-built, MIT,
 
 ## Install (macOS)
 
-Download the `.dmg` from [Releases](https://github.com/AJSubrizi/Pi-App/releases) (`aarch64` = Apple Silicon, `x64` = Intel).
+Download the `.dmg` from [Releases](https://github.com/AJSubrizi/Pi-App/releases)
+(`aarch64` = Apple Silicon, `x64` = Intel).
 
-Builds are **not Apple-notarized** (no paid Developer ID). Gatekeeper may say the app is damaged or move it to Trash. That is expected for unsigned community builds.
+Builds are **not Apple-notarized** (community MIT app, no paid Developer ID).
+macOS may show *“Pi cannot be opened”* / *Sposta nel Cestino* — that is Gatekeeper.
 
-**After dragging Pi to Applications**, run:
+**Recommended:** open the DMG and double-click **`Open Pi.command`**
+(installs to Applications, clears quarantine, opens the app).
+
+If macOS still blocks Pi:
+
+1. **System Settings → Privacy & Security**
+2. Scroll to the message about **Pi** → **Open Anyway**
+3. Confirm **Open**
+
+Or in Terminal:
 
 ```bash
 xattr -cr /Applications/Pi.app
-codesign --force --deep --sign - /Applications/Pi.app
 open /Applications/Pi.app
 ```
-
-Or: Finder → right-click **Pi** → **Open** → confirm.
 
 ---
 

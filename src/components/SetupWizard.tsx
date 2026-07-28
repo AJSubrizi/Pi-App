@@ -1,6 +1,8 @@
 /**
- * Full-screen first-run gate: install Pi (required) → enter the workbench.
- * No page scrollbars; content is centered and compact.
+ * Full-screen first-run gate:
+ * 1) Install / detect Pi CLI
+ * 2) Ensure models are available (or skip with guidance)
+ * 3) Enter workbench
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -19,7 +21,7 @@ export type SetupCliInfo = {
   cliAuthPresent: boolean;
 };
 
-type Step = "runtime" | "ready";
+type Step = "runtime" | "models" | "ready";
 
 type Props = {
   tr: Tr;
@@ -45,7 +47,7 @@ export function SetupWizard({
   initialCli,
   onComplete,
 }: Props) {
-  const [step, setStep] = useState<Step>(initialCli.found ? "ready" : "runtime");
+  const [step, setStep] = useState<Step>(initialCli.found ? "models" : "runtime");
   const [cli, setCli] = useState<SetupCliInfo>(initialCli);
   const [probing, setProbing] = useState(false);
   const [installing, setInstalling] = useState(false);
@@ -56,12 +58,14 @@ export function SetupWizard({
     null,
   );
   const [copied, setCopied] = useState(false);
+  const [modelsBusy, setModelsBusy] = useState(false);
+  const [modelIds, setModelIds] = useState<string[]>([]);
+  const [modelsSkipped, setModelsSkipped] = useState(false);
 
   useEffect(() => {
     void api.cliInstallCommands().then(setInstallCmds).catch(() => null);
   }, []);
 
-  // Live install progress from Host
   useEffect(() => {
     if (!api.isTauri()) return;
     let unlisten: (() => void) | undefined;
@@ -98,9 +102,7 @@ export function SetupWizard({
         cliAuthPresent: !!r.cliAuthPresent,
       };
       setCli(next);
-      if (next.found) {
-        setStatusMsg(null);
-      }
+      if (next.found) setStatusMsg(null);
       return next;
     } catch (e) {
       setError(String(e));
@@ -110,72 +112,72 @@ export function SetupWizard({
     }
   }, []);
 
-  // Soft auto-detect once when opening runtime step without CLI
+  const refreshModels = useCallback(async () => {
+    setModelsBusy(true);
+    setError(null);
+    try {
+      const res = await api.modelsListAvailable();
+      const ids = (res.models || [])
+        .map((m) => m.id)
+        .filter((id) => id && id !== "auto");
+      setModelIds(ids);
+      return ids.length;
+    } catch (e) {
+      setError(String(e));
+      setModelIds([]);
+      return 0;
+    } finally {
+      setModelsBusy(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (step !== "runtime" || cli.found) return;
     void recheck();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    if (step !== "models" || !cli.found) return;
+    void refreshModels();
+  }, [step, cli.found, refreshModels]);
+
   const runInstall = useCallback(async () => {
     if (installing) return;
     setInstalling(true);
     setError(null);
-    setProgress({
-      phase: "resolving",
-      message: tr("setup.detecting"),
-      percent: 0,
-    });
+    setProgress(null);
     try {
-      const res = await api.cliInstallLatest();
-      if (!res.ok) {
-        setError(res.message || tr("setup.error"));
-        return;
-      }
-      const next = await recheck(res.path);
+      await api.cliInstallLatest();
+      const next = await recheck();
       if (next?.found) {
-        setStep("ready");
+        setStep("models");
       } else {
-        setError(tr("setup.cli.missing"));
+        setError(tr("setup.error"));
       }
     } catch (e) {
-      const msg = String(e);
-      setError(msg);
-      setProgress((p) =>
-        p
-          ? { ...p, phase: "error", message: msg }
-          : { phase: "error", message: msg },
-      );
+      setError(String(e));
     } finally {
       setInstalling(false);
     }
   }, [installing, recheck, tr]);
 
   const pickBinary = useCallback(async () => {
-    setError(null);
     try {
-      const path = await api.pickCliBinary();
-      if (!path) return;
-      await api.settingsGet().then((s) =>
-        api.settingsSet({ ...s, manualCliPath: path }),
-      );
-      const next = await recheck(path);
-      if (next?.found) {
-        setStep("ready");
-      } else {
-        setError(tr("setup.cli.missing"));
-      }
+      const p = await api.pickCliBinary();
+      if (p) await recheck(p);
     } catch (e) {
       setError(String(e));
     }
-  }, [recheck, tr]);
+  }, [recheck]);
 
   const copyCmd = useCallback(async () => {
-    const cmd = installCmds?.primary;
-    if (!cmd) return;
+    const cmd =
+      installCmds?.primary ||
+      "npm install --global @earendil-works/pi-coding-agent@latest";
     try {
       await navigator.clipboard.writeText(cmd);
       setCopied(true);
-      window.setTimeout(() => setCopied(false), 1800);
+      window.setTimeout(() => setCopied(false), 1600);
     } catch {
       setError(tr("setup.error"));
     }
@@ -186,13 +188,19 @@ export function SetupWizard({
     void api.openExternalUrl(url).catch((e) => setError(String(e)));
   }, [installCmds]);
 
+  const openModelsDocs = useCallback(() => {
+    void api
+      .openExternalUrl("https://pi.dev/docs/latest")
+      .catch((e) => setError(String(e)));
+  }, []);
+
   const finishWizard = useCallback(async () => {
     try {
       const s = await api.settingsGet();
       await api.settingsSet({
         ...s,
         setupWizardCompleted: true,
-        authSetupDeferred: false,
+        authSetupDeferred: modelsSkipped || modelIds.length === 0,
         onboardingDone: true,
         setupSkipped: false,
       });
@@ -200,7 +208,7 @@ export function SetupWizard({
       /* still enter if probe succeeded */
     }
     onComplete(cli);
-  }, [cli, onComplete]);
+  }, [cli, modelIds.length, modelsSkipped, onComplete]);
 
   const percent = useMemo(() => {
     const p = progress?.percent;
@@ -208,7 +216,8 @@ export function SetupWizard({
     return Math.max(0, Math.min(100, Math.round(p)));
   }, [progress, installing]);
 
-  const stepIndex = step === "runtime" ? 0 : 1;
+  const stepIndex = step === "runtime" ? 0 : step === "models" ? 1 : 2;
+  const realModelCount = modelIds.length;
 
   return (
     <div
@@ -226,7 +235,9 @@ export function SetupWizard({
           <div
             className={
               "setup-logo" +
-              (installing || probing ? " setup-logo--spin" : " setup-logo--pulse")
+              (installing || probing || modelsBusy
+                ? " setup-logo--spin"
+                : " setup-logo--pulse")
             }
           >
             <PiLogo size={44} />
@@ -239,6 +250,7 @@ export function SetupWizard({
           {(
             [
               ["runtime", "setup.step.runtime"],
+              ["models", "setup.step.models"],
               ["ready", "setup.step.ready"],
             ] as const
           ).map(([id, key], i) => (
@@ -315,7 +327,7 @@ export function SetupWizard({
                   <button
                     type="button"
                     className="btn btn--primary setup-btn-primary"
-                    onClick={() => setStep("ready")}
+                    onClick={() => setStep("models")}
                   >
                     {tr("setup.continue")}
                   </button>
@@ -379,6 +391,100 @@ export function SetupWizard({
             </>
           )}
 
+          {step === "models" && (
+            <>
+              <div className="setup-card__head">
+                <h2>{tr("setup.models.title")}</h2>
+                <p>{tr("setup.models.hint")}</p>
+              </div>
+
+              {modelsBusy ? (
+                <p className="setup-hint">
+                  <Spinner className="size-3.5" /> {tr("setup.models.working")}
+                </p>
+              ) : realModelCount > 0 ? (
+                <>
+                  <p className="setup-hint">
+                    {tr("setup.models.found", { n: String(realModelCount) })}
+                  </p>
+                  <ul className="setup-checklist setup-models-list">
+                    {modelIds.slice(0, 8).map((id) => (
+                      <li key={id} className="is-ok">
+                        <span className="setup-check" />
+                        <span className="setup-mono">{id}</span>
+                      </li>
+                    ))}
+                    {modelIds.length > 8 ? (
+                      <li className="is-ok">
+                        <span className="setup-check" />+
+                        {modelIds.length - 8}
+                      </li>
+                    ) : null}
+                  </ul>
+                </>
+              ) : (
+                <>
+                  <p className="setup-hint">
+                    <strong>{tr("setup.models.empty")}</strong>
+                    <br />
+                    {tr("setup.models.emptyHint")}
+                  </p>
+                  <code className="setup-cmd">
+                    npm install -g @earendil-works/pi-coding-agent@latest
+                    {"\n"}
+                    pi
+                  </code>
+                  <p className="setup-hint">{tr("setup.models.cmdAuthHint")}</p>
+                </>
+              )}
+
+              <div className="setup-actions">
+                {realModelCount > 0 ? (
+                  <button
+                    type="button"
+                    className="btn btn--primary setup-btn-primary"
+                    onClick={() => {
+                      setModelsSkipped(false);
+                      setStep("ready");
+                    }}
+                  >
+                    {tr("setup.continue")}
+                  </button>
+                ) : null}
+                <div className="setup-actions__row">
+                  <button
+                    type="button"
+                    className="btn btn--ghost"
+                    disabled={modelsBusy}
+                    onClick={() => void refreshModels()}
+                  >
+                    {modelsBusy ? <Spinner className="size-3.5" /> : null}
+                    {tr("setup.models.recheck")}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn--ghost"
+                    onClick={openModelsDocs}
+                  >
+                    {tr("setup.models.openDocs")}
+                  </button>
+                </div>
+                {realModelCount === 0 ? (
+                  <button
+                    type="button"
+                    className="btn btn--ghost"
+                    onClick={() => {
+                      setModelsSkipped(true);
+                      setStep("ready");
+                    }}
+                  >
+                    {tr("setup.models.skip")}
+                  </button>
+                ) : null}
+              </div>
+            </>
+          )}
+
           {step === "ready" && (
             <>
               <div className="setup-card__head">
@@ -392,9 +498,14 @@ export function SetupWizard({
                     <span className="setup-check-meta">{cli.version}</span>
                   ) : null}
                 </li>
-                <li className="is-ok">
+                <li className={realModelCount > 0 ? "is-ok" : ""}>
                   <span className="setup-check" />
-                  {tr("setup.ready.authOk")}
+                  {realModelCount > 0
+                    ? tr("setup.ready.modelsOk")
+                    : tr("setup.ready.modelsSkip")}
+                  {realModelCount > 0 ? (
+                    <span className="setup-check-meta">{realModelCount}</span>
+                  ) : null}
                 </li>
               </ul>
               <div className="setup-actions">

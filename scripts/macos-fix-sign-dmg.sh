@@ -29,10 +29,29 @@ rebuild_dmg() {
   local volname="${3:-Pi}"
   local tmp
   tmp="$(mktemp -d)"
-  trap 'rm -rf "$tmp"' RETURN
+  # shellcheck disable=SC2064
+  trap "rm -rf '$tmp'" RETURN
   mkdir -p "$tmp/stage"
   cp -R "$app" "$tmp/stage/Pi.app"
   ln -s /Applications "$tmp/stage/Applications"
+  # Helper for Gatekeeper: double-click instead of dragging bare .app
+  cp "$ROOT/scripts/macos-Open-Pi.command" "$tmp/stage/Open Pi.command"
+  chmod +x "$tmp/stage/Open Pi.command"
+  # Short readme on the volume
+  cat > "$tmp/stage/README-macOS.txt" <<'EOF'
+Pi for macOS
+============
+
+These builds are not Apple-notarized (community MIT app).
+
+Recommended:
+  1. Double-click "Open Pi.command"
+  2. If macOS blocks Pi: System Settings → Privacy & Security → Open Anyway
+
+Or drag Pi.app to Applications, then in Terminal:
+  xattr -cr /Applications/Pi.app
+  open /Applications/Pi.app
+EOF
   rm -f "$dmg_out"
   hdiutil create \
     -volname "$volname" \

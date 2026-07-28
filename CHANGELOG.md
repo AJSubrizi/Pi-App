@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-07-28
+
+> **Highlight:** first-run models onboarding + macOS “Open Pi.command” in the DMG.
+
+### Added
+
+- **Setup wizard → Models step** — detect `pi --list-models`, guide new users to configure providers, recheck or skip.
+- **DMG helper** — `Open Pi.command` + README-macOS for Gatekeeper (not notarized builds).
+
+### Fixed
+
+- Clearer macOS install docs (Privacy & Security → Open Anyway).
+
 ## [0.2.2] - 2026-07-28
 
 > **Highlight:** macOS DMG opens without “damaged / move to Trash” (fixed ad-hoc codesign).
