@@ -1232,16 +1232,12 @@ html.platform-mac[data-theme="light"] .settings-page__content {
 
 /* Brand mark: theme via currentColor (dark → light glyph, light → dark glyph) */
 .g-icon--pi-mark,
-.g-icon--pi-mark,
-.pi-logo,
-.grok-logo {
+.pi-logo {
   color: var(--text-primary);
 }
 
 .g-icon--pi-mark svg,
-.g-icon--pi-mark svg,
-.pi-logo svg,
-.grok-logo svg {
+.pi-logo svg {
   display: block;
   width: 100%;
   height: 100%;
@@ -1249,8 +1245,6 @@ html.platform-mac[data-theme="light"] .settings-page__content {
 }
 
 .sidebar-brand-row__left .pi-logo,
-.sidebar-brand-row__left .grok-logo,
-.sidebar-brand-row__left .g-icon--pi-mark,
 .sidebar-brand-row__left .g-icon--pi-mark {
   color: inherit;
 }
@@ -1593,8 +1587,7 @@ html.platform-mac[data-theme="light"] .settings-page__content {
   letter-spacing: -0.02em;
 }
 
-.brand .pi-logo,
-.brand .grok-logo {
+.brand .pi-logo {
   color: var(--text-primary);
   flex-shrink: 0;
 }
@@ -15352,15 +15345,13 @@ html[data-theme="light"] .rim-sidebar {
   );
 }
 
-.composer-welcome-mark .pi-logo,
-.composer-welcome-mark .grok-logo {
+.composer-welcome-mark .pi-logo {
   display: block;
   filter: drop-shadow(0 2px 10px rgba(0, 0, 0, 0.35));
   animation: welcome-mark-float 7s ease-in-out 0.7s infinite;
 }
 
-[data-theme="light"] .composer-welcome-mark .pi-logo,
-[data-theme="light"] .composer-welcome-mark .grok-logo {
+[data-theme="light"] .composer-welcome-mark .pi-logo {
   filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.12));
 }
 
@@ -15508,7 +15499,6 @@ html[data-theme="light"] .rim-sidebar {
   .composer-welcome-mark,
   .composer-welcome-mark::before,
   .composer-welcome-mark .pi-logo,
-  .composer-welcome-mark .grok-logo,
   .composer-wrap--welcome .composer {
     animation: none !important;
   }

@@ -645,7 +645,7 @@ export const IDLE_SNAPSHOT: SessionSnapshot = {
   state: "idle",
   lastError: null,
   streamingMessageId: null,
-  backend: "grok_agent_stdio",
+  backend: "pi_rpc",
   modelId: null,
   projectPath: null,
   title: "",

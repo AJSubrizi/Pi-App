@@ -69,12 +69,12 @@ describe("attachments", () => {
   it("extracts absolute media paths from assistant prose", () => {
     const content = `完整路径：
 
-\`/Users/me/Library/Application Support/com.grokapp.pi-app/agent-home/sessions/abc/images/1.jpg\`
+\`/Users/me/Library/Application Support/dev.pi.pi-app/agent-home/sessions/abc/images/1.jpg\`
 
 also /tmp/other.png and /tmp/clip.mp4 and not a file.`;
     const atts = extractMediaPathsFromContent(content);
     expect(atts.map((a) => a.path)).toEqual([
-      "/Users/me/Library/Application Support/com.grokapp.pi-app/agent-home/sessions/abc/images/1.jpg",
+      "/Users/me/Library/Application Support/dev.pi.pi-app/agent-home/sessions/abc/images/1.jpg",
       "/tmp/other.png",
       "/tmp/clip.mp4",
     ]);

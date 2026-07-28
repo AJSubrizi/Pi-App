@@ -144,7 +144,7 @@ describe("shortPathLabel", () => {
 
   it("truncates long paths keeping basename tail", () => {
     const long =
-      "/Users/someone/Library/Application Support/com.grokapp.pi-app/agent-home/skills/my-skill/SKILL.md";
+      "/Users/someone/Library/Application Support/dev.pi.pi-app/agent-home/skills/my-skill/SKILL.md";
     const label = shortPathLabel(long, 40);
     expect(label.startsWith("…")).toBe(true);
     expect(label.length).toBeLessThanOrEqual(40);

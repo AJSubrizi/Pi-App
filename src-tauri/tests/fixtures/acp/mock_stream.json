@@ -22,13 +22,12 @@
     "proces",
     "s stub",
     " — not",
-    " pi ",
-    "agent ",
-    "stdio.",
-    " Ready",
-    " for P",
-    "R3 swa",
-    "p."
+    " pi ag",
+    "ent st",
+    "dio. R",
+    "eady f",
+    "or PR3",
+    " swap."
   ],
   "expect": {
     "minChunks": 2,

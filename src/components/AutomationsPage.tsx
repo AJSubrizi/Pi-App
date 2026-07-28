@@ -25,8 +25,8 @@ import { Tip } from "@/components/ui/tooltip";
 import {
   DEFAULT_EFFORT,
   DEFAULT_MODEL_ID,
-  GROK_BUILD_EFFORTS,
-  GROK_BUILD_MODELS,
+  PI_FALLBACK_EFFORTS,
+  PI_FALLBACK_MODELS,
   type ModelOption,
 } from "@/lib/agentCatalog";
 
@@ -330,12 +330,12 @@ export function AutomationsPage({
     [projects, t],
   );
 
-  const modelOptions = (models?.length ? models : GROK_BUILD_MODELS).map((m) => ({
+  const modelOptions = (models?.length ? models : PI_FALLBACK_MODELS).map((m) => ({
     value: m.id,
     label: m.label,
   }));
 
-  const effortOptions = GROK_BUILD_EFFORTS.map((e) => ({
+  const effortOptions = PI_FALLBACK_EFFORTS.map((e) => ({
     value: e.id,
     label: t(`effort.${e.id}` as "effort.high"),
   }));

@@ -32,7 +32,7 @@
 
 ## 数据
 
-- 文件：`paths::automations_file()`（macOS 常见：`~/Library/Application Support/com.grokapp.pi-app/automations.json`）
+- 文件：`paths::automations_file()`（macOS 常见：`~/Library/Application Support/dev.pi.pi-app/automations.json`）
 - 浏览器兜底：`localStorage["pi-app.automations"]`
 - 字段：`title` `prompt` `enabled` `projectId` `modelId` `effort` `frequency` `time` `weekdays` `notify` `lastRunAt` `nextRunAt`
 

@@ -113,7 +113,7 @@ import { createT, resolveLocale, type Locale } from "@/i18n";
 import {
   DEFAULT_EFFORT,
   DEFAULT_MODEL_ID,
-  GROK_BUILD_MODELS,
+  PI_FALLBACK_MODELS,
   PERMISSION_POLICIES,
   findModel,
   isValidEffort,
@@ -754,7 +754,7 @@ export default function App() {
   const [policy, setPolicy] = useState("ask");
   /** Live selectable models from Host (official CLI catalog only; not providers). */
   const [availableModels, setAvailableModels] =
-    useState<ModelOption[]>(GROK_BUILD_MODELS);
+    useState<ModelOption[]>(PI_FALLBACK_MODELS);
   /** Where model/permission chips are remembered. */
   const [prefsScope, setPrefsScope] =
     useState<ComposerPrefsScope>("global");
@@ -945,7 +945,7 @@ export default function App() {
 
   const applyComposerPrefs = useCallback(
     (prefs: api.ComposerPrefs, catalog: ModelOption[]) => {
-      const models = catalog.length > 0 ? catalog : GROK_BUILD_MODELS;
+      const models = catalog.length > 0 ? catalog : PI_FALLBACK_MODELS;
       let nextModelId: string;
       if (prefs.modelId && isValidModelId(prefs.modelId, models)) {
         nextModelId = prefs.modelId;
@@ -1039,7 +1039,7 @@ export default function App() {
                 reasoningEfforts: efforts,
               };
             })
-          : GROK_BUILD_MODELS;
+          : PI_FALLBACK_MODELS;
       setAvailableModels(catalog);
       if (
         settings.composerPrefsScope &&
@@ -2438,7 +2438,7 @@ export default function App() {
         sessionId: s.id,
         title: s.title || "Untitled",
         state: "idle",
-        backend: "grok_agent_stdio",
+        backend: "pi_rpc",
       });
     }
     if (openingSessionIdRef.current === s.id) {
@@ -2634,7 +2634,7 @@ export default function App() {
       sessionId: null,
       title: tr("session.new"),
       state: "idle",
-      backend: "grok_agent_stdio",
+      backend: "pi_rpc",
     });
     setLocalError(null);
     // Disconnect any live agent for previous session (best-effort).
@@ -2791,7 +2791,7 @@ export default function App() {
           sessionId: null,
           title: auto.title || tr("session.new"),
           state: "idle",
-          backend: "grok_agent_stdio",
+          backend: "pi_rpc",
         });
         {
           const idle = { ...IDLE_SNAPSHOT };
@@ -3071,7 +3071,7 @@ export default function App() {
                 sessionId: prev.sessionId,
                 title: prev.title,
                 state: "idle",
-                backend: prev.backend || "grok_agent_stdio",
+                backend: prev.backend || "pi_rpc",
               }
             : prev,
         );
@@ -5748,7 +5748,7 @@ export default function App() {
                 sessionId: sid,
                 title: prev.title,
                 state: "idle",
-                backend: prev.backend || "grok_agent_stdio",
+                backend: prev.backend || "pi_rpc",
               }
             : prev,
         );

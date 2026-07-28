@@ -62,30 +62,64 @@ EOF
   echo "==> wrote $dmg_out"
 }
 
-# Prefer release / target triple bundles from tauri build
+ver="$(python3 -c 'import json; print(json.load(open("package.json"))["version"])')"
+
+# tauri-action removes the .app after producing the DMG. When the bundle still
+# exists, sign it directly. Otherwise, extract it from the generated DMG first.
 APPS="$(find src-tauri/target -type d -name 'Pi.app' 2>/dev/null | sort -u)"
-if [[ -z "$APPS" ]]; then
-  echo "error: no Pi.app found under src-tauri/target" >&2
-  find src-tauri/target -name '*.app' 2>/dev/null | head -20 || true
-  exit 1
+if [[ -n "$APPS" ]]; then
+  echo "$APPS" | while IFS= read -r app; do
+    [[ -n "$app" ]] || continue
+    sign_app "$app"
+    # Sibling dmg dir used by tauri: .../bundle/dmg and .../bundle/macos
+    bundle_dir="$(cd "$(dirname "$app")/.." && pwd)"
+    dmg_dir="$bundle_dir/dmg"
+    mkdir -p "$dmg_dir"
+    arch="universal"
+    case "$app" in
+      *aarch64-apple-darwin*) arch="aarch64" ;;
+      *x86_64-apple-darwin*) arch="x64" ;;
+    esac
+    out="$dmg_dir/Pi_${ver}_${arch}.dmg"
+    rebuild_dmg "$app" "$out" "Pi"
+  done
+else
+  DMGS="$(find src-tauri/target -type f -name 'Pi_*.dmg' 2>/dev/null | sort -u)"
+  if [[ -z "$DMGS" ]]; then
+    echo "error: no Pi.app or Pi_*.dmg found under src-tauri/target" >&2
+    exit 1
+  fi
+
+  echo "$DMGS" | while IFS= read -r dmg; do
+    [[ -n "$dmg" ]] || continue
+    tmp="$(mktemp -d)"
+    mount_point=""
+    cleanup_extract() {
+      if [[ -n "$mount_point" ]]; then
+        hdiutil detach "$mount_point" -quiet || true
+      fi
+      rm -rf "$tmp"
+    }
+    trap cleanup_extract EXIT
+
+    mount_point="$(
+      hdiutil attach -nobrowse -readonly "$dmg" |
+        sed -nE 's|^.*(/Volumes/.*)$|\1|p' |
+        tail -1
+    )"
+    if [[ -z "$mount_point" || ! -d "$mount_point/Pi.app" ]]; then
+      echo "error: Pi.app not found inside $dmg" >&2
+      exit 1
+    fi
+    cp -R "$mount_point/Pi.app" "$tmp/Pi.app"
+    hdiutil detach "$mount_point" -quiet
+    mount_point=""
+
+    sign_app "$tmp/Pi.app"
+    rebuild_dmg "$tmp/Pi.app" "$dmg" "Pi"
+    cleanup_extract
+    trap - EXIT
+  done
 fi
 
-ver="$(python3 -c 'import json; print(json.load(open("package.json"))["version"])')"
-echo "$APPS" | while IFS= read -r app; do
-  [[ -n "$app" ]] || continue
-  sign_app "$app"
-  # Sibling dmg dir used by tauri: .../bundle/dmg and .../bundle/macos
-  bundle_dir="$(cd "$(dirname "$app")/.." && pwd)"
-  dmg_dir="$bundle_dir/dmg"
-  mkdir -p "$dmg_dir"
-  arch="universal"
-  case "$app" in
-    *aarch64-apple-darwin*) arch="aarch64" ;;
-    *x86_64-apple-darwin*) arch="x64" ;;
-  esac
-  out="$dmg_dir/Pi_${ver}_${arch}.dmg"
-  rebuild_dmg "$app" "$out" "Pi"
-done
-
 echo "OK — macOS ad-hoc sign + dmg rebuild complete"
-

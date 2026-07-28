@@ -16,7 +16,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import {
-  GROK_BUILD_MODELS,
+  PI_FALLBACK_MODELS,
   effortDisplayLabel,
   effortsForModel,
   findModel,
@@ -215,14 +215,14 @@ function resolveEffortLabel(
 export function ComposerModelMenu({
   modelId,
   effort,
-  models = GROK_BUILD_MODELS,
+  models = PI_FALLBACK_MODELS,
   labels,
   onModel,
   onEffort,
 }: ComposerModelMenuProps) {
   const [nested, setNested] = useState<Nested>(null);
   const menu = usePortalMenu(240, 280, nested ?? "root");
-  const modelList = models.length > 0 ? models : GROK_BUILD_MODELS;
+  const modelList = models.length > 0 ? models : PI_FALLBACK_MODELS;
   const activeModel = findModel(modelId, modelList);
   const effortList = effortsForModel(activeModel);
 
@@ -507,4 +507,3 @@ export function ComposerApprovalsMenu({
     </MenuShell>
   );
 }
-

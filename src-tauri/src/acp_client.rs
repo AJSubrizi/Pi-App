@@ -1422,7 +1422,7 @@ impl AcpClient {
                         .and_then(|v| v.as_str())
                         .map(|s| s.to_string());
                     let _ = self.event_tx.send(AcpEvent::State {
-                        backend: "grok_agent_stdio".into(),
+                        backend: "pi_rpc".into(),
                         agent_session_id: Some(sid.clone()),
                         model_id,
                     });
@@ -1469,7 +1469,7 @@ impl AcpClient {
             .map(|s| s.to_string());
 
         let _ = self.event_tx.send(AcpEvent::State {
-            backend: "grok_agent_stdio".into(),
+            backend: "pi_rpc".into(),
             agent_session_id: Some(sid.clone()),
             model_id,
         });
@@ -1606,13 +1606,13 @@ impl AcpClient {
             .and_then(|v| v.as_str())
         {
             let _ = self.event_tx.send(AcpEvent::State {
-                backend: "grok_agent_stdio".into(),
+                backend: "pi_rpc".into(),
                 agent_session_id: Some(sid),
                 model_id: Some(mid.to_string()),
             });
         } else {
             let _ = self.event_tx.send(AcpEvent::State {
-                backend: "grok_agent_stdio".into(),
+                backend: "pi_rpc".into(),
                 agent_session_id: Some(sid),
                 model_id: Some(model_id.to_string()),
             });

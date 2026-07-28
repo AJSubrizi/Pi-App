@@ -427,9 +427,9 @@ fn session_lookup_host_hint(user_text: &str) -> Option<String> {
 This looks like a request to read a **Pi / agent session** by UUID.\n\
 Do **not** scan the whole home directory or assume Claude/Codex/Cursor storage first.\n\
 Prefer, in order:\n\
-1. Pi journal: `~/Library/Application Support/com.grokapp.pi-app/sessions/<id>/messages.json` \
+1. Pi journal: `~/Library/Application Support/dev.pi.pi-app/sessions/<id>/messages.json` \
 (and `sessions_index.json` for meta).\n\
-2. Pi agent-home: `…/com.grokapp.pi-app/agent-home/sessions/<encoded-cwd>/<agentSessionId>/` \
+2. Pi agent-home: `…/dev.pi.pi-app/agent-home/sessions/<encoded-cwd>/<agentSessionId>/` \
 (chat_history.jsonl, updates.jsonl) — map app session id via sessions_index.agentSessionId.\n\
 3. Only if missing there, try Claude/Codex/Cursor resume paths with a **narrow** query.\n\
 Avoid unbounded `find ~` / multi-GB scans; use index files and known roots.\n\

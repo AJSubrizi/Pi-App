@@ -23,7 +23,7 @@ Flags **必须在** `stdio` 之前。连接后 `session/set_model` 再对齐一�
 
 ## 推理强度（effort）
 
-CLI `models_cache.json` 每模型可带 `info.reasoning_efforts: [{id,value,label,description,default}]`。Host 经 `AvailableModel.reasoningEfforts`（`isDefault`）下发；composer 列表优先用该数组，空则回退静态 `GROK_BUILD_EFFORTS`（`low` | `medium` | `high`）。展示标签优先用 catalog `label`，否则 i18n `effort.high|medium|low`。
+CLI `models_cache.json` 每模型可带 `info.reasoning_efforts: [{id,value,label,description,default}]`。Host 经 `AvailableModel.reasoningEfforts`（`isDefault`）下发；composer 列表优先用该数组，空则回退静态 `PI_FALLBACK_EFFORTS`（`low` | `medium` | `high`）。展示标签优先用 catalog `label`，否则 i18n `effort.high|medium|low`。
 
 Spawn：`--reasoning-effort <id>`。无模型级默认时 App 默认 **`medium`**；有 `default: true` 时用模型默认。中途修改：soft-disconnect agent → 下一条消息重连。无 `session/set_effort` RPC。
 

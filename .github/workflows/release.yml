@@ -106,9 +106,12 @@ jobs:
           # Windows runners default to cp1252; bilingual CHANGELOG needs UTF-8 stdout.
           PYTHONIOENCODING: utf-8
           PYTHONUTF8: "1"
+          INPUT_TAG: ${{ github.event.inputs.tag }}
         run: |
           set -euo pipefail
-          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+          if [[ -n "$INPUT_TAG" ]]; then
+            VER="$INPUT_TAG"
+          elif [[ "${{ github.ref_type }}" == "tag" ]]; then
             VER="${{ github.ref_name }}"
           else
             VER="v$(python3 -c 'import json; print(json.load(open("package.json"))["version"])')"
@@ -116,9 +119,9 @@ jobs:
           python3 scripts/changelog-for-release.py "$VER" | tee release-notes.md
           # Multiline body for tauri-action `releaseBody` (no releaseBodyFile input).
           {
-            echo "RELEASE_BODY<<GROKAPP_EOF"
+            echo "RELEASE_BODY<<PI_RELEASE_EOF"
             cat release-notes.md
-            echo "GROKAPP_EOF"
+            echo "PI_RELEASE_EOF"
           } >> "$GITHUB_ENV"
 
       # NOTE: Do NOT pass empty APPLE_* / TAURI_SIGNING_* secrets.
@@ -133,7 +136,7 @@ jobs:
           # Root package.json + src-tauri/ layout (create-tauri-app style)
           projectPath: .
           # Prefer the pushed git tag; fallback replaces __VERSION__ from tauri.conf.json
-          tagName: ${{ github.ref_type == 'tag' && github.ref_name || 'v__VERSION__' }}
+          tagName: ${{ github.event.inputs.tag || (github.ref_type == 'tag' && github.ref_name) || 'v__VERSION__' }}
           releaseName: "Pi v__VERSION__"
           releaseBody: ${{ env.RELEASE_BODY }}
           releaseDraft: false
@@ -149,10 +152,13 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INPUT_TAG: ${{ github.event.inputs.tag }}
         run: |
           set -euo pipefail
           bash scripts/macos-fix-sign-dmg.sh
-          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+          if [[ -n "$INPUT_TAG" ]]; then
+            TAG="$INPUT_TAG"
+          elif [[ "${{ github.ref_type }}" == "tag" ]]; then
             TAG="${{ github.ref_name }}"
           else
             TAG="v$(python3 -c 'import json; print(json.load(open("package.json"))["version"])')"
@@ -170,9 +176,12 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INPUT_TAG: ${{ github.event.inputs.tag }}
         run: |
           set -euo pipefail
-          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+          if [[ -n "$INPUT_TAG" ]]; then
+            TAG="$INPUT_TAG"
+          elif [[ "${{ github.ref_type }}" == "tag" ]]; then
             TAG="${{ github.ref_name }}"
           else
             TAG="v$(python3 -c 'import json; print(json.load(open("package.json"))["version"])')"

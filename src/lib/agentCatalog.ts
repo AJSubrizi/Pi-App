@@ -61,15 +61,15 @@ export const COMPOSER_PREFS_SCOPES: ComposerPrefsScope[] = [
  * Official OAuth currently exposes pi-4.5 only (2026-07 probe).
  * `pi-build` is NOT listed — CLI rejects it as unknown model id.
  */
-export const GROK_BUILD_MODELS: ModelOption[] = [
+export const PI_FALLBACK_MODELS: ModelOption[] = [
   { id: "auto", label: "Pi default", isDefault: true, source: "pi" },
 ];
 
 export const DEFAULT_MODEL_ID =
-  GROK_BUILD_MODELS.find((m) => m.isDefault)?.id ?? "auto";
+  PI_FALLBACK_MODELS.find((m) => m.isDefault)?.id ?? "auto";
 
 /** Static fallback when the selected model has no `reasoning_efforts` in cache. */
-export const GROK_BUILD_EFFORTS: EffortOption[] = [
+export const PI_FALLBACK_EFFORTS: EffortOption[] = [
   { id: "off" },
   { id: "minimal" },
   { id: "low" },
@@ -108,7 +108,7 @@ export const PERMISSION_POLICIES: {
 
 export function isValidModelId(
   id: string,
-  catalog: ModelOption[] = GROK_BUILD_MODELS,
+  catalog: ModelOption[] = PI_FALLBACK_MODELS,
 ): boolean {
   return catalog.some((m) => m.id === id);
 }
@@ -126,12 +126,12 @@ export function effortsForModel(
     model?.reasoningEfforts && model.reasoningEfforts.length > 0
       ? model.reasoningEfforts
       : null;
-  return fromArg ?? fromModel ?? GROK_BUILD_EFFORTS;
+  return fromArg ?? fromModel ?? PI_FALLBACK_EFFORTS;
 }
 
 /**
  * Validate an effort id against the selected model's efforts when known;
- * otherwise against the static GROK_BUILD_EFFORTS fallback.
+ * otherwise against the static PI_FALLBACK_EFFORTS fallback.
  */
 export function isValidEffort(
   id: string,
@@ -196,7 +196,7 @@ export function pickDefaultModelId(catalog: ModelOption[]): string {
 /** Find a model in catalog by id. */
 export function findModel(
   id: string,
-  catalog: ModelOption[] = GROK_BUILD_MODELS,
+  catalog: ModelOption[] = PI_FALLBACK_MODELS,
 ): ModelOption | undefined {
   return catalog.find((m) => m.id === id);
 }

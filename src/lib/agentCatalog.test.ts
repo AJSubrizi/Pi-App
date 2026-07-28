@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_EFFORT,
-  GROK_BUILD_EFFORTS,
+  PI_FALLBACK_EFFORTS,
   effortDisplayLabel,
   effortsForModel,
   isValidEffort,
@@ -47,10 +47,10 @@ const modelCustomOnly: ModelOption = {
 describe("effortsForModel", () => {
   it("returns static fallback when model has no efforts", () => {
     expect(effortsForModel({ id: "x", label: "X" })).toEqual(
-      GROK_BUILD_EFFORTS,
+      PI_FALLBACK_EFFORTS,
     );
-    expect(effortsForModel(null)).toEqual(GROK_BUILD_EFFORTS);
-    expect(effortsForModel(undefined)).toEqual(GROK_BUILD_EFFORTS);
+    expect(effortsForModel(null)).toEqual(PI_FALLBACK_EFFORTS);
+    expect(effortsForModel(undefined)).toEqual(PI_FALLBACK_EFFORTS);
   });
 
   it("returns model efforts when non-empty", () => {

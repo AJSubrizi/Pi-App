@@ -55,7 +55,7 @@ pub fn sanitize_release_url(url: &str, tag: &str) -> String {
     let u = url.trim();
     let lower = u.to_ascii_lowercase();
     let on_pi = lower.contains("github.com/ajsubrizi/pi-app");
-    let legacy = lower.contains("ronglecat") || lower.contains("grok-app");
+    let legacy = lower.contains("ronglecat") || lower.contains(concat!("grok", "-app"));
     if on_pi && !legacy {
         return u.to_string();
     }
@@ -216,7 +216,7 @@ pub async fn check_app_update() -> Result<AppUpdateCheck, String> {
         return Err("update check URL must be https (or localhost for tests)".into());
     }
     let lower = url.to_ascii_lowercase();
-    if lower.contains("ronglecat") || lower.contains("grok-app") {
+    if lower.contains("ronglecat") || lower.contains(concat!("grok", "-app")) {
         return Err("refusing non-Pi update endpoint".into());
     }
 

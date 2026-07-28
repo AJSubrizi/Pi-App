@@ -5,7 +5,7 @@
 
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { GROK_BUILD_EFFORTS } from "@/lib/agentCatalog";
+import { PI_FALLBACK_EFFORTS } from "@/lib/agentCatalog";
 import { IconChevronDown } from "@/components/icons";
 import { Tip } from "@/components/ui/tooltip";
 import { useFloatingMenu } from "@/lib/floatingMenu";
@@ -162,7 +162,7 @@ export function EffortPanel({
               </span>
             </div>
             <div className="effort-panel__hint">
-              {GROK_BUILD_EFFORTS.map((e) => e.id).join(" · ")}
+              {PI_FALLBACK_EFFORTS.map((e) => e.id).join(" · ")}
             </div>
           </div>,
           document.body,
