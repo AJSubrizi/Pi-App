@@ -141,8 +141,30 @@ jobs:
           args: ${{ matrix.args }}
           includeUpdaterJson: false
 
-      # 绿色版：免安装 zip（单文件 exe + 说明）。WebView2 仍由系统提供。
-      - name: Windows portable zip (绿色版)
+      # Linker-only ad-hoc signatures lack sealed Resources → macOS says "damaged"
+      # and moves the app to Trash. Re-sign + rebuild DMG, then re-upload.
+      - name: macOS re-sign app + rebuild DMG
+        if: startsWith(matrix.platform, 'macos')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          bash scripts/macos-fix-sign-dmg.sh
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            TAG="${{ github.ref_name }}"
+          else
+            TAG="v$(python3 -c 'import json; print(json.load(open("package.json"))["version"])')"
+          fi
+          # Upload fixed dmgs (clobber broken ones from tauri-action)
+          while IFS= read -r dmg; do
+            echo "upload $dmg -> $TAG"
+            gh release upload "$TAG" "$dmg" --clobber
+          done < <(find src-tauri/target -type f -name 'Pi_*.dmg' 2>/dev/null | sort -u)
+
+      # Windows portable zip (no installer). WebView2 still from the system.
+      - name: Windows portable zip
         if: matrix.platform == 'windows-latest'
         shell: bash
         env:

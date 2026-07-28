@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-07-28
+
+> **Highlight:** macOS DMG opens without “damaged / move to Trash” (fixed ad-hoc codesign).
+
+### Fixed
+
+- **macOS packaging** — re-sign `Pi.app` with a full ad-hoc signature (sealed Resources) and rebuild the DMG in CI.
+- README install steps for Gatekeeper / quarantine.
+
 ## [0.2.1] - 2026-07-28
 
 > **Highlight:** update links always open **AJSubrizi/Pi-App**.

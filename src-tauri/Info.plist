@@ -3,8 +3,6 @@
 <plist version="1.0">
 <dict>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Pi needs the microphone for voice dictation into the composer.</string>
-  <key>NSMicrophoneUsageDescription</key>
-  <string>Pi needs the microphone for voice dictation and live voice sessions with agent delegation.</string>
+	<string>Pi may use the microphone for optional voice features.</string>
 </dict>
 </plist>

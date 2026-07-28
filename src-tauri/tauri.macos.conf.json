@@ -20,5 +20,11 @@
       }
     ],
     "macOSPrivateApi": true
+  },
+  "bundle": {
+    "macOS": {
+      "signingIdentity": "-",
+      "infoPlist": "Info.plist"
+    }
   }
 }

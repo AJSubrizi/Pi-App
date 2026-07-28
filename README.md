@@ -73,6 +73,24 @@ It is a **sister project** to [pi.dev](https://pi.dev) — community-built, MIT,
 
 ---
 
+## Install (macOS)
+
+Download the `.dmg` from [Releases](https://github.com/AJSubrizi/Pi-App/releases) (`aarch64` = Apple Silicon, `x64` = Intel).
+
+Builds are **not Apple-notarized** (no paid Developer ID). Gatekeeper may say the app is damaged or move it to Trash. That is expected for unsigned community builds.
+
+**After dragging Pi to Applications**, run:
+
+```bash
+xattr -cr /Applications/Pi.app
+codesign --force --deep --sign - /Applications/Pi.app
+open /Applications/Pi.app
+```
+
+Or: Finder → right-click **Pi** → **Open** → confirm.
+
+---
+
 ## Develop
 
 ```bash
