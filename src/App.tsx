@@ -6706,6 +6706,8 @@ export default function App() {
       "providersModels.modelsTitle",
       "providersModels.modelsDescription",
       "providersModels.modelsEmpty",
+      "providersModels.modelCount",
+      "providersModels.defaultModel",
       "providersModels.packagesTitle",
       "providersModels.packagesDescription",
       "providersModels.openExtensions",

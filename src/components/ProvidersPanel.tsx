@@ -342,7 +342,11 @@ export function ProvidersPanel({
         </div>
       )}
 
-      <div className="prov-split">
+      <div
+        className={
+          "prov-split" + (rightMode === "empty" ? " is-idle" : "")
+        }
+      >
         {/* ── Left: list ───────────────────────────────────────────── */}
         <aside className="prov-split__list">
           <button

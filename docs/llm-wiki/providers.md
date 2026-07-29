@@ -35,3 +35,24 @@ review before invoking Pi CLI.
 
 API keys are never returned to the frontend after saving and must not be copied
 into App-owned metadata or logs.
+
+## Curated connection catalog
+
+Settings presents pinned package versions and the authentication method verified
+from each package's published documentation:
+
+| Account | Pi package | Authentication |
+|---------|------------|----------------|
+| xAI | `pi-xai-oauth` | OAuth |
+| Claude | `@gotgenes/pi-anthropic-auth` | OAuth |
+| OpenAI Codex | `@cortexkit/pi-openai-auth` | OAuth |
+| Google | `pi-antigravity` | OAuth with PKCE |
+| Kimi | `@zgltyq/pi-provider-kimi-code` | OAuth |
+| Qwen | `pi-qwen-provider` | OAuth |
+| GLM / Z.AI | `@thesethrose/pi-zai-provider` | API key |
+| Xiaomi MiMo | `pi-xiaomi-mimo-provider` | API key |
+
+Selecting a provider opens the existing package trust review. Installation uses
+`pi install` and then shows the provider's documented `/login <provider>`
+command. Installed packages keep a persistent **Finish login** or
+**Configure key** action.

@@ -1166,10 +1166,49 @@ const en = {
     "Models reported by Pi CLI. Provider identifiers stay visible so you always know which route is being used.",
   "providersModels.modelsEmpty":
     "No models reported yet. Check the Pi runtime, then refresh the app.",
+  "providersModels.modelCount": "{count} available",
+  "providersModels.defaultModel": "Default",
   "providersModels.packagesTitle": "Provider packages",
   "providersModels.packagesDescription":
     "Provider adapters are Pi packages. Install only reviewed, pinned sources from the Extensions screen.",
   "providersModels.openExtensions": "Review Pi packages",
+  "providerConnect.title": "Connect a provider",
+  "providerConnect.description":
+    "Choose an account, review its Pi package, then install it. OAuth credentials remain managed by Pi.",
+  "providerConnect.oauth": "OAuth",
+  "providerConnect.apiKey": "API key",
+  "providerConnect.installed": "Installed",
+  "providerConnect.finishLogin": "Finish login",
+  "providerConnect.configureKey": "Configure key",
+  "providerConnect.review": "Review & connect",
+  "providerConnect.reviewTitle": "Connect {name}",
+  "providerConnect.package": "Package",
+  "providerConnect.authentication": "Authentication",
+  "providerConnect.reviewNotice":
+    "Pi packages run in the local agent process. The exact version above is pinned and will be installed through Pi CLI.",
+  "providerConnect.install": "Install package",
+  "providerConnect.installing": "Installing…",
+  "providerConnect.readyTitle": "{name} is ready",
+  "providerConnect.readyDescription":
+    "Open Pi’s terminal and run {command} to finish authentication.",
+  "providerConnect.copyLogin": "Copy login command",
+  "providerConnect.copied": "Copied",
+  "providerConnect.xai.description":
+    "Use an xAI or Grok subscription with browser or device OAuth.",
+  "providerConnect.anthropic.description":
+    "Connect a Claude subscription through Anthropic OAuth.",
+  "providerConnect.openai.description":
+    "Connect a ChatGPT or Codex account through OpenAI OAuth.",
+  "providerConnect.google.description":
+    "Connect Google Cloud Code Assist through OAuth with PKCE.",
+  "providerConnect.kimi.description":
+    "Use a Kimi Code membership with browser OAuth and automatic refresh.",
+  "providerConnect.qwen.description":
+    "Connect qwen.ai through OAuth, including its free daily allowance.",
+  "providerConnect.glm.description":
+    "Add Z.AI GLM models using a Z.AI API key.",
+  "providerConnect.mimo.description":
+    "Add Xiaomi MiMo models using a Xiaomi API key.",
   "prov.configuredTitle": "Custom providers",
   "prov.lead":
     "Connect an OpenAI-compatible gateway. Pi reads this configuration from the active agent profile.",

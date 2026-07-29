@@ -61,6 +61,7 @@ import * as api from "@/lib/api";
 import { ExtensionsPanel } from "@/components/ExtensionsPanel";
 import { PiExtensionsPanel } from "@/components/PiExtensionsPanel";
 import { ProvidersPanel } from "@/components/ProvidersPanel";
+import { ProviderConnectionsPanel } from "@/components/ProviderConnectionsPanel";
 import { ProjectInspectPanel } from "@/components/ProjectInspectPanel";
 import { PermissionRulesPanel } from "@/components/PermissionRulesPanel";
 import { ContextSettingsPanel } from "@/components/ContextSettingsPanel";
@@ -806,6 +807,20 @@ export function SettingsPage({
                 : section === "shortcuts"
                   ? t("settings.nav.shortcuts")
                   : t("settings.nav.about");
+
+  const modelGroups = Array.from(
+    (availableModels ?? []).reduce((groups, model) => {
+      const slash = model.id.indexOf("/");
+      const provider =
+        slash > 0
+          ? model.id.slice(0, slash)
+          : model.source?.trim() || "pi";
+      const current = groups.get(provider) ?? [];
+      current.push(model);
+      groups.set(provider, current);
+      return groups;
+    }, new Map<string, ModelOption[]>()),
+  ).sort(([left], [right]) => left.localeCompare(right));
 
   return (
     <div className="settings-page" data-testid="settings-page">
@@ -1746,6 +1761,10 @@ export function SettingsPage({
 
         {section === "providers-models" && (
           <div className="settings-section providers-models">
+            <ProviderConnectionsPanel
+              locale={resolveLocale(locale)}
+              projectPath={projectPath}
+            />
             <ProvidersPanel
               locale={resolveLocale(locale)}
               onProviderActivated={onProviderActivated}
@@ -1757,14 +1776,47 @@ export function SettingsPage({
               <p className="settings-row__desc">
                 {t("providersModels.modelsDescription")}
               </p>
-              <div className="providers-models__model-list">
-                {(availableModels ?? []).map((model) => (
-                  <div className="providers-models__model-row" key={model.id}>
-                    <span>{model.label || model.id}</span>
-                    <code>{model.id}</code>
-                  </div>
+              <div className="providers-models__model-groups">
+                {modelGroups.map(([provider, models]) => (
+                  <section
+                    className="providers-models__model-group"
+                    key={provider}
+                    aria-labelledby={`model-provider-${provider}`}
+                  >
+                    <div className="providers-models__provider-head">
+                      <h3 id={`model-provider-${provider}`}>{provider}</h3>
+                      <span>
+                        {t("providersModels.modelCount", {
+                          count: models.length,
+                        })}
+                      </span>
+                    </div>
+                    <div className="providers-models__model-list">
+                      {models.map((model) => {
+                        const slash = model.id.indexOf("/");
+                        const modelId =
+                          slash > 0 ? model.id.slice(slash + 1) : model.id;
+                        return (
+                          <div
+                            className="providers-models__model-row"
+                            key={model.id}
+                          >
+                            <div>
+                              <strong>{model.label || modelId}</strong>
+                              {model.isDefault && (
+                                <span>
+                                  {t("providersModels.defaultModel")}
+                                </span>
+                              )}
+                            </div>
+                            <code>{modelId}</code>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </section>
                 ))}
-                {!availableModels?.length && (
+                {!modelGroups.length && (
                   <p className="settings-row__desc">
                     {t("providersModels.modelsEmpty")}
                   </p>

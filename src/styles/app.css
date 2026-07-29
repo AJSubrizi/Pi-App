@@ -10143,6 +10143,20 @@ textarea::-webkit-scrollbar-thumb:active,
   min-height: 0;
 }
 
+.prov-split.is-idle {
+  grid-template-columns: 1fr;
+  min-height: 0;
+}
+
+.prov-split.is-idle .prov-split__list {
+  max-height: none;
+  border-right: 0;
+}
+
+.prov-split.is-idle .prov-split__detail {
+  display: none;
+}
+
 .prov-detail-empty {
   height: 100%;
   min-height: 280px;
@@ -10336,27 +10350,167 @@ textarea::-webkit-scrollbar-thumb:active,
   gap: 12px;
 }
 
+.provider-connect {
+  display: grid;
+  gap: 14px;
+  padding: 20px;
+  border-radius: var(--radius-lg);
+  background: var(--bg-elevated);
+}
+
+.provider-connect__head p {
+  margin: 5px 0 0;
+  max-width: 68ch;
+}
+
+.provider-connect__list {
+  display: grid;
+}
+
+.provider-connect__row {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr) 150px;
+  align-items: center;
+  gap: 20px;
+  min-height: 68px;
+  padding: 10px 0;
+}
+
+.provider-connect__row + .provider-connect__row {
+  border-top: 1px solid color-mix(in srgb, currentColor 8%, transparent);
+}
+
+.provider-connect__identity {
+  display: grid;
+  gap: 3px;
+}
+
+.provider-connect__identity strong {
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.provider-connect__identity span,
+.provider-connect__installed {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.provider-connect__row p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.provider-connect__action {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.provider-connect__installed {
+  font-weight: 600;
+  color: var(--success);
+}
+
+.provider-connect__review {
+  display: grid;
+  gap: 16px;
+}
+
+.provider-connect__review > p {
+  margin: 0;
+}
+
+.provider-connect__review dl {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  gap: 10px 18px;
+  margin: 0;
+}
+
+.provider-connect__review dt {
+  color: var(--text-tertiary);
+}
+
+.provider-connect__review dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--text-primary);
+}
+
+.providers-models__model-groups {
+  display: grid;
+  gap: 18px;
+}
+
+.providers-models__model-group {
+  display: grid;
+  gap: 4px;
+}
+
+.providers-models__provider-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 2px 0 8px;
+}
+
+.providers-models__provider-head h3 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 650;
+  text-transform: capitalize;
+}
+
+.providers-models__provider-head span {
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
 .providers-models__model-list {
   display: grid;
-  gap: 2px;
 }
 
 .providers-models__model-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(180px, auto);
+  grid-template-columns: minmax(0, 1fr) minmax(220px, auto);
   align-items: center;
   gap: 20px;
-  min-height: 42px;
-  padding: 8px 0;
+  min-height: 48px;
+  padding: 9px 12px;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--bg-primary) 62%, transparent);
 }
 
 .providers-models__model-row + .providers-models__model-row {
-  border-top: 1px solid color-mix(in srgb, currentColor 8%, transparent);
+  margin-top: 3px;
 }
 
-.providers-models__model-row > span {
+.providers-models__model-row > div {
   min-width: 0;
-  font-weight: 560;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.providers-models__model-row strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 13.5px;
+  font-weight: 570;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.providers-models__model-row > div span {
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+  font-size: 11px;
 }
 
 .providers-models__model-row code {
@@ -10374,6 +10528,16 @@ textarea::-webkit-scrollbar-thumb:active,
 }
 
 @media (max-width: 760px) {
+  .provider-connect__row {
+    grid-template-columns: 1fr;
+    gap: 7px;
+    padding: 14px 0;
+  }
+
+  .provider-connect__action {
+    justify-content: flex-start;
+  }
+
   .providers-models__model-row,
   .providers-models__packages {
     grid-template-columns: 1fr;
