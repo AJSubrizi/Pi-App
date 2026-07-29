@@ -596,6 +596,33 @@ export async function fsWriteAbsolute(
   });
 }
 
+export type AgentContextFile = {
+  name: "AGENTS.md" | "SYSTEM.md";
+  path: string;
+  content: string;
+  exists: boolean;
+  mtimeMs: number;
+};
+
+export type AgentContextResult = {
+  home: string;
+  agents: AgentContextFile;
+  system: AgentContextFile;
+};
+
+/** Context files loaded by Pi from the active independent/shared agent profile. */
+export async function agentContextGet() {
+  return invoke<AgentContextResult>("agent_context_get");
+}
+
+/** Save AGENTS.md or SYSTEM.md; the host soft-respawns so the next turn reloads it. */
+export async function agentContextSet(
+  kind: "agents" | "system",
+  content: string,
+) {
+  return invoke<AgentContextResult>("agent_context_set", { kind, content });
+}
+
 /** Read absolute filesystem path for chat → resource pane preview. */
 export async function fsReadAbsolute(path: string) {
   return invoke<FsReadResult>("fs_read_absolute", { path });

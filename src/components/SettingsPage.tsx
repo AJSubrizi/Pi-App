@@ -20,6 +20,7 @@ import {
   IconCheck,
   IconDoctor,
   IconInfo,
+  IconInstructions,
   IconKeyboard,
   IconMinimize,
   IconPuzzle,
@@ -58,6 +59,7 @@ import { ExtensionsPanel } from "@/components/ExtensionsPanel";
 import { PiExtensionsPanel } from "@/components/PiExtensionsPanel";
 import { ProjectInspectPanel } from "@/components/ProjectInspectPanel";
 import { PermissionRulesPanel } from "@/components/PermissionRulesPanel";
+import { ContextSettingsPanel } from "@/components/ContextSettingsPanel";
 import { GlassModal } from "@/components/GlassModal";
 import {
   createT,
@@ -69,6 +71,7 @@ import {
 export type SettingsSectionId =
   | "general"
   | "appearance"
+  | "context"
   | "archived"
   | "extensions"
   | "runtime"
@@ -193,6 +196,7 @@ const NAV: {
   icon:
     | "settings"
     | "appearance"
+    | "context"
     | "archive"
     | "extensions"
     | "doctor"
@@ -203,6 +207,7 @@ const NAV: {
 }[] = [
   { id: "general", icon: "settings", labelKey: "settings.nav.general", group: "personal" },
   { id: "appearance", icon: "appearance", labelKey: "settings.nav.appearance", group: "personal" },
+  { id: "context", icon: "context", labelKey: "settings.nav.context", group: "personal" },
   { id: "archived", icon: "archive", labelKey: "settings.nav.archived", group: "personal" },
   {
     id: "extensions",
@@ -228,6 +233,7 @@ function NavIcon({
   size?: number;
 }) {
   if (name === "appearance") return <IconAppearance size={size} />;
+  if (name === "context") return <IconInstructions size={size} />;
   if (name === "archive") return <IconArchive size={size} />;
   if (name === "keyboard") return <IconKeyboard size={size} />;
   if (name === "extensions") return <IconPuzzle size={size} />;
@@ -757,15 +763,17 @@ export function SettingsPage({
       ? t("settings.nav.general")
       : section === "appearance"
         ? t("settings.nav.appearance")
-        : section === "archived"
-          ? t("settings.nav.archived")
-          : section === "extensions"
-            ? t("settings.nav.extensions")
-            : section === "runtime"
-              ? t("settings.nav.runtime")
-              : section === "shortcuts"
-                ? t("settings.nav.shortcuts")
-                : t("settings.nav.about");
+        : section === "context"
+          ? t("settings.nav.context")
+          : section === "archived"
+            ? t("settings.nav.archived")
+            : section === "extensions"
+              ? t("settings.nav.extensions")
+              : section === "runtime"
+                ? t("settings.nav.runtime")
+                : section === "shortcuts"
+                  ? t("settings.nav.shortcuts")
+                  : t("settings.nav.about");
 
   return (
     <div className="settings-page" data-testid="settings-page">
@@ -871,6 +879,8 @@ export function SettingsPage({
             </div>
           </div>
         )}
+
+        {section === "context" && <ContextSettingsPanel t={t} />}
 
         {section === "general" && (
           <div hidden>

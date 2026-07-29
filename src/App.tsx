@@ -2163,6 +2163,7 @@ export default function App() {
         const allowed: SettingsSectionId[] = [
           "general",
           "appearance",
+          "context",
           "archived",
           "extensions",
           "runtime",
@@ -6250,6 +6251,7 @@ export default function App() {
             const allowed: SettingsSectionId[] = [
               "general",
               "appearance",
+              "context",
               "archived",
               "extensions",
               "runtime",

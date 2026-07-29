@@ -851,12 +851,35 @@ const en = {
   "settings.group.system": "System",
   "settings.nav.general": "General",
   "settings.nav.appearance": "Appearance",
+  "settings.nav.context": "Context",
   "settings.nav.account": "Account",
   "settings.nav.archived": "Archived chats",
   "settings.nav.extensions": "Extensions",
   "settings.nav.runtime": "CLI / Runtime",
   "settings.nav.shortcuts": "Keyboard",
   "settings.nav.about": "About",
+  "settings.context.intro":
+    "Shape the instructions Pi receives. These files belong to the active Pi profile and apply across projects that use it.",
+  "settings.context.activeProfile": "Active profile",
+  "settings.context.loading": "Loading…",
+  "settings.context.systemDesc":
+    "Replace or extend Pi’s minimal system prompt. Keep this focused on behavior that should apply everywhere.",
+  "settings.context.systemPlaceholder":
+    "Example: Be concise. Verify changes before reporting completion.",
+  "settings.context.agentsDesc":
+    "Standing instructions loaded by Pi at startup. Use this for your workflow, tools, conventions, and preferences.",
+  "settings.context.agentsPlaceholder":
+    "# Working preferences\n\n- Keep changes small and reviewable.\n- Run relevant tests before completion.",
+  "settings.context.unsaved": "Unsaved",
+  "settings.context.savedState": "Saved",
+  "settings.context.characters": "{n} characters",
+  "settings.context.save": "Save {name}",
+  "settings.context.saving": "Saving…",
+  "settings.context.saved": "{name} saved",
+  "settings.context.error": "Could not load or save context: {error}",
+  "settings.context.nextTurn":
+    "Saving reconnects the active agent. The new context is used from the next turn.",
+  "setup.stepsAria": "Setup steps",
   "settings.shortcuts.title": "Keyboard shortcuts",
   "settings.shortcuts.desc":
     "Bindings that already work in the app. Read-only for now — remapping comes later.",

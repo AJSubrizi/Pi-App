@@ -9,6 +9,7 @@ Desktop GUI for **Pi** (`pi --mode rpc`). Package name: **`pi-app`**. Product na
    - [dialogs.md](docs/llm-wiki/dialogs.md) — **no** `window.confirm` / `prompt` / `alert`  
    - [catalog.md](docs/llm-wiki/catalog.md) — models / effort / permissions  
    - [setup.md](docs/llm-wiki/setup.md) — first-run (CLI required)  
+   - [context-settings.md](docs/llm-wiki/context-settings.md) — active Pi context files
    - [icons.md](docs/llm-wiki/icons.md) — dock icons vs tray icons (never mix)  
    - [release.md](docs/llm-wiki/release.md) — ship steps when present  
 

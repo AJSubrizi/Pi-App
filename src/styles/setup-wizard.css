@@ -9,13 +9,7 @@
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  background:
-    radial-gradient(
-      120% 80% at 50% -10%,
-      var(--accent-muted) 0%,
-      transparent 55%
-    ),
-    var(--bg-app);
+  background: var(--bg-app);
   color: var(--text-primary);
   /* Hard ban scrollbars on the gate surface */
   scrollbar-width: none;
@@ -60,13 +54,11 @@
   flex-direction: column;
   align-items: stretch;
   gap: var(--space-4);
-  /* Allow logo glow to paint above; clip only horizontally if needed */
   overflow-x: hidden;
   overflow-y: hidden;
   position: relative;
   z-index: 2;
-  /* Room for logo pulse/glow box-shadow above the icon (~32px blur) */
-  padding-top: 28px;
+  padding-top: 12px;
 }
 
 .setup-hero {
@@ -76,67 +68,30 @@
   text-align: center;
   gap: var(--space-2);
   flex-shrink: 0;
-  /* Extra headroom so animated blue glow is not clipped */
-  padding-top: 12px;
-  overflow: visible;
+  padding-top: 4px;
 }
 
 .setup-logo {
-  width: 72px;
-  height: 72px;
-  border-radius: 20px;
+  width: 52px;
+  height: 52px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--bg-elevated);
-  border: 1px solid var(--border-subtle);
   color: var(--text-primary);
-  box-shadow: var(--shadow-pop);
-  /* Glow paints outside the box; keep visible within hero */
-  overflow: visible;
   flex-shrink: 0;
 }
 
-.setup-logo--pulse {
-  animation: setup-logo-pulse 2.4s ease-in-out infinite;
-}
-
 .setup-logo--spin {
-  animation: setup-logo-glow 1.2s ease-in-out infinite;
+  animation: setup-logo-turn 1.2s linear infinite;
 }
 
-@keyframes setup-logo-pulse {
-  0%,
-  100% {
-    transform: scale(1);
-    box-shadow: 0 0 0 0 transparent, var(--shadow-pop);
-  }
-  50% {
-    transform: scale(1.03);
-    box-shadow:
-      0 0 28px rgba(138, 164, 255, 0.18),
-      var(--shadow-pop);
-  }
-}
-
-@keyframes setup-logo-glow {
-  0%,
-  100% {
-    box-shadow:
-      0 0 0 0 transparent,
-      var(--shadow-pop);
-    border-color: var(--border-subtle);
-  }
-  50% {
-    box-shadow:
-      0 0 32px rgba(138, 164, 255, 0.28),
-      var(--shadow-pop);
-    border-color: var(--border-focus);
+@keyframes setup-logo-turn {
+  to {
+    transform: rotate(360deg);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .setup-logo--pulse,
   .setup-logo--spin {
     animation: none;
   }
@@ -190,7 +145,6 @@
 
 .setup-steps__item.is-active .setup-steps__dot {
   background: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-muted);
 }
 
 .setup-steps__item.is-done {
@@ -205,7 +159,6 @@
   background: var(--bg-elevated);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-pop);
   padding: var(--space-5);
   display: flex;
   flex-direction: column;
@@ -243,6 +196,13 @@
   line-height: 1.4;
 }
 
+.setup-hint--success {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+}
+
 .setup-progress {
   display: flex;
   flex-direction: column;
@@ -259,7 +219,7 @@
 .setup-progress__fill {
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, var(--accent), var(--accent-hover));
+  background: var(--accent);
   transition: width var(--motion-normal) ease;
 }
 

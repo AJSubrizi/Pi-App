@@ -3,6 +3,7 @@
 mod acp_client;
 #[cfg(test)]
 mod acp_golden_test;
+mod agent_context;
 mod agent_memory;
 mod agent_prefs;
 mod agent_subagents;
@@ -249,6 +250,8 @@ pub fn run() {
             repository_trust::repository_trust_revoke,
             commands::composer_prefs_resolve,
             commands::composer_prefs_set,
+            commands::agent_context_get,
+            commands::agent_context_set,
             commands::session_set_policy,
             commands::session_set_model,
             commands::session_rewind_drop_last_user,

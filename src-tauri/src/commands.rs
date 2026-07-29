@@ -5539,6 +5539,30 @@ pub async fn permission_rules_set(
     Ok(result)
 }
 
+/// Read editable AGENTS.md and SYSTEM.md from the active Pi agent profile.
+#[tauri::command]
+pub async fn agent_context_get() -> Result<crate::agent_context::AgentContextResult, String> {
+    tauri::async_runtime::spawn_blocking(crate::agent_context::load)
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+/// Save one active-profile context file and reload it for conflict-free UI state.
+#[tauri::command]
+pub async fn agent_context_set(
+    app: tauri::AppHandle,
+    mgr: State<'_, Arc<SessionManager>>,
+    kind: String,
+    content: String,
+) -> Result<crate::agent_context::AgentContextResult, String> {
+    let result =
+        tauri::async_runtime::spawn_blocking(move || crate::agent_context::save(&kind, &content))
+            .await
+            .map_err(|e| e.to_string())??;
+    mgr.soft_respawn(&app).await;
+    Ok(result)
+}
+
 // from PR #82
 
 /// Create root `AGENTS.md` stub when missing (idempotent).

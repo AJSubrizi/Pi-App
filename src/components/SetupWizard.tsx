@@ -237,7 +237,7 @@ export function SetupWizard({
               "setup-logo" +
               (installing || probing || modelsBusy
                 ? " setup-logo--spin"
-                : " setup-logo--pulse")
+                : "")
             }
           >
             <PiLogo size={44} />
@@ -246,7 +246,7 @@ export function SetupWizard({
           <p className="setup-subtitle">{tr("setup.subtitle")}</p>
         </div>
 
-        <ol className="setup-steps" aria-label="Setup steps">
+        <ol className="setup-steps" aria-label={tr("setup.stepsAria")}>
           {(
             [
               ["runtime", "setup.step.runtime"],
@@ -403,25 +403,10 @@ export function SetupWizard({
                   <Spinner className="size-3.5" /> {tr("setup.models.working")}
                 </p>
               ) : realModelCount > 0 ? (
-                <>
-                  <p className="setup-hint">
-                    {tr("setup.models.found", { n: String(realModelCount) })}
-                  </p>
-                  <ul className="setup-checklist setup-models-list">
-                    {modelIds.slice(0, 8).map((id) => (
-                      <li key={id} className="is-ok">
-                        <span className="setup-check" />
-                        <span className="setup-mono">{id}</span>
-                      </li>
-                    ))}
-                    {modelIds.length > 8 ? (
-                      <li className="is-ok">
-                        <span className="setup-check" />+
-                        {modelIds.length - 8}
-                      </li>
-                    ) : null}
-                  </ul>
-                </>
+                <p className="setup-hint setup-hint--success">
+                  <span className="setup-check" />
+                  {tr("setup.models.found", { n: String(realModelCount) })}
+                </p>
               ) : (
                 <>
                   <p className="setup-hint">
