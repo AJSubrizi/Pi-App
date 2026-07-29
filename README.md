@@ -81,8 +81,10 @@ Download the `.dmg` from [Releases](https://github.com/AJSubrizi/Pi-App/releases
 Builds are **not Apple-notarized** (community MIT app, no paid Developer ID).
 macOS may show *“Pi cannot be opened”* / *Sposta nel Cestino* — that is Gatekeeper.
 
-**Recommended:** open the DMG and double-click **`Open Pi.command`**
-(installs to Applications, clears quarantine, opens the app).
+Open the DMG and double-click **`Install Pi.command`**. The application payload
+is intentionally hidden so it cannot be launched directly by mistake. The
+installer copies Pi to Applications, clears Safari's quarantine attribute,
+verifies the local signature and opens the app.
 
 If macOS still blocks Pi:
 
@@ -90,7 +92,7 @@ If macOS still blocks Pi:
 2. Scroll to the message about **Pi** → **Open Anyway**
 3. Confirm **Open**
 
-Or in Terminal:
+Manual recovery in Terminal:
 
 ```bash
 xattr -cr /Applications/Pi.app

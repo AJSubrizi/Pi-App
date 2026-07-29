@@ -1,58 +1,69 @@
 #!/bin/bash
-# Double-click this from the Pi DMG (or after copy) to install & open on macOS.
-# Needed because release builds are not Apple-notarized (no paid Developer ID).
+# Visible entry point for community macOS builds without Apple notarization.
 set -euo pipefail
 
 APP_SRC=""
-# Prefer sibling Pi.app (when run from DMG volume)
 DIR="$(cd "$(dirname "$0")" && pwd)"
-if [[ -d "$DIR/Pi.app" ]]; then
+if [[ -d "$DIR/.payload/Pi.app" ]]; then
+  APP_SRC="$DIR/.payload/Pi.app"
+elif [[ -d "$DIR/Pi.app" ]]; then
+  # Compatibility with DMGs produced before v0.2.4.
   APP_SRC="$DIR/Pi.app"
 elif [[ -d "/Volumes/Pi/Pi.app" ]]; then
   APP_SRC="/Volumes/Pi/Pi.app"
 fi
 
-DEST="/Applications/Pi.app"
+DEST_DIR="${PI_APP_INSTALL_DIR:-/Applications}"
+if [[ ! -w "$DEST_DIR" ]]; then
+  DEST_DIR="$HOME/Applications"
+fi
+DEST="$DEST_DIR/Pi.app"
+TMP_DEST="$DEST_DIR/.Pi.app.installing.$$"
+
+cleanup() {
+  rm -rf "$TMP_DEST"
+}
+trap cleanup EXIT
 
 echo ""
-echo "  Pi — macOS install helper"
+echo "  Pi - macOS installer"
 echo "  ─────────────────────────"
 echo ""
 
 if [[ -z "$APP_SRC" ]]; then
-  echo "Could not find Pi.app next to this script."
-  echo "Open the DMG, then double-click “Open Pi.command” inside it."
+  echo "Could not find the Pi application payload."
+  echo "Open the Pi DMG and run Install Pi.command from there."
   echo ""
-  read -r -p "Press Enter to close…"
+  read -r -p "Press Enter to close..."
   exit 1
 fi
 
-echo "Copying Pi to Applications…"
+mkdir -p "$DEST_DIR"
+echo "Installing Pi in $DEST_DIR..."
+ditto "$APP_SRC" "$TMP_DEST"
+
+echo "Removing download quarantine..."
+xattr -cr "$TMP_DEST"
+
+echo "Applying and verifying the local signature..."
+codesign \
+  --force \
+  --deep \
+  --sign - \
+  --timestamp=none \
+  --identifier "dev.pi.desktop" \
+  "$TMP_DEST"
+codesign --verify --deep --strict "$TMP_DEST"
+
 rm -rf "$DEST"
-cp -R "$APP_SRC" "$DEST"
+mv "$TMP_DEST" "$DEST"
+trap - EXIT
 
-echo "Clearing download quarantine…"
-xattr -cr "$DEST" 2>/dev/null || true
+echo "Opening Pi..."
+open "$DEST"
 
-echo "Applying local ad-hoc signature…"
-codesign --force --deep --sign - --timestamp=none --identifier "dev.pi.desktop" "$DEST" 2>/dev/null || true
-
-echo "Opening Pi…"
-if open "$DEST" 2>/dev/null; then
-  echo ""
-  echo "If macOS still blocks the app:"
-  echo "  1. System Settings → Privacy & Security"
-  echo "  2. Scroll to the message about Pi → Open Anyway"
-  echo "  3. Confirm Open"
-  echo ""
-else
-  echo ""
-  echo "Gatekeeper blocked the open. Do this once:"
-  echo "  System Settings → Privacy & Security → Open Anyway (Pi)"
-  echo ""
-  echo "Or run:"
-  echo "  xattr -cr /Applications/Pi.app && open /Applications/Pi.app"
-  echo ""
-fi
-
-read -r -p "Press Enter to close this window…"
+echo ""
+echo "Pi is installed and ready."
+echo "You can close this window."
+echo ""
+read -r -p "Press Enter to close..."

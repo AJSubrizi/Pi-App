@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.4] - 2026-07-29
+
+> **Highlight:** macOS downloads now have one safe installation path.
+
+### Fixed
+
+- **DMG installation flow** - hide the non-notarized app payload and expose a single `Install Pi.command` entry point.
+- **Gatekeeper handling** - the installer removes Safari quarantine, applies and verifies the local signature, then opens Pi.
+- **Release rebuilds** - manual GitHub Actions runs now honor the requested existing tag.
+- **CI** - refresh stale ACP stream fixtures so Rust tests pass on every platform.
+- **Branding cleanup** - remove remaining internal references inherited from the former app shell.
+
 ## [0.2.3] - 2026-07-28
 
 > **Highlight:** first-run models onboarding + macOS “Open Pi.command” in the DMG.

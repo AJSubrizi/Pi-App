@@ -31,26 +31,21 @@ rebuild_dmg() {
   tmp="$(mktemp -d)"
   # shellcheck disable=SC2064
   trap "rm -rf '$tmp'" RETURN
-  mkdir -p "$tmp/stage"
-  cp -R "$app" "$tmp/stage/Pi.app"
-  ln -s /Applications "$tmp/stage/Applications"
-  # Helper for Gatekeeper: double-click instead of dragging bare .app
-  cp "$ROOT/scripts/macos-Open-Pi.command" "$tmp/stage/Open Pi.command"
-  chmod +x "$tmp/stage/Open Pi.command"
-  # Short readme on the volume
-  cat > "$tmp/stage/README-macOS.txt" <<'EOF'
+  mkdir -p "$tmp/stage/.payload"
+  cp -R "$app" "$tmp/stage/.payload/Pi.app"
+  cp "$ROOT/scripts/macos-Open-Pi.command" "$tmp/stage/Install Pi.command"
+  chmod +x "$tmp/stage/Install Pi.command"
+  cat > "$tmp/stage/START HERE.txt" <<'EOF'
 Pi for macOS
 ============
 
 These builds are not Apple-notarized (community MIT app).
 
-Recommended:
-  1. Double-click "Open Pi.command"
-  2. If macOS blocks Pi: System Settings → Privacy & Security → Open Anyway
+Double-click "Install Pi.command".
 
-Or drag Pi.app to Applications, then in Terminal:
-  xattr -cr /Applications/Pi.app
-  open /Applications/Pi.app
+The installer copies Pi to Applications, removes the browser quarantine,
+verifies its local signature, and opens it. The application payload is hidden
+to prevent macOS from offering a direct launch that Gatekeeper will reject.
 EOF
   rm -f "$dmg_out"
   hdiutil create \
@@ -107,11 +102,15 @@ else
         sed -nE 's|^.*(/Volumes/.*)$|\1|p' |
         tail -1
     )"
-    if [[ -z "$mount_point" || ! -d "$mount_point/Pi.app" ]]; then
+    mounted_app="$mount_point/.payload/Pi.app"
+    if [[ ! -d "$mounted_app" ]]; then
+      mounted_app="$mount_point/Pi.app"
+    fi
+    if [[ -z "$mount_point" || ! -d "$mounted_app" ]]; then
       echo "error: Pi.app not found inside $dmg" >&2
       exit 1
     fi
-    cp -R "$mount_point/Pi.app" "$tmp/Pi.app"
+    cp -R "$mounted_app" "$tmp/Pi.app"
     hdiutil detach "$mount_point" -quiet
     mount_point=""
 
