@@ -248,7 +248,7 @@ export async function openExternalUrl(url: string) {
   return invoke<void>("open_external_url", { url });
 }
 
-/** GitHub Releases check (Settings → About / startup banner). Does not auto-install. */
+/** GitHub Releases check used by Settings and the startup update offer. */
 export type AppUpdateCheck = {
   currentVersion: string;
   latestVersion: string;
@@ -276,6 +276,41 @@ export function resolveAppUpdateOpenUrl(r: AppUpdateCheck): string {
 
 export async function appCheckUpdate() {
   return invoke<AppUpdateCheck>("app_check_update");
+}
+
+export type AppUpdateProgress = {
+  downloaded: number;
+  total: number | null;
+};
+
+/**
+ * Download a signed Tauri update, install it, then restart Pi.
+ * The updater verifies the artifact against the public key bundled with the app.
+ */
+export async function appInstallUpdate(
+  onProgress?: (progress: AppUpdateProgress) => void,
+) {
+  const [{ check }, { relaunch }] = await Promise.all([
+    import("@tauri-apps/plugin-updater"),
+    import("@tauri-apps/plugin-process"),
+  ]);
+  const update = await check();
+  if (!update) throw new Error("No signed update is available.");
+
+  let downloaded = 0;
+  let total: number | null = null;
+  await update.downloadAndInstall((event) => {
+    if (event.event === "Started") {
+      total = event.data.contentLength ?? null;
+      onProgress?.({ downloaded, total });
+    } else if (event.event === "Progress") {
+      downloaded += event.data.chunkLength;
+      onProgress?.({ downloaded, total });
+    } else if (event.event === "Finished") {
+      onProgress?.({ downloaded: total ?? downloaded, total });
+    }
+  });
+  await relaunch();
 }
 
 export async function projectsList() {

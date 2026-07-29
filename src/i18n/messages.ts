@@ -8,7 +8,7 @@ const en = {
   // App chrome
   "app.name": "Pi",
   "app.tagline": "MIT · Unofficial · Sister project pi.dev",
-  "app.versionFooter": "Pi v0.2.4 · MIT · Unofficial · Sister project pi.dev",
+  "app.versionFooter": "Pi v0.2.5 · MIT · Unofficial · Sister project pi.dev",
   "common.refresh": "Refresh",
   "common.loading": "Loading…",
   "common.remove": "Remove",
@@ -1155,15 +1155,17 @@ const en = {
   "settings.aboutApp": "About Pi App",
   "settings.checkUpdate": "Check for updates",
   "settings.checkUpdateDesc":
-    "Look up the latest GitHub release. Download installers from the release page — this app does not auto-install yet.",
+    "Check GitHub for a signed Pi update. Installation is verified before the app restarts.",
   "settings.checkUpdateChecking": "Checking…",
   "settings.checkUpdateLatest": "You are on the latest version ({version}).",
   "settings.checkUpdateAvailable":
     "Version {latest} is available (you have {current}).",
-  "settings.checkUpdateOpen": "Open release page",
+  "settings.checkUpdateOpen": "Install and restart",
+  "settings.checkUpdateInstalling": "Installing {percent}%",
   "settings.checkUpdateFailed": "Could not check: {error}",
   "app.updateBanner": "Pi {latest} is available (you have {current}).",
-  "app.updateBannerOpen": "Download",
+  "app.updateBannerOpen": "Install and restart",
+  "app.updateBannerInstalling": "Installing {percent}%",
   "app.updateBannerDismiss": "Not now",
   "settings.close": "Close",
   "settings.sharedConfirm":

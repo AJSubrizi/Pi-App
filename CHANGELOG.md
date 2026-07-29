@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.5] - 2026-07-29
+
+> **Highlight:** signed in-app updates and natural-language capability discovery.
+
+### Added
+
+- **Signed auto-updater** - download, verify, install and restart from the startup banner or Settings.
+- **Provider connections** - guided OAuth and API-key setup with grouped model presentation.
+- **Natural-language extensions** - describe a capability and let Pi find a package or propose a focused local extension.
+- **Curated packages** - Context7, Plannotator, Simplify and local voice dictation.
+
+### Security
+
+- Updater archives are signed in GitHub Actions; the app bundles only the public verification key.
+- Package installation remains approval-first and reports source, version, access and provider costs.
+
+### Notes
+
+- Updating from 0.2.4 to 0.2.5 still requires the existing manual installer. In-app installation applies from 0.2.5 onward.
+
 ## [0.2.4] - 2026-07-29
 
 > **Highlight:** macOS downloads now have one safe installation path.

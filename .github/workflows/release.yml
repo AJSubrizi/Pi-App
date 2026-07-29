@@ -10,7 +10,7 @@
 # Optional signing secrets (unsigned builds still work; macOS may warn):
 #   - Apple: APPLE_CERTIFICATE, APPLE_CERTIFICATE_PASSWORD, APPLE_SIGNING_IDENTITY,
 #            APPLE_ID, APPLE_PASSWORD, APPLE_TEAM_ID  (see Tauri macOS signing docs)
-#   - Windows: TAURI_SIGNING_PRIVATE_KEY (+ PASSWORD) if using Tauri updater signing
+#   - Updater: TAURI_SIGNING_PRIVATE_KEY (+ PASSWORD when the key is encrypted)
 name: release
 
 on:
@@ -132,6 +132,7 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         with:
           # Root package.json + src-tauri/ layout (create-tauri-app style)
           projectPath: .
@@ -142,7 +143,7 @@ jobs:
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
-          includeUpdaterJson: false
+          includeUpdaterJson: true
 
       # Linker-only ad-hoc signatures lack sealed Resources → macOS says "damaged"
       # and moves the app to Trash. Re-sign + rebuild DMG, then re-upload.

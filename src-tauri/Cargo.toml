@@ -1,6 +1,6 @@
 [package]
 name = "pi-app"
-version = "0.2.4"
+version = "0.2.5"
 description = "Desktop GUI for Pi — projects, sessions and packages over Pi RPC"
 authors = ["Pi contributors"]
 edition = "2021"
@@ -56,6 +56,8 @@ fs2 = "0.4"
 tokio-tungstenite = { version = "0.26", features = ["rustls-tls-webpki-roots"] }
 url = "2"
 portable-pty = "0.9"
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
 
 [profile.release]
 codegen-units = 1

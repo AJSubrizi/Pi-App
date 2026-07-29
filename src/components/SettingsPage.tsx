@@ -2339,6 +2339,7 @@ function AboutUpdateRow({
   t: (key: MessageKey, vars?: Record<string, string | number>) => string;
 }) {
   const [busy, setBusy] = useState(false);
+  const [installPercent, setInstallPercent] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<api.AppUpdateCheck | null>(null);
 
@@ -2360,10 +2361,19 @@ function AboutUpdateRow({
     }
   };
 
-  const openRelease = async (url: string) => {
+  const install = async () => {
+    setInstallPercent(0);
+    setError(null);
     try {
-      await api.openExternalUrl(url);
+      await api.appInstallUpdate(({ downloaded, total }) => {
+        setInstallPercent(
+          total && total > 0
+            ? Math.min(100, Math.round((downloaded / total) * 100))
+            : 0,
+        );
+      });
     } catch (e) {
+      setInstallPercent(null);
       setError(String(e));
     }
   };
@@ -2376,27 +2386,31 @@ function AboutUpdateRow({
       </div>
       <div className="settings-about-update">
         <div className="settings-about-update__actions">
-          <button
-            type="button"
-            className="btn btn--solid"
-            disabled={busy}
-            onClick={() => void check()}
-          >
-            {busy
-              ? t("settings.checkUpdateChecking")
-              : t("settings.checkUpdate")}
-          </button>
           {result?.updateAvailable ? (
             <button
               type="button"
-              className="btn btn--ghost"
-              onClick={() =>
-                void openRelease(api.resolveAppUpdateOpenUrl(result))
-              }
+              className="btn btn--solid"
+              disabled={installPercent !== null}
+              onClick={() => void install()}
             >
-              {t("settings.checkUpdateOpen")}
+              {installPercent === null
+                ? t("settings.checkUpdateOpen")
+                : t("settings.checkUpdateInstalling", {
+                    percent: installPercent,
+                  })}
             </button>
-          ) : null}
+          ) : (
+            <button
+              type="button"
+              className="btn btn--solid"
+              disabled={busy}
+              onClick={() => void check()}
+            >
+              {busy
+                ? t("settings.checkUpdateChecking")
+                : t("settings.checkUpdate")}
+            </button>
+          )}
         </div>
         {error ? (
           <div className="settings-about-update__err" role="alert">

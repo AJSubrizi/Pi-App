@@ -28,6 +28,8 @@
     "core:webview:allow-webview-position",
     "core:webview:allow-webview-size",
     "core:webview:allow-get-all-webviews",
-    "store:default"
+    "store:default",
+    "updater:default",
+    "process:allow-restart"
   ]
 }

@@ -770,9 +770,12 @@ export default function App() {
   /** Live drag-drop target for zone overlays (null = not dragging). */
   const [dragZone, setDragZone] = useState<"sidebar" | "main" | null>(null);
   const [toast, setToast] = useState<string | null>(null);
-  /** Soft startup banner when GitHub has a newer release (not auto-install). */
+  /** Soft startup banner when GitHub has a newer signed release. */
   const [appUpdateOffer, setAppUpdateOffer] =
     useState<api.AppUpdateCheck | null>(null);
+  const [appUpdateInstallPercent, setAppUpdateInstallPercent] = useState<
+    number | null
+  >(null);
   const [piExtensionUiBySession, setPiExtensionUiBySession] = useState<
     Record<string, PiExtensionSessionUi>
   >({});
@@ -7827,22 +7830,40 @@ export default function App() {
                 <button
                   type="button"
                   className="btn btn--solid btn--sm"
+                  disabled={appUpdateInstallPercent !== null}
                   onClick={() => {
-                    const url = api.resolveAppUpdateOpenUrl(appUpdateOffer);
-                    void api.openExternalUrl(url).catch(() => {
-                      try {
-                        window.open(url, "_blank", "noopener,noreferrer");
-                      } catch {
-                        /* ignore */
-                      }
-                    });
+                    setAppUpdateInstallPercent(0);
+                    void api
+                      .appInstallUpdate(({ downloaded, total }) => {
+                        setAppUpdateInstallPercent(
+                          total && total > 0
+                            ? Math.min(
+                                100,
+                                Math.round((downloaded / total) * 100),
+                              )
+                            : 0,
+                        );
+                      })
+                      .catch((error) => {
+                        setAppUpdateInstallPercent(null);
+                        setToast(
+                          tr("settings.checkUpdateFailed", {
+                            error: String(error),
+                          }),
+                        );
+                      });
                   }}
                 >
-                  {tr("app.updateBannerOpen")}
+                  {appUpdateInstallPercent === null
+                    ? tr("app.updateBannerOpen")
+                    : tr("app.updateBannerInstalling", {
+                        percent: appUpdateInstallPercent,
+                      })}
                 </button>
                 <button
                   type="button"
                   className="btn btn--ghost btn--sm"
+                  disabled={appUpdateInstallPercent !== null}
                   onClick={() => {
                     try {
                       localStorage.setItem(

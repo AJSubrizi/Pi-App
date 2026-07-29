@@ -17,3 +17,15 @@
 4. GitHub Actions builds installers and attaches them to the Release
 
 Update checks read: `https://api.github.com/repos/AJSubrizi/Pi-App/releases/latest`
+
+## Signed app updater
+
+The desktop app checks GitHub softly after launch and can download, verify,
+install and restart from either the update banner or Settings → About.
+
+- Tauri reads `latest.json` from the latest GitHub Release.
+- Every updater archive must be signed by `TAURI_SIGNING_PRIVATE_KEY`.
+- Only the public verification key is bundled in `tauri.conf.json`.
+- The private key lives only in GitHub Actions secrets. Never commit or print it.
+- Keep `includeUpdaterJson: true` and `createUpdaterArtifacts: true`; otherwise
+  releases remain manually downloadable but cannot be installed in-app.
