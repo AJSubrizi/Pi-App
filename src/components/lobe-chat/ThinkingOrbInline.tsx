@@ -1,33 +1,33 @@
 import { ThinkingOrb } from "thinking-orbs";
-import type { OrbState } from "thinking-orbs";
 import { cn } from "@/lib/utils";
+import {
+  INLINE_ORB_STATE_MAP,
+  type InlineOrbState,
+} from "./thinkingOrbState";
 
-export type InlineOrbState = "thinking" | "working" | "searching" | "done";
-
-const STATE_MAP: Record<InlineOrbState, OrbState> = {
-  thinking: "composing",
-  working: "working",
-  searching: "searching",
-  done: "solving",
-};
+export type { InlineOrbState } from "./thinkingOrbState";
 
 export function ThinkingOrbInline({
   state = "thinking",
   paused = false,
   className,
   size = 20,
+  decorative = true,
 }: {
   state?: InlineOrbState;
   paused?: boolean;
   className?: string;
   size?: 20 | 64;
+  /** Hide the canvas from assistive tech when adjacent text names the status. */
+  decorative?: boolean;
 }) {
   return (
     <ThinkingOrb
-      state={STATE_MAP[state]}
+      state={INLINE_ORB_STATE_MAP[state]}
       size={size}
       theme="auto"
       paused={paused}
+      aria-hidden={decorative || undefined}
       className={cn("thinking-orb-inline", className)}
     />
   );

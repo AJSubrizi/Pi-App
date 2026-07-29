@@ -646,7 +646,9 @@
 
 /* ── Mid-stream tool text (plain one line under reply, replace-only) ── */
 .lobe-chat-tool-text {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   width: 100%;
   max-width: 100%;
   box-sizing: border-box;
@@ -661,6 +663,11 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.lobe-chat-tool-text__title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Quiet thinking / cancel rows (shared chrome) */
@@ -1101,21 +1108,6 @@
 .thinking-orb-inline {
   flex-shrink: 0;
   display: block;
-}
-
-.lobe-chat-thinking__orb {
-  width: 16px;
-  height: 16px;
-}
-
-.lobe-chat-thinking__orb canvas {
-  width: 16px !important;
-  height: 16px !important;
-}
-
-.lobe-chat-live-tool__mark .thinking-orb-inline canvas {
-  width: 14px !important;
-  height: 14px !important;
 }
 
 /* ── Chat Minimap (navigable index) ── */

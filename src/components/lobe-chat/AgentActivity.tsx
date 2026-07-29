@@ -15,6 +15,8 @@ import { createT } from "@/i18n";
 import type { ChatMessage } from "@/lib/session";
 import { toolStepDisplayTitle } from "@/lib/session";
 import { IconStop } from "@/components/icons";
+import { ThinkingOrbInline } from "./ThinkingOrbInline";
+import { inlineOrbStateForTool } from "./thinkingOrbState";
 // locale kept on LiveToolText for API compatibility with ConversationThread
 
 export {
@@ -46,7 +48,8 @@ export function LiveToolText({
       data-tool-id={message.toolCallId}
       title={message.toolDetail || message.toolPath || title}
     >
-      {title}
+      <ThinkingOrbInline state={inlineOrbStateForTool(message)} />
+      <span className="lobe-chat-tool-text__title">{title}</span>
     </div>
   );
 }
