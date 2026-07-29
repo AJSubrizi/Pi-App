@@ -17,7 +17,6 @@ import {
   applyWallpaperFlag,
   applyWallpaperScrimToDocument,
   loadSkin,
-  loadWallpaperMeta,
   loadWallpaperScrim,
 } from "./lib/themeSkin";
 
@@ -25,10 +24,9 @@ import {
 const bootTheme = loadTheme(localStorage);
 applyThemeToDocument(bootTheme);
 applySkinToDocument(loadSkin(localStorage));
-// Only the data-wallpaper flag is set synchronously (so the shell flips to
-// transparent + scrim instantly). The media layer is rendered by App after
-// the IndexedDB blob is loaded — no synchronous access to IDB is possible.
-applyWallpaperFlag(loadWallpaperMeta(localStorage) !== null);
+// A bundled default wallpaper is always present. Set the transparent wallpaper
+// shell synchronously so first paint does not flash a solid background.
+applyWallpaperFlag(true);
 applyWallpaperScrimToDocument(loadWallpaperScrim(localStorage));
 // Sync macOS NSAppearance / vibrancy with app theme (avoids dark glass under light UI).
 void applyNativeWindowTheme(bootTheme);

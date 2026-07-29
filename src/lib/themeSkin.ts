@@ -40,8 +40,8 @@ export const SKIN_STORAGE_KEY = "pi-app.skin";
 export const WALLPAPER_STORAGE_KEY = "pi-app.wallpaper";
 /** Scrim strength over wallpaper only (0 = clear wallpaper, 100 = full dim). */
 export const WALLPAPER_SCRIM_STORAGE_KEY = "pi-app.wallpaper-scrim";
-/** Default matches the built-in gradient at full opacity. */
-export const DEFAULT_WALLPAPER_SCRIM = 100;
+/** Keeps the built-in landscape visible while preserving chrome contrast. */
+export const DEFAULT_WALLPAPER_SCRIM = 68;
 export const DEFAULT_SKIN: ThemeSkinId = "default";
 
 /** Accept common image types + short-loop video for wallpaper upload. */

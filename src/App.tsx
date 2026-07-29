@@ -8,6 +8,7 @@ import {
   type MouseEvent as ReactMouseEvent,
 } from "react";
 import { createPortal } from "react-dom";
+import defaultWallpaperUrl from "@/assets/land-default.jpg";
 import { useFloatingMenu } from "@/lib/floatingMenu";
 import {
   applyNativeWindowTheme,
@@ -368,7 +369,7 @@ export default function App() {
   const [wallpaperRecord, setWallpaperRecord] = useState<WallpaperRecord | null>(
     null,
   );
-  const [wallpaperUrl, setWallpaperUrl] = useState<string | null>(null);
+  const [wallpaperUrl, setWallpaperUrl] = useState<string>(defaultWallpaperUrl);
   // Holds the current blob: URL so we can revoke it when replacing/clearing.
   const wallpaperUrlRef = useRef<string | null>(null);
   const [wallpaperScrim, setWallpaperScrim] = useState(() =>
@@ -2094,7 +2095,7 @@ export default function App() {
         wallpaperUrlRef.current = null;
       }
       setWallpaperRecord(null);
-      setWallpaperUrl(null);
+      setWallpaperUrl(defaultWallpaperUrl);
       return;
     }
     try {
@@ -6968,6 +6969,7 @@ export default function App() {
           onSkin={applySkinChoice}
           wallpaperUrl={wallpaperUrl}
           wallpaperKind={wallpaperRecord?.kind ?? null}
+          wallpaperIsCustom={wallpaperRecord !== null}
           onWallpaper={applyWallpaperChoice}
           wallpaperScrim={wallpaperScrim}
           onWallpaperScrim={applyWallpaperScrimChoice}

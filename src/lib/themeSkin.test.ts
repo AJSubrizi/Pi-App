@@ -217,10 +217,10 @@ describe("wallpaper storage", () => {
 });
 
 describe("wallpaper scrim", () => {
-  it("defaults to full strength and clamps out-of-range values", () => {
-    expect(DEFAULT_WALLPAPER_SCRIM).toBe(100);
-    expect(parseWallpaperScrim(null)).toBe(100);
-    expect(parseWallpaperScrim("nope")).toBe(100);
+  it("defaults to a readable landscape strength and clamps out-of-range values", () => {
+    expect(DEFAULT_WALLPAPER_SCRIM).toBe(68);
+    expect(parseWallpaperScrim(null)).toBe(68);
+    expect(parseWallpaperScrim("nope")).toBe(68);
     expect(parseWallpaperScrim(-20)).toBe(0);
     expect(parseWallpaperScrim(140)).toBe(100);
     expect(parseWallpaperScrim("35.6")).toBe(36);

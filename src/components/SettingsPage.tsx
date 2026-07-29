@@ -36,6 +36,7 @@ import {
 } from "@/lib/shortcuts";
 import type { Theme } from "@/lib/theme";
 import {
+  DEFAULT_WALLPAPER_SCRIM,
   THEME_SKINS,
   WALLPAPER_ACCEPT,
   WallpaperPrepareError,
@@ -102,10 +103,12 @@ export interface SettingsPageProps {
   /** Color skin pack on top of light/dark (optional for older callers). */
   skin?: ThemeSkinId;
   onSkin?: (v: ThemeSkinId) => void;
-  /** Custom wallpaper blob: URL (null/undefined = none). */
+  /** Active built-in or custom wallpaper URL. */
   wallpaperUrl?: string | null;
   /** Kind of the current wallpaper, to pick <video> vs <img> in the preview. */
   wallpaperKind?: WallpaperKind | null;
+  /** Whether the current wallpaper came from a user upload. */
+  wallpaperIsCustom?: boolean;
   onWallpaper?: (record: WallpaperRecord | null) => void | Promise<void>;
   /** Wallpaper scrim strength 0–100 (only the dimming overlay; not chrome). */
   wallpaperScrim?: number;
@@ -436,7 +439,8 @@ export function SettingsPage({
   onSkin,
   wallpaperUrl = null,
   wallpaperKind = null,
-  wallpaperScrim = 100,
+  wallpaperIsCustom = false,
+  wallpaperScrim = DEFAULT_WALLPAPER_SCRIM,
   onWallpaperScrim,
   onWallpaper,
   sessionDataMode,
@@ -1453,7 +1457,7 @@ export function SettingsPage({
                       >
                         {t("settings.wallpaperFind")}
                       </button>
-                      {wallpaperUrl ? (
+                      {wallpaperIsCustom ? (
                         <button
                           type="button"
                           className="btn btn--ghost btn--sm"
