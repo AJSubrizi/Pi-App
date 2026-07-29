@@ -52,6 +52,7 @@ mod terminal;
 mod tray;
 mod tray_i18n;
 mod turn_complete;
+mod usage;
 
 use std::sync::Arc;
 
@@ -275,6 +276,7 @@ pub fn run() {
             terminal::terminal_write,
             terminal::terminal_resize,
             terminal::terminal_stop,
+            usage::usage_profile,
             commands::git_file_diff,
             commands::git_status,
             commands::git_numstat,

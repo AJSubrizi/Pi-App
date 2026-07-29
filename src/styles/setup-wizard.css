@@ -375,6 +375,38 @@
   gap: 10px;
 }
 
+.setup-name {
+  display: grid;
+  gap: 7px;
+  margin: 16px 0 2px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 550;
+}
+
+.setup-name input {
+  width: 100%;
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 72%, transparent);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--bg-input) 92%, transparent);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 14px;
+  outline: none;
+}
+
+.setup-name input:focus-visible {
+  border-color: var(--border-focus);
+}
+
+.setup-name small {
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 400;
+}
+
 .setup-checklist li {
   display: flex;
   align-items: center;

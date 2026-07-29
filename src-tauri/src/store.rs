@@ -124,6 +124,9 @@ pub struct SessionMeta {
 pub struct AppSettings {
     pub theme: String,
     pub locale: String,
+    /// Local display name shown in the desktop shell and usage profile.
+    #[serde(default)]
+    pub user_name: String,
     pub session_data_mode: String,
     pub manual_cli_path: Option<String>,
     pub permission_policy: String,
@@ -264,6 +267,7 @@ impl Default for AppSettings {
             theme: "dark".into(),
             // Product default is English; users can switch to zh / zh-TW in Settings.
             locale: "en".into(),
+            user_name: String::new(),
             session_data_mode: "independent".into(),
             manual_cli_path: None,
             permission_policy: "ask".into(),

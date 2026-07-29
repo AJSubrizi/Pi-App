@@ -365,6 +365,7 @@ type PlanState = SessionPlanState;
 
 export default function App() {
   const [theme, setTheme] = useState<Theme>(() => loadTheme(localStorage));
+  const [userName, setUserName] = useState("");
   const [skin, setSkin] = useState<ThemeSkinId>(() => loadSkin(localStorage));
   const [wallpaperRecord, setWallpaperRecord] = useState<WallpaperRecord | null>(
     null,
@@ -1019,6 +1020,7 @@ export default function App() {
       );
       void api.trayRefresh();
       setLocale(resolveLocale(settings.locale));
+      setUserName(settings.userName?.trim() || "");
       const catalog: ModelOption[] =
         modelsRes?.models?.length
           ? modelsRes.models.map((m) => {
@@ -2165,6 +2167,7 @@ export default function App() {
           "general",
           "appearance",
           "context",
+          "usage",
           "archived",
           "extensions",
           "runtime",
@@ -6253,6 +6256,7 @@ export default function App() {
               "general",
               "appearance",
               "context",
+              "usage",
               "archived",
               "extensions",
               "runtime",
@@ -6933,7 +6937,8 @@ export default function App() {
               cliAuthPresent: false,
             }
           }
-          onComplete={(cli) => {
+          onComplete={(cli, name) => {
+            setUserName(name);
             setCliInfo({
               found: cli.found,
               path: cli.path,
@@ -6965,6 +6970,15 @@ export default function App() {
           locale={locale}
           theme={theme}
           onTheme={applyThemeChoice}
+          userName={userName}
+          onUserName={(value) => {
+            const next = value.trim().slice(0, 80);
+            if (!next) return;
+            setUserName(next);
+            void api.settingsGet().then((settings) =>
+              api.settingsSet({ ...settings, userName: next }),
+            );
+          }}
           skin={skin}
           onSkin={applySkinChoice}
           wallpaperUrl={wallpaperUrl}
@@ -7752,7 +7766,7 @@ export default function App() {
               </div>
               <div className="user-meta">
                 <span className="user-meta__name">
-                  {tr("app.name")}
+                  {userName || tr("app.name")}
                 </span>
                 <span className="user-meta__quota">{tr("common.local")}</span>
               </div>

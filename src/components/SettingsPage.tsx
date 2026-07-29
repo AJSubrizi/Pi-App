@@ -15,6 +15,7 @@ import {
 import { Select } from "@/components/Select";
 import {
   IconArchive,
+  IconActivity,
   IconAppearance,
   IconArrowLeft,
   IconCheck,
@@ -61,6 +62,7 @@ import { PiExtensionsPanel } from "@/components/PiExtensionsPanel";
 import { ProjectInspectPanel } from "@/components/ProjectInspectPanel";
 import { PermissionRulesPanel } from "@/components/PermissionRulesPanel";
 import { ContextSettingsPanel } from "@/components/ContextSettingsPanel";
+import { UsageProfilePage } from "@/components/UsageProfilePage";
 import { GlassModal } from "@/components/GlassModal";
 import {
   createT,
@@ -73,6 +75,7 @@ export type SettingsSectionId =
   | "general"
   | "appearance"
   | "context"
+  | "usage"
   | "archived"
   | "extensions"
   | "runtime"
@@ -100,6 +103,8 @@ export interface SettingsPageProps {
   locale: string;
   theme: Theme;
   onTheme: (v: Theme) => void;
+  userName?: string;
+  onUserName?: (value: string) => void;
   /** Color skin pack on top of light/dark (optional for older callers). */
   skin?: ThemeSkinId;
   onSkin?: (v: ThemeSkinId) => void;
@@ -200,6 +205,7 @@ const NAV: {
     | "settings"
     | "appearance"
     | "context"
+    | "usage"
     | "archive"
     | "extensions"
     | "doctor"
@@ -211,6 +217,7 @@ const NAV: {
   { id: "general", icon: "settings", labelKey: "settings.nav.general", group: "personal" },
   { id: "appearance", icon: "appearance", labelKey: "settings.nav.appearance", group: "personal" },
   { id: "context", icon: "context", labelKey: "settings.nav.context", group: "personal" },
+  { id: "usage", icon: "usage", labelKey: "settings.nav.usage", group: "personal" },
   { id: "archived", icon: "archive", labelKey: "settings.nav.archived", group: "personal" },
   {
     id: "extensions",
@@ -237,6 +244,7 @@ function NavIcon({
 }) {
   if (name === "appearance") return <IconAppearance size={size} />;
   if (name === "context") return <IconInstructions size={size} />;
+  if (name === "usage") return <IconActivity size={size} />;
   if (name === "archive") return <IconArchive size={size} />;
   if (name === "keyboard") return <IconKeyboard size={size} />;
   if (name === "extensions") return <IconPuzzle size={size} />;
@@ -435,6 +443,8 @@ export function SettingsPage({
   locale,
   theme,
   onTheme,
+  userName = "",
+  onUserName,
   skin = "default",
   onSkin,
   wallpaperUrl = null,
@@ -769,6 +779,8 @@ export function SettingsPage({
         ? t("settings.nav.appearance")
         : section === "context"
           ? t("settings.nav.context")
+          : section === "usage"
+            ? t("settings.nav.usage")
           : section === "archived"
             ? t("settings.nav.archived")
             : section === "extensions"
@@ -885,6 +897,13 @@ export function SettingsPage({
         )}
 
         {section === "context" && <ContextSettingsPanel t={t} />}
+        {section === "usage" && onUserName && (
+          <UsageProfilePage
+            t={t}
+            userName={userName}
+            onUserName={onUserName}
+          />
+        )}
 
         {section === "general" && (
           <div hidden>

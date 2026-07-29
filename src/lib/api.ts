@@ -448,6 +448,52 @@ export async function terminalStop(terminalId: string) {
   return invoke<void>("terminal_stop", { terminalId });
 }
 
+export interface UsageDay {
+  date: string;
+  activities: number;
+  estimatedTokens: number;
+}
+
+export interface UsageTool {
+  name: string;
+  count: number;
+}
+
+export interface UsageProfile {
+  days: UsageDay[];
+  totalEstimatedTokens: number;
+  maxSessionTokens: number;
+  longestActivitySecs: number;
+  currentStreakDays: number;
+  longestStreakDays: number;
+  totalSessions: number;
+  totalTurns: number;
+  totalToolCalls: number;
+  modelsUsed: number;
+  mostUsedEffort: string | null;
+  topTools: UsageTool[];
+}
+
+export async function usageProfile() {
+  if (!isTauri()) {
+    return {
+      days: [],
+      totalEstimatedTokens: 0,
+      maxSessionTokens: 0,
+      longestActivitySecs: 0,
+      currentStreakDays: 0,
+      longestStreakDays: 0,
+      totalSessions: 0,
+      totalTurns: 0,
+      totalToolCalls: 0,
+      modelsUsed: 0,
+      mostUsedEffort: null,
+      topTools: [],
+    } satisfies UsageProfile;
+  }
+  return invoke<UsageProfile>("usage_profile");
+}
+
 /** Optional git unified diff for a project file (session Changes panel). */
 export interface GitFileDiffResult {
   available: boolean;
@@ -902,6 +948,8 @@ export type ComposerPrefsScope = "global" | "project" | "session";
 export interface AppSettings {
   theme: string;
   locale: string;
+  /** Local display name chosen during onboarding. */
+  userName?: string;
   sessionDataMode: string;
   manualCliPath: string | null;
   permissionPolicy: string;

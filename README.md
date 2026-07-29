@@ -54,6 +54,7 @@ It is a **sister project** to [pi.dev](https://pi.dev) — community-built, MIT,
 | **Sessions** | Stream chat with the real Pi process — create, resume, abort, compact |
 | **Models** | Pick model and thinking level from what Pi exposes |
 | **Projects** | Trusted folders, multi-session sidebar, workbench around your repo |
+| **Usage** | Private local activity profile with estimated tokens, streaks and tool history |
 | **Resources** | Files, previews, git changes (stage / discard / commit & push), embedded browser and project terminal |
 | **Packages** | Install Pi packages from npm, git or a local path (user or project scope) |
 | **Extensions** | Native UI for Pi `select` / `confirm` / `input` / `editor` and status widgets |

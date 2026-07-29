@@ -28,7 +28,7 @@ type Props = {
   platform: "mac" | "win" | "other";
   useCustomWindowChrome: boolean;
   initialCli: SetupCliInfo;
-  onComplete: (cli: SetupCliInfo) => void;
+  onComplete: (cli: SetupCliInfo, userName: string) => void;
 };
 
 function mirrorHost(url: string | null | undefined): string {
@@ -61,6 +61,7 @@ export function SetupWizard({
   const [modelsBusy, setModelsBusy] = useState(false);
   const [modelIds, setModelIds] = useState<string[]>([]);
   const [modelsSkipped, setModelsSkipped] = useState(false);
+  const [userName, setUserName] = useState("");
 
   useEffect(() => {
     void api.cliInstallCommands().then(setInstallCmds).catch(() => null);
@@ -195,10 +196,13 @@ export function SetupWizard({
   }, []);
 
   const finishWizard = useCallback(async () => {
+    const name = userName.trim().slice(0, 80);
+    if (!name) return;
     try {
       const s = await api.settingsGet();
       await api.settingsSet({
         ...s,
+        userName: name,
         setupWizardCompleted: true,
         authSetupDeferred: modelsSkipped || modelIds.length === 0,
         onboardingDone: true,
@@ -207,8 +211,8 @@ export function SetupWizard({
     } catch {
       /* still enter if probe succeeded */
     }
-    onComplete(cli);
-  }, [cli, modelIds.length, modelsSkipped, onComplete]);
+    onComplete(cli, name);
+  }, [cli, modelIds.length, modelsSkipped, onComplete, userName]);
 
   const percent = useMemo(() => {
     const p = progress?.percent;
@@ -493,11 +497,29 @@ export function SetupWizard({
                   ) : null}
                 </li>
               </ul>
+              <label className="setup-name">
+                <span>{tr("setup.ready.name")}</span>
+                <input
+                  type="text"
+                  value={userName}
+                  maxLength={80}
+                  autoComplete="name"
+                  autoFocus
+                  placeholder={tr("setup.ready.namePlaceholder")}
+                  onChange={(event) => setUserName(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" && userName.trim()) {
+                      void finishWizard();
+                    }
+                  }}
+                />
+                <small>{tr("setup.ready.nameHint")}</small>
+              </label>
               <div className="setup-actions">
                 <button
                   type="button"
                   className="btn btn--primary setup-btn-primary"
-                  disabled={!cli.found}
+                  disabled={!cli.found || !userName.trim()}
                   onClick={() => void finishWizard()}
                 >
                   {tr("setup.ready.enter")}

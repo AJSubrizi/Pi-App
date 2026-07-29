@@ -40,7 +40,8 @@ OAuth, official key, relay, import CLI / pi-go. No `window.prompt`.
 
 ### Step 3 — Ready → Enter
 
-Persists `setupWizardCompleted: true`. If account skipped: `authSetupDeferred: true`.
+Collects a local display name, then persists `setupWizardCompleted: true`.
+If account setup was skipped: `authSetupDeferred: true`.
 
 ## Settings fields
 
@@ -48,6 +49,7 @@ Persists `setupWizardCompleted: true`. If account skipped: `authSetupDeferred: t
 |-------|------|
 | `setupWizardCompleted` | Wizard finished with CLI ready |
 | `authSetupDeferred` | User skipped account step |
+| `userName` | Local display name shown in the sidebar and Usage profile |
 | `onboardingDone` / `setupSkipped` | Legacy; migrated when CLI present |
 
 ## UI
