@@ -5,6 +5,8 @@
  */
 
 import {
+  lazy,
+  Suspense,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -77,6 +79,12 @@ import {
   isResourceDraftDirty,
   isResourceTextEditable,
 } from "@/lib/resourceEdit";
+
+const EmbeddedTerminal = lazy(() =>
+  import("@/components/EmbeddedTerminal").then((module) => ({
+    default: module.EmbeddedTerminal,
+  })),
+);
 
 const TREE_WIDTH_KEY = "pi-app.resourceTreeWidth";
 const TREE_WIDTH_DEFAULT = 220;
@@ -151,11 +159,18 @@ export interface ResourceViewerProps {
 type SideMode = "files" | "changes" | "plan" | "rules";
 
 /** Full-pane panels that open as browser-like tabs (Cursor-style). */
-type PanelTabKind = "changes" | "browser-home" | "files" | "rules" | "plan";
+type PanelTabKind =
+  | "changes"
+  | "browser-home"
+  | "terminal"
+  | "files"
+  | "rules"
+  | "plan";
 
 const PANEL_TAB_IDS: Record<PanelTabKind, string> = {
   changes: "panel:changes",
   "browser-home": "panel:browser",
+  terminal: "panel:terminal",
   files: "panel:files",
   rules: "panel:rules",
   plan: "panel:plan",
@@ -167,6 +182,7 @@ function isPanelTabKind(
   return (
     k === "changes" ||
     k === "browser-home" ||
+    k === "terminal" ||
     k === "files" ||
     k === "rules" ||
     k === "plan"
@@ -1264,6 +1280,7 @@ export function ResourceViewer({
     (kind: PanelTabKind): string => {
       if (kind === "changes") return tr("rp.launcher.changes");
       if (kind === "browser-home") return tr("rp.launcher.browser");
+      if (kind === "terminal") return tr("rp.launcher.terminal");
       if (kind === "files") return tr("resources.files");
       if (kind === "rules") return tr("rules.title");
       return tr("resources.plan");
@@ -1329,6 +1346,7 @@ export function ResourceViewer({
   const browserHomeView =
     activePanelKind === "browser-home" || (!activeTab && browserHome);
   const filesPanelActive = activePanelKind === "files";
+  const terminalPanelActive = activePanelKind === "terminal";
   const rulesPanelActive = activePanelKind === "rules";
   const planPanelActive = activePanelKind === "plan";
 
@@ -2750,7 +2768,7 @@ export function ResourceViewer({
               className="rp-toolmenu__item"
               onClick={() => {
                 setToolMenu(null);
-                void api.openSystemTerminal(projectPath ?? null);
+                openPanelTab("terminal");
               }}
             >
               <span className="rp-toolmenu__ico" aria-hidden>
@@ -3052,6 +3070,16 @@ export function ResourceViewer({
                 )}
               </OverlayScroll>
             </div>
+          ) : terminalPanelActive ? (
+            <Suspense
+              fallback={
+                <div className="rp__empty-state">
+                  {tr("common.loading")}
+                </div>
+              }
+            >
+              <EmbeddedTerminal projectPath={projectPath} locale={locale} />
+            </Suspense>
           ) : browserHomeView ? (
               <div className="rp-browser-home" aria-label={tr("rp.browser.home")}>
                 <form
@@ -3088,13 +3116,12 @@ export function ResourceViewer({
                   </button>
                 </form>
                 <div className="rp-browser-dials" role="list">
-                  {BROWSER_DIALS.map((d, i) => (
+                  {BROWSER_DIALS.map((d) => (
                     <button
                       key={d.url}
                       type="button"
                       role="listitem"
                       className="rp-browser-dial"
-                      style={{ ["--dial-i" as string]: String(i) }}
                       title={d.url}
                       onClick={() => openUrl(d.url)}
                     >
@@ -3212,41 +3239,19 @@ export function ResourceViewer({
                       {tr("rp.launcher.browser")}
                     </span>
                   </button>
-                  {api.isTauri() ? (
-                    <button
-                      type="button"
-                      className="rp-launcher__card"
-                      aria-label={tr("rp.launcher.terminal")}
-                      onClick={() =>
-                        void api.openSystemTerminal(projectPath ?? null)
-                      }
-                    >
-                      <span className="rp-launcher__ico" aria-hidden>
-                        <IconTerminal size={22} />
-                      </span>
-                      <span className="rp-launcher__label">
-                        {tr("rp.launcher.terminal")}
-                      </span>
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      className="rp-launcher__card is-soon"
-                      disabled
-                      title={tr("rp.launcher.soon")}
-                      aria-label={`${tr("rp.launcher.terminal")} (${tr("rp.launcher.soon")})`}
-                    >
-                      <span className="rp-launcher__ico" aria-hidden>
-                        <IconTerminal size={22} />
-                      </span>
-                      <span className="rp-launcher__label">
-                        {tr("rp.launcher.terminal")}
-                      </span>
-                      <span className="rp-launcher__badge" aria-hidden>
-                        {tr("rp.launcher.soon")}
-                      </span>
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    className="rp-launcher__card"
+                    aria-label={tr("rp.launcher.terminal")}
+                    onClick={() => openPanelTab("terminal")}
+                  >
+                    <span className="rp-launcher__ico" aria-hidden>
+                      <IconTerminal size={22} />
+                    </span>
+                    <span className="rp-launcher__label">
+                      {tr("rp.launcher.terminal")}
+                    </span>
+                  </button>
                   <button
                     type="button"
                     className="rp-launcher__card"

@@ -415,13 +415,37 @@ export async function pathReveal(path: string) {
   return invoke<void>("path_reveal", { path });
 }
 
-/**
- * Open the OS terminal, optionally rooted at a project folder. No-op outside
- * Tauri (the host decides whether the launcher is enabled at all).
- */
-export async function openSystemTerminal(projectPath: string | null) {
-  if (!isTauri()) return;
-  return invoke<void>("open_system_terminal", { projectPath });
+export interface TerminalOutputEvent {
+  terminalId: string;
+  dataBase64: string;
+}
+
+export interface TerminalExitEvent {
+  terminalId: string;
+}
+
+export async function terminalStart(
+  projectPath: string | null,
+  cols: number,
+  rows: number,
+) {
+  return invoke<string>("terminal_start", { projectPath, cols, rows });
+}
+
+export async function terminalWrite(terminalId: string, data: string) {
+  return invoke<void>("terminal_write", { terminalId, data });
+}
+
+export async function terminalResize(
+  terminalId: string,
+  cols: number,
+  rows: number,
+) {
+  return invoke<void>("terminal_resize", { terminalId, cols, rows });
+}
+
+export async function terminalStop(terminalId: string) {
+  return invoke<void>("terminal_stop", { terminalId });
 }
 
 /** Optional git unified diff for a project file (session Changes panel). */

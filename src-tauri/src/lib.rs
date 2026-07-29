@@ -48,6 +48,7 @@ mod store;
 mod store_lock;
 mod stream_stall;
 mod support_bundle;
+mod terminal;
 mod tray;
 mod tray_i18n;
 mod turn_complete;
@@ -270,7 +271,10 @@ pub fn run() {
             commands::paths_classify,
             commands::path_open,
             commands::path_reveal,
-            commands::open_system_terminal,
+            terminal::terminal_start,
+            terminal::terminal_write,
+            terminal::terminal_resize,
+            terminal::terminal_stop,
             commands::git_file_diff,
             commands::git_status,
             commands::git_numstat,

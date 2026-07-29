@@ -55,6 +55,7 @@ image = { version = "0.25", default-features = false, features = ["png"] }
 fs2 = "0.4"
 tokio-tungstenite = { version = "0.26", features = ["rustls-tls-webpki-roots"] }
 url = "2"
+portable-pty = "0.9"
 
 [profile.release]
 codegen-units = 1
