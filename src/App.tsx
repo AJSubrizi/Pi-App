@@ -2169,6 +2169,7 @@ export default function App() {
           "context",
           "usage",
           "archived",
+          "providers-models",
           "extensions",
           "runtime",
           "shortcuts",
@@ -6258,6 +6259,7 @@ export default function App() {
               "context",
               "usage",
               "archived",
+              "providers-models",
               "extensions",
               "runtime",
               "shortcuts",
@@ -6685,6 +6687,7 @@ export default function App() {
       "settings.nav.general",
       "settings.nav.appearance",
       "settings.nav.archived",
+      "settings.nav.providersModels",
       "settings.nav.extensions",
       "settings.nav.runtime",
       "settings.nav.shortcuts",
@@ -6700,6 +6703,12 @@ export default function App() {
       "settings.archived.deselectAll",
       "settings.archived.selectedCount",
       "settings.archived.totalCount",
+      "providersModels.modelsTitle",
+      "providersModels.modelsDescription",
+      "providersModels.modelsEmpty",
+      "providersModels.packagesTitle",
+      "providersModels.packagesDescription",
+      "providersModels.openExtensions",
       "session.untitled",
       "settings.section.permissions",
       "settings.section.composer",
@@ -6990,6 +6999,9 @@ export default function App() {
           sessionDataMode={sessionDataMode}
           onCliSessionsImported={() => {
             void refreshSessions();
+          }}
+          onProviderActivated={() => {
+            void api.sessionDisconnect().catch(() => {});
           }}
           onSessionDataMode={(v) => {
             const commit = () => {

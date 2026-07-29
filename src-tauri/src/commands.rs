@@ -4381,6 +4381,89 @@ pub async fn session_import_transcript_file(
     Ok(Some(meta))
 }
 
+// ── Custom providers (Pi agent profile config.toml) ────────────────────────
+
+#[tauri::command]
+pub async fn providers_list() -> Result<crate::providers::ProvidersListResult, String> {
+    crate::providers::repair_custom_base_urls()?;
+    crate::providers::list_custom_providers()
+}
+
+#[tauri::command]
+pub async fn providers_activate(
+    source: String,
+    provider_id: Option<String>,
+) -> Result<crate::providers::ProvidersListResult, String> {
+    let result = crate::providers::activate_provider(&source, provider_id.as_deref())?;
+    let mut settings = store::load_settings();
+    settings.model_id = result.default_model.clone();
+    store::save_settings(&settings)?;
+    Ok(result)
+}
+
+#[tauri::command]
+pub async fn providers_upsert(
+    id: String,
+    model: String,
+    base_url: String,
+    name: Option<String>,
+    api_key: Option<String>,
+    api_backend: Option<String>,
+    set_as_default: Option<bool>,
+    create_only: Option<bool>,
+) -> Result<crate::providers::ProvidersListResult, String> {
+    let result = crate::providers::upsert_custom_provider(crate::providers::UpsertProviderInput {
+        id,
+        model,
+        base_url,
+        name,
+        api_key,
+        api_backend,
+        set_as_default,
+        create_only,
+    })?;
+    if let Some(default_model) = result.default_model.clone() {
+        let mut settings = store::load_settings();
+        settings.model_id = Some(default_model);
+        store::save_settings(&settings)?;
+    }
+    Ok(result)
+}
+
+#[tauri::command]
+pub async fn providers_remove(id: String) -> Result<crate::providers::ProvidersListResult, String> {
+    crate::providers::remove_custom_provider(&id)
+}
+
+#[tauri::command]
+pub async fn providers_set_default(
+    model_id: String,
+) -> Result<crate::providers::ProvidersListResult, String> {
+    let result = crate::providers::set_default_model_id(&model_id)?;
+    let mut settings = store::load_settings();
+    settings.model_id = Some(model_id);
+    store::save_settings(&settings)?;
+    Ok(result)
+}
+
+#[tauri::command]
+pub async fn providers_ping(
+    base_url: Option<String>,
+    api_key: Option<String>,
+    provider_id: Option<String>,
+) -> Result<crate::providers::ProviderPingResult, String> {
+    crate::providers::ping_provider(base_url, api_key, provider_id).await
+}
+
+#[tauri::command]
+pub async fn providers_list_models(
+    base_url: String,
+    api_key: Option<String>,
+    provider_id: Option<String>,
+) -> Result<crate::providers::RemoteModelsResult, String> {
+    crate::providers::list_remote_models(base_url, api_key, provider_id).await
+}
+
 // ── Editors ─────────────────────────────────────────────────────────────────
 
 #[tauri::command]

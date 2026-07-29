@@ -37,6 +37,7 @@ mod pi_packages;
 mod process_limits;
 mod process_util;
 mod project_rules;
+mod providers;
 mod repository_trust;
 mod secrets;
 mod session_content_search;
@@ -190,6 +191,13 @@ pub fn run() {
             commands::settings_set,
             commands::settings_remember_last_session,
             commands::models_list_available,
+            commands::providers_list,
+            commands::providers_activate,
+            commands::providers_upsert,
+            commands::providers_remove,
+            commands::providers_set_default,
+            commands::providers_ping,
+            commands::providers_list_models,
             commands::agents_catalog,
             commands::agents_list,
             commands::cli_sessions_list,

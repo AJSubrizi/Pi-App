@@ -26,6 +26,7 @@ import {
   IconMinimize,
   IconPuzzle,
   IconSearch,
+  IconShare,
   IconSettings,
   IconShield,
   IconTrash,
@@ -59,6 +60,7 @@ import type { DetectedEditor } from "@/lib/api";
 import * as api from "@/lib/api";
 import { ExtensionsPanel } from "@/components/ExtensionsPanel";
 import { PiExtensionsPanel } from "@/components/PiExtensionsPanel";
+import { ProvidersPanel } from "@/components/ProvidersPanel";
 import { ProjectInspectPanel } from "@/components/ProjectInspectPanel";
 import { PermissionRulesPanel } from "@/components/PermissionRulesPanel";
 import { ContextSettingsPanel } from "@/components/ContextSettingsPanel";
@@ -77,6 +79,7 @@ export type SettingsSectionId =
   | "context"
   | "usage"
   | "archived"
+  | "providers-models"
   | "extensions"
   | "runtime"
   | "shortcuts"
@@ -193,6 +196,8 @@ export interface SettingsPageProps {
   projectPath?: string | null;
   /** Start a focused chat that can find, configure, or build a Pi capability. */
   onAskPiForCapability?: () => void;
+  /** Reconnect the active Pi process after changing its provider route. */
+  onProviderActivated?: () => void;
   /** After skill enable toggle — refresh slash palette in App. */
   onSkillsPrefsChanged?: () => void;
   /** Open the same shortcuts help modal as ⌘/ / Ctrl+/. */
@@ -207,6 +212,7 @@ const NAV: {
     | "context"
     | "usage"
     | "archive"
+    | "providers"
     | "extensions"
     | "doctor"
     | "keyboard"
@@ -219,6 +225,12 @@ const NAV: {
   { id: "context", icon: "context", labelKey: "settings.nav.context", group: "personal" },
   { id: "usage", icon: "usage", labelKey: "settings.nav.usage", group: "personal" },
   { id: "archived", icon: "archive", labelKey: "settings.nav.archived", group: "personal" },
+  {
+    id: "providers-models",
+    icon: "providers",
+    labelKey: "settings.nav.providersModels",
+    group: "system",
+  },
   {
     id: "extensions",
     icon: "extensions",
@@ -246,6 +258,7 @@ function NavIcon({
   if (name === "context") return <IconInstructions size={size} />;
   if (name === "usage") return <IconActivity size={size} />;
   if (name === "archive") return <IconArchive size={size} />;
+  if (name === "providers") return <IconShare size={size} />;
   if (name === "keyboard") return <IconKeyboard size={size} />;
   if (name === "extensions") return <IconPuzzle size={size} />;
   if (name === "doctor") return <IconDoctor size={size} />;
@@ -503,6 +516,7 @@ export function SettingsPage({
   onDeleteArchivedSessions,
   projectPath = null,
   onAskPiForCapability,
+  onProviderActivated,
   onSkillsPrefsChanged,
   onOpenShortcutsHelp,
 }: SettingsPageProps) {
@@ -783,6 +797,8 @@ export function SettingsPage({
             ? t("settings.nav.usage")
           : section === "archived"
             ? t("settings.nav.archived")
+            : section === "providers-models"
+              ? t("settings.nav.providersModels")
             : section === "extensions"
               ? t("settings.nav.extensions")
               : section === "runtime"
@@ -1726,6 +1742,53 @@ export function SettingsPage({
             projectPath={projectPath}
             onAskPi={onAskPiForCapability}
           />
+        )}
+
+        {section === "providers-models" && (
+          <div className="settings-section providers-models">
+            <ProvidersPanel
+              locale={resolveLocale(locale)}
+              onProviderActivated={onProviderActivated}
+            />
+            <div className="settings-card providers-models__models">
+              <h2 className="settings-page__h2">
+                {t("providersModels.modelsTitle")}
+              </h2>
+              <p className="settings-row__desc">
+                {t("providersModels.modelsDescription")}
+              </p>
+              <div className="providers-models__model-list">
+                {(availableModels ?? []).map((model) => (
+                  <div className="providers-models__model-row" key={model.id}>
+                    <span>{model.label || model.id}</span>
+                    <code>{model.id}</code>
+                  </div>
+                ))}
+                {!availableModels?.length && (
+                  <p className="settings-row__desc">
+                    {t("providersModels.modelsEmpty")}
+                  </p>
+                )}
+              </div>
+            </div>
+            <div className="settings-card providers-models__packages">
+              <div className="settings-row__text">
+                <div className="settings-row__label">
+                  {t("providersModels.packagesTitle")}
+                </div>
+                <div className="settings-row__desc">
+                  {t("providersModels.packagesDescription")}
+                </div>
+              </div>
+              <button
+                type="button"
+                className="btn btn--ghost"
+                onClick={() => onSection("extensions")}
+              >
+                {t("providersModels.openExtensions")}
+              </button>
+            </div>
+          </div>
         )}
 
         {false && section === "extensions" && (
