@@ -14,8 +14,14 @@
   <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey" alt="Platforms" />
   <img src="https://img.shields.io/badge/Tauri-2-orange" alt="Tauri 2" />
   <img src="https://img.shields.io/badge/runtime-Pi%20RPC-informational" alt="Pi RPC" />
+  <img src="https://img.shields.io/badge/status-alpha-red" alt="Alpha status" />
   <img src="https://img.shields.io/badge/note-unofficial-yellow" alt="Unofficial" />
 </p>
+
+> [!WARNING]
+> **Pi Desktop is alpha software.** Features, data formats and installation
+> behavior may change between releases. Keep important work under version
+> control and report issues through [GitHub Issues](https://github.com/AJSubrizi/Pi-App/issues).
 
 <p align="center">
   <img src="assets/screenshots/pi-home-macshot.jpg" alt="Pi desktop workbench with the default landscape and prompt composer" width="100%" />
@@ -167,6 +173,15 @@ The GUI does not copy provider secrets into its package center. Pi remains the s
 - extensions, skills, prompts, themes  
 
 Plan modes, gates, sub-agents and other workflows should come from packages — not from hard-coded shell features.
+
+---
+
+## Acknowledgements
+
+Agent activity animations are powered by
+[Thinking Orbs](https://orbs.jakubantalik.com/) by
+[Jakub Antalik](https://github.com/JakubAntalik), distributed under the
+[MIT License](https://github.com/JakubAntalik/thinking-orbs/blob/main/LICENSE).
 
 ---
 
