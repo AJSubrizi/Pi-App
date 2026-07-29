@@ -17,6 +17,25 @@
   <img src="https://img.shields.io/badge/note-unofficial-yellow" alt="Unofficial" />
 </p>
 
+<p align="center">
+  <img src="assets/screenshots/pi-home-macshot.jpg" alt="Pi desktop workbench with the default landscape and prompt composer" width="100%" />
+</p>
+
+<table>
+  <tr>
+    <td width="50%">
+      <img src="assets/screenshots/pi-providers-macshot.jpg" alt="Pi provider and model connections" width="100%" />
+    </td>
+    <td width="50%">
+      <img src="assets/screenshots/pi-extensions-macshot.jpg" alt="Pi package and natural-language extension settings" width="100%" />
+    </td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Providers &amp; Models</strong></td>
+    <td align="center"><strong>Describe a capability</strong></td>
+  </tr>
+</table>
+
 ---
 
 ## Philosophy
