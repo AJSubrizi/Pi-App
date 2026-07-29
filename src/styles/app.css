@@ -15291,6 +15291,29 @@ html[data-theme="light"] .rim-sidebar {
   gap: 12px;
 }
 
+.pi-ext__ask {
+  display: grid;
+  gap: 14px;
+  padding: 22px;
+  border-radius: 14px;
+  background: var(--bg-elevated);
+  box-shadow:
+    inset 0 1px color-mix(in srgb, var(--text-primary) 7%, transparent),
+    inset 0 -1px color-mix(in srgb, var(--text-primary) 3%, transparent);
+}
+
+.pi-ext__ask-input {
+  width: 100%;
+  min-height: 82px;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.pi-ext__ask-action {
+  display: flex;
+  justify-content: flex-end;
+}
+
 .pi-ext h3,
 .pi-ext p {
   margin-top: 0;
@@ -15545,7 +15568,7 @@ html[data-theme="light"] .rim-sidebar {
   padding: 22px;
 }
 
-.pi-ext :is(button, input):focus-visible {
+.pi-ext :is(button, input, textarea):focus-visible {
   outline: 2px solid var(--border-focus, var(--accent));
   outline-offset: 2px;
 }

@@ -7203,9 +7203,11 @@ export default function App() {
             deleteSessionsConfirm(rows);
           }}
           projectPath={activeProject?.path ?? null}
-          onAskPiForCapability={() => {
+          onAskPiForCapability={(request) => {
             void newChat(activeProject ?? null, {
-              seedDraft: tr("piExt.askDraft"),
+              seedDraft: request
+                ? tr("piExt.askDraftWithRequest", { request })
+                : tr("piExt.askDraft"),
             });
           }}
         />

@@ -13,7 +13,7 @@ import {
 type Props = {
   locale: string;
   projectPath?: string | null;
-  onAskPi?: () => void;
+  onAskPi?: (request?: string) => void;
 };
 
 type InstallCandidate = {
@@ -45,6 +45,7 @@ export function PiExtensionsPanel({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pendingInstall, setPendingInstall] = useState<InstallCandidate[]>([]);
+  const [capabilityRequest, setCapabilityRequest] = useState("");
   const reviewRef = useRef<HTMLElement | null>(null);
 
   const refresh = useCallback(async () => {
@@ -229,6 +230,30 @@ export function PiExtensionsPanel({
           })}
         </p>
       </div>
+
+      <section className="pi-ext__ask" aria-labelledby="pi-ext-ask-title">
+        <div>
+          <h3 id="pi-ext-ask-title">{tr("piExt.askTitle")}</h3>
+          <p>{tr("piExt.askDescription")}</p>
+        </div>
+        <textarea
+          className="settings-input pi-ext__ask-input"
+          value={capabilityRequest}
+          onChange={(event) => setCapabilityRequest(event.target.value)}
+          placeholder={tr("piExt.askPlaceholder")}
+          rows={3}
+        />
+        <div className="pi-ext__ask-action">
+          <button
+            type="button"
+            className="btn btn--solid"
+            disabled={!onAskPi || !capabilityRequest.trim()}
+            onClick={() => onAskPi?.(capabilityRequest.trim())}
+          >
+            {tr("piExt.askAction")}
+          </button>
+        </div>
+      </section>
 
       <section className="pi-ext__native" aria-labelledby="pi-native-title">
         <div className="pi-ext__section-head">
@@ -481,17 +506,6 @@ export function PiExtensionsPanel({
         )}
       </div>
 
-      <div className="settings-card pi-ext__primitive">
-        <div>
-          <h3>{tr("piExt.primitives")}</h3>
-          <p>{tr("piExt.primitivesBody")}</p>
-        </div>
-        {onAskPi ? (
-          <button type="button" className="btn btn--solid" onClick={onAskPi}>
-            {tr("piExt.askPi")}
-          </button>
-        ) : null}
-      </div>
     </div>
   );
 }

@@ -45,8 +45,16 @@ const en = {
   "piExt.primitivesBody":
     "Ask Pi to build an extension. RPC exposes dialogs, notifications, status, widgets and editor text, so custom workflows can feel native in this GUI.",
   "piExt.askPi": "Ask Pi for a capability",
+  "piExt.askTitle": "Describe what Pi should do",
+  "piExt.askDescription":
+    "Write the outcome in your own words. Pi will look for a reviewed package or skill first, then offer to build the smallest extension if none fits.",
+  "piExt.askPlaceholder":
+    "Example: Add a command that reviews my current Git diff and opens an annotated report.",
+  "piExt.askAction": "Ask Pi",
   "piExt.askDraft":
     "Help me add a new capability to Pi App. First inspect the installed packages and look for an existing Pi package or skill. Explain exactly what it can access, its pinned version or commit, and any provider cost. Do not install or modify anything until I approve. If nothing suitable exists, design and test a local Pi extension that works through RPC and this GUI.",
+  "piExt.askDraftWithRequest":
+    "I want Pi App to gain this capability: {request}\n\nFirst inspect the installed packages, skills and pi.dev/packages for an existing solution. Recommend the smallest suitable option and explain its exact pinned version, source, access, provider costs and how it integrates with Pi RPC. Do not install or modify anything until I approve. If nothing suitable exists, design and test a focused local Pi extension instead of adding the feature to the app core.",
   "piExt.native.title": "Native in Pi App",
   "piExt.native.description":
     "These capabilities belong to the GUI and need no package installation.",
@@ -110,6 +118,18 @@ const en = {
   "piExt.package.hashline.title": "Reliable editing",
   "piExt.package.hashline.description":
     "Adds hash-addressed read and edit tools that detect stale lines before changing a file.",
+  "piExt.package.context7.title": "Library documentation",
+  "piExt.package.context7.description":
+    "Use the official Context7 Pi extension to retrieve current library documentation when coding.",
+  "piExt.package.plannotator.title": "Interactive review",
+  "piExt.package.plannotator.description":
+    "Review plans, agent messages and code changes with browser-based annotations.",
+  "piExt.package.simplify.title": "Code simplifier",
+  "piExt.package.simplify.description":
+    "Review recent changes for clarity, consistency and maintainability.",
+  "piExt.package.voice.title": "Local voice input",
+  "piExt.package.voice.description":
+    "Dictate prompts locally, review the transcription, then send it to Pi.",
   "piRuntime.title": "Pi runtime",
   "piRuntime.description": "Each live workspace runs the local Pi CLI in RPC mode.",
   "piRuntime.path": "CLI path",

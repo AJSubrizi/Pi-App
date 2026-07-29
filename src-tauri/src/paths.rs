@@ -5,6 +5,35 @@ use std::path::{Path, PathBuf};
 
 use directories::ProjectDirs;
 
+const DEFAULT_AGENT_INSTRUCTIONS: &str = r#"# Pi App
+
+Keep Pi's core small. When the user asks to add a capability:
+
+1. Inspect installed Pi packages and skills, then search https://pi.dev/packages for an existing focused solution.
+2. Before installing anything, show the exact pinned source and version, what it can access, any provider cost, and how it fits the request.
+3. Wait for explicit approval before running `pi install` or changing configuration.
+4. If no suitable package exists, create and test the smallest local Pi extension or skill. Do not add optional capability directly to the app core.
+
+Prefer real Pi CLI and RPC behavior. Never expose credentials or copy them into project files.
+"#;
+
+fn ensure_default_agent_instructions(agent_home: &Path) -> std::io::Result<()> {
+    let target = agent_home.join("AGENTS.md");
+    if target.exists() {
+        return Ok(());
+    }
+    use std::io::Write;
+    match std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(target)
+    {
+        Ok(mut file) => file.write_all(DEFAULT_AGENT_INSTRUCTIONS.as_bytes()),
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => Ok(()),
+        Err(error) => Err(error),
+    }
+}
+
 pub fn app_data_root() -> PathBuf {
     if let Ok(custom) = std::env::var("PI_APP_HOME").or_else(|_| std::env::var("PI_APP_HOME")) {
         return PathBuf::from(custom);
@@ -32,7 +61,9 @@ pub fn ensure_app_dirs() -> std::io::Result<PathBuf> {
     std::fs::create_dir_all(root.join("sessions"))?;
     std::fs::create_dir_all(root.join("logs"))?;
     // Agent profile (config.toml / optional auth) when session_data_mode=independent.
-    std::fs::create_dir_all(root.join("agent-home"))?;
+    let agent_home = root.join("agent-home");
+    std::fs::create_dir_all(&agent_home)?;
+    ensure_default_agent_instructions(&agent_home)?;
     // Clipboard paste / picker-written attachment files.
     std::fs::create_dir_all(root.join("attachments").join("paste"))?;
     // Multi-account auth snapshots.
@@ -240,5 +271,26 @@ mod tests {
         let root = PathBuf::from("/tmp/session");
         assert!(resolve_session_relative_media(&root, "../etc/passwd").is_none());
         assert!(resolve_session_relative_media(&root, "/etc/passwd").is_none());
+    }
+
+    #[test]
+    fn default_agent_instructions_never_overwrite_user_content() {
+        let home = std::env::temp_dir().join(format!(
+            "pi-app-default-agents-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&home);
+        fs::create_dir_all(&home).unwrap();
+
+        ensure_default_agent_instructions(&home).unwrap();
+        let target = home.join("AGENTS.md");
+        assert!(fs::read_to_string(&target)
+            .unwrap()
+            .contains("https://pi.dev/packages"));
+
+        fs::write(&target, "my instructions").unwrap();
+        ensure_default_agent_instructions(&home).unwrap();
+        assert_eq!(fs::read_to_string(&target).unwrap(), "my instructions");
+        let _ = fs::remove_dir_all(&home);
     }
 }

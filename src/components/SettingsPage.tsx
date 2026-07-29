@@ -196,7 +196,7 @@ export interface SettingsPageProps {
   /** Active project path for Skills/MCP inspect cwd. */
   projectPath?: string | null;
   /** Start a focused chat that can find, configure, or build a Pi capability. */
-  onAskPiForCapability?: () => void;
+  onAskPiForCapability?: (request?: string) => void;
   /** Reconnect the active Pi process after changing its provider route. */
   onProviderActivated?: () => void;
   /** After skill enable toggle — refresh slash palette in App. */
