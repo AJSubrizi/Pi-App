@@ -51,6 +51,7 @@
     "active": true,
     "createUpdaterArtifacts": true,
     "targets": [
+      "app",
       "dmg",
       "nsis",
       "appimage",

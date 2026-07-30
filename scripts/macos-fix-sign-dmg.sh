@@ -23,6 +23,30 @@ sign_app() {
   codesign -dv --verbose=2 "$app" 2>&1 | head -20 || true
 }
 
+# Rebuild the updater bundle from the *re-signed* app.
+#
+# tauri-action produces Pi.app.tar.gz + .sig from the app as the linker left it,
+# i.e. before sign_app() seals Resources. Shipping that tarball would make the
+# updater install exactly the "damaged" bundle this script exists to repair, so
+# the tarball and its signature are regenerated here and re-uploaded.
+rebuild_updater_bundle() {
+  local app="$1"
+  local outdir="$2"
+  if [[ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" ]]; then
+    echo "==> skip updater bundle: TAURI_SIGNING_PRIVATE_KEY unset"
+    return 0
+  fi
+  mkdir -p "$outdir"
+  local tgz="$outdir/Pi.app.tar.gz"
+  rm -f "$tgz" "$tgz.sig"
+  echo "==> updater bundle: $tgz"
+  # Tauri expects the .app at the tarball root.
+  tar czf "$tgz" -C "$(dirname "$app")" "$(basename "$app")"
+  # Writes "$tgz.sig"; reads key/password from TAURI_SIGNING_PRIVATE_KEY[_PASSWORD].
+  pnpm --silent tauri signer sign "$tgz"
+  [[ -f "$tgz.sig" ]] || { echo "error: signer produced no $tgz.sig" >&2; return 1; }
+}
+
 rebuild_dmg() {
   local app="$1"
   local dmg_out="$2"
@@ -103,6 +127,7 @@ if [[ -n "$APPS" ]]; then
     esac
     out="$dmg_dir/Pi_${ver}_${arch}.dmg"
     rebuild_dmg "$app" "$out" "Pi"
+    rebuild_updater_bundle "$app" "$bundle_dir/macos"
   done
 else
   DMGS="$(find src-tauri/target -type f -name 'Pi_*.dmg' 2>/dev/null | sort -u)"
@@ -142,6 +167,7 @@ else
 
     sign_app "$tmp/Pi.app"
     rebuild_dmg "$tmp/Pi.app" "$dmg" "Pi"
+    rebuild_updater_bundle "$tmp/Pi.app" "$(dirname "$dmg")/../macos"
     cleanup_extract
     trap - EXIT
   done
