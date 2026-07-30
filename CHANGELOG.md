@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.9] - 2026-07-30
+
+### Fixed
+
+- **macOS auto-update** - publish the signed updater archive for Mac so in-app updates install correctly; previous releases offered updates on Linux and Windows only.
+- **Attachment filenames** - drop a dead branch in the paste/drop filename sanitizer that made both outcomes identical.
+- **Store lock** - declare truncate behaviour explicitly when opening the shared lock file.
+
+### Changed
+
+- **Agent runtime naming** - the agent home, spawn environment variables and internal identifiers now consistently use Pi naming. In shared session mode the agent home resolves to `~/.pi`; independent mode is unaffected.
+- **Smaller codebase** - remove modules, components and helpers that were never reachable from the running app, along with their tests.
+
 ## [0.2.8] - 2026-07-30
 
 ### Fixed
