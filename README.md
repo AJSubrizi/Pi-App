@@ -105,18 +105,33 @@ It is a **sister project** to [pi.dev](https://pi.dev) — community-built, MIT,
 Download the `.dmg` from [Releases](https://github.com/AJSubrizi/Pi-App/releases)
 (`aarch64` = Apple Silicon, `x64` = Intel).
 
-Builds are **not Apple-notarized** (community MIT app, no paid Developer ID).
-The first launch therefore needs Apple's supported one-time override:
+Builds are **not Apple-notarized** (community MIT app, no paid Developer ID),
+so macOS blocks them on first launch. Clearing the download quarantine flag is
+the one method that still works on current macOS:
 
 1. Open the DMG and drag **Pi.app** onto **Applications**.
-2. Open the Applications folder in Finder.
-3. **Right-click Pi.app → Open**.
-4. Click **Open** in the confirmation dialog.
+2. Open **Terminal** and run:
 
-Do not double-click Pi on the first launch: Gatekeeper will reject an
-unnotarized download. After the right-click launch, Pi opens normally.
+   ```bash
+   xattr -dr com.apple.quarantine /Applications/Pi.app
+   ```
 
-Manual recovery in Terminal:
+3. Open Pi normally from Applications.
+
+You only do this once. After the first launch Pi opens like any other app.
+
+> [!NOTE]
+> **Right-click → Open no longer works.** Apple removed that override in
+> macOS 15 Sequoia and tightened it further in macOS 26 Tahoe, so any guide
+> still recommending it will fail. System Settings → Privacy & Security →
+> *Open Anyway* works only intermittently on Tahoe; the command above is
+> reliable.
+
+Prefer not to run a command? [Build from source](#develop) — locally built
+apps are never quarantined.
+
+If Pi still refuses to open, clear every extended attribute and launch it
+directly:
 
 ```bash
 xattr -cr /Applications/Pi.app

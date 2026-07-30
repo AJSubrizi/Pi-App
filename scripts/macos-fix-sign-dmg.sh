@@ -68,16 +68,31 @@ rebuild_dmg() {
 Pi for macOS
 ============
 
-These builds are not Apple-notarized (community MIT app).
+These builds are not Apple-notarized (community MIT app), so macOS blocks
+them on first launch. Clearing the download quarantine flag is the one
+method that still works on current macOS.
 
 1. Drag Pi.app onto the Applications shortcut.
-2. Open Applications in Finder.
-3. RIGHT-CLICK Pi.app, choose Open, then choose Open again.
+2. Open Terminal (Applications > Utilities).
+3. Paste this line and press Return:
 
-Do not double-click Pi.app the first time: macOS will reject an unnotarized
-download. The right-click Open action is Apple's supported one-time override.
+     xattr -dr com.apple.quarantine /Applications/Pi.app
 
-After the first successful launch, Pi opens normally.
+4. Open Pi normally from Applications.
+
+You only do this once. After the first launch Pi opens like any other app.
+
+Note: right-clicking and choosing Open no longer works. Apple removed that
+override in macOS 15 Sequoia, and macOS 26 Tahoe tightened it further, so
+older instructions that mention it will fail. System Settings >
+Privacy & Security > "Open Anyway" works only sometimes; the command above
+is reliable.
+
+Prefer not to run a command? Build from source instead - locally built
+apps are never quarantined:
+
+     git clone https://github.com/AJSubrizi/Pi-App && cd Pi-App
+     pnpm install && pnpm build
 EOF
   rm -f "$dmg_out"
   hdiutil create \
