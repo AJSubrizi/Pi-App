@@ -49,6 +49,7 @@ import {
   querySidebarEl,
   toClientDragPoint,
 } from "@/lib/dragZone";
+import { buildPrReviewPrompt, parsePullRequestRef } from "@/lib/ghReview";
 import {
   applyContextCompact,
   applyGeneratedImage,
@@ -5094,6 +5095,60 @@ export default function App() {
     [projects, requestComposerFocus, showToast, tr],
   );
 
+  /**
+   * `/review-pr` — pull a PR diff through `gh` and open a chat seeded with it.
+   *
+   * The shell only composes primitives here: `gh` owns auth and the API, Pi
+   * owns the reviewing. Nothing is written to the remote.
+   */
+  const openReviewPrDialog = useCallback(() => {
+    const projectPath = activeProject?.path?.trim();
+    if (!projectPath) {
+      showToast(tr("reviewPr.noProject"));
+      return;
+    }
+    setAppDialog({
+      kind: "prompt",
+      title: tr("reviewPr.title"),
+      message: tr("reviewPr.message"),
+      initial: "",
+      placeholder: tr("reviewPr.placeholder"),
+      submitLabel: tr("reviewPr.submit"),
+      onSubmit: async (raw) => {
+        const ref = parsePullRequestRef(raw);
+        if (!ref) {
+          showToast(tr("reviewPr.badRef"));
+          return;
+        }
+        const gh = await api.ghAvailable(projectPath);
+        if (!gh.installed) {
+          showToast(tr("reviewPr.ghMissing"), 6000);
+          return;
+        }
+        if (!gh.authenticated) {
+          showToast(tr("reviewPr.ghUnauthenticated"), 6000);
+          return;
+        }
+        showToast(tr("reviewPr.loading", { number: ref.number }));
+        try {
+          const pr = await api.ghPrDiff(projectPath, ref.number);
+          await newChat(activeProject, {
+            seedDraft: buildPrReviewPrompt(pr),
+            switchToChat: true,
+          });
+          showToast(
+            tr("reviewPr.ready", {
+              number: pr.number,
+              files: pr.changedFiles,
+            }),
+          );
+        } catch (e) {
+          showToast(tr("reviewPr.failed", { reason: String(e) }), 6000);
+        }
+      },
+    });
+  }, [activeProject, showToast, tr]);
+
   const openHandoffDialog = useCallback(
     (source?: SessionRow) => {
       setCtxMenu(null);
@@ -5524,6 +5579,9 @@ export default function App() {
             return;
           case "settings":
             navigateSettings("general");
+            return;
+          case "review-pr":
+            openReviewPrDialog();
             return;
           case "export":
             void exportActiveSessionMd();

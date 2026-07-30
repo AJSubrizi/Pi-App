@@ -118,6 +118,14 @@ export function builtinSlashItems(): SlashItem[] {
       action: "settings",
     },
     {
+      id: "review-pr",
+      kind: "action",
+      name: "review-pr",
+      titleKey: "slash.reviewPr",
+      descriptionKey: "slash.reviewPrDesc",
+      action: "review-pr",
+    },
+    {
       id: "export",
       kind: "action",
       name: "export",

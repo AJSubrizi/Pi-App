@@ -20,6 +20,7 @@ mod editors;
 mod error;
 mod extensions;
 mod fs_browser;
+mod gh_cli;
 mod hooks;
 #[cfg(test)]
 mod integration_test;
@@ -308,6 +309,10 @@ pub fn run() {
             commands::git_worktree_remove,
             commands::git_worktree_gc,
             commands::git_show_file,
+            gh_cli::gh_available,
+            gh_cli::gh_pr_list,
+            gh_cli::gh_pr_diff,
+            gh_cli::gh_pr_create,
             commands::fs_list_dir,
             commands::fs_read_file,
             commands::fs_write_file,

@@ -2835,3 +2835,69 @@ export async function projectRulesEnsureTemplate(projectPath: string) {
     path: projectPath,
   });
 }
+
+// ── GitHub CLI (`gh`) — pull-request review and hand-off ───────────────────
+
+export interface GhAvailability {
+  installed: boolean;
+  authenticated: boolean;
+  version?: string | null;
+  reason?: string | null;
+}
+
+export interface GhPullRequest {
+  number: number;
+  title: string;
+  author: string;
+  baseRef: string;
+  headRef: string;
+  isDraft: boolean;
+  url: string;
+}
+
+export interface GhPrDiff {
+  number: number;
+  title: string;
+  body: string;
+  baseRef: string;
+  headRef: string;
+  url: string;
+  diff: string;
+  truncated: boolean;
+  changedFiles: number;
+}
+
+export interface GhOpResult {
+  ok: boolean;
+  output: string;
+  reason?: string | null;
+}
+
+export async function ghAvailable(projectPath: string) {
+  return invoke<GhAvailability>("gh_available", { projectPath });
+}
+
+export async function ghPrList(projectPath: string, limit?: number) {
+  return invoke<GhPullRequest[]>("gh_pr_list", { projectPath, limit });
+}
+
+export async function ghPrDiff(projectPath: string, number: number) {
+  return invoke<GhPrDiff>("gh_pr_diff", { projectPath, number });
+}
+
+/** Publishes to the remote — confirm with the user before calling. */
+export async function ghPrCreate(args: {
+  projectPath: string;
+  title: string;
+  body: string;
+  draft: boolean;
+  base?: string | null;
+}) {
+  return invoke<GhOpResult>("gh_pr_create", {
+    projectPath: args.projectPath,
+    title: args.title,
+    body: args.body,
+    draft: args.draft,
+    base: args.base ?? null,
+  });
+}
