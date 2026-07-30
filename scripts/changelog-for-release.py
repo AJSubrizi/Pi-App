@@ -23,6 +23,20 @@ CHANGELOG = ROOT / "CHANGELOG.md"
 FOOTER = """
 ---
 
+### macOS: one command after installing
+
+These builds are not Apple-notarized (community MIT app), so macOS blocks them
+on first launch. After dragging **Pi.app** into Applications, run:
+
+```
+xattr -dr com.apple.quarantine /Applications/Pi.app
+```
+
+Once only. Right-click → Open no longer works: Apple removed that override in
+macOS 15 Sequoia and tightened it further in macOS 26 Tahoe.
+
+---
+
 Assets are attached below. Install and develop notes: [README](https://github.com/AJSubrizi/Pi-App#readme) · Full history: [CHANGELOG.md](https://github.com/AJSubrizi/Pi-App/blob/main/CHANGELOG.md)
 """
 

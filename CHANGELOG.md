@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.11] - 2026-07-30
+
+### Changed
+
+- **Simpler macOS release** - the DMG is now published exactly as Tauri bundles it. The custom re-sign and rebuild step was repairing a signature problem current Tauri no longer produces, and its own failures were the only thing breaking macOS builds in 0.2.9 and 0.2.10.
+- **Install instructions on the release page** - the macOS first-launch command now appears in the release notes, before download, instead of inside the disk image.
+
 ## [0.2.10] - 2026-07-30
 
 ### Fixed
