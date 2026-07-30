@@ -134,7 +134,15 @@ function buildGrid(
     const m = parseYmd(sample).getMonth();
     if (m !== lastMonth) {
       lastMonth = m;
-      monthLabels.push({ week: wi, label: sample.slice(5, 7) });
+      const next = { week: wi, label: sample.slice(5, 7) };
+      const previous = monthLabels.at(-1);
+      // A trailing-year range can begin in the last few days of a month.
+      // Replace that fragment label so two month names never collide.
+      if (previous && wi - previous.week < 3) {
+        monthLabels[monthLabels.length - 1] = next;
+      } else {
+        monthLabels.push(next);
+      }
     }
   });
 

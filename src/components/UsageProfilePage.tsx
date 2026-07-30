@@ -2,6 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import { Heatmap } from "@/components/Heatmap";
 import * as api from "@/lib/api";
 import type { MessageKey, Vars } from "@/i18n";
+import {
+  buildUsageTimeline,
+  type UsageTimelineView,
+} from "@/lib/usageTimeline";
 
 type T = (key: MessageKey | string, vars?: Vars) => string;
 
@@ -40,6 +44,8 @@ export function UsageProfilePage({
   const [profile, setProfile] = useState<api.UsageProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [draftName, setDraftName] = useState(userName);
+  const [timelineView, setTimelineView] =
+    useState<UsageTimelineView>("daily");
 
   useEffect(() => setDraftName(userName), [userName]);
   useEffect(() => {
@@ -60,16 +66,21 @@ export function UsageProfilePage({
     };
   }, []);
 
-  const heatmap = useMemo(
-    () =>
-      (profile?.days ?? []).map((day) => ({
+  const heatmap = useMemo(() => {
+    const timeline = buildUsageTimeline(profile?.days ?? [], timelineView);
+    return timeline.map((day) => ({
         date: day.date,
         requests: day.activities,
         tokens: day.estimatedTokens,
         costUsd: 0,
-      })),
-    [profile],
-  );
+      }));
+  }, [profile, timelineView]);
+
+  const timelineViews: { id: UsageTimelineView; label: string }[] = [
+    { id: "daily", label: t("usage.view.daily") },
+    { id: "weekly", label: t("usage.view.weekly") },
+    { id: "cumulative", label: t("usage.view.cumulative") },
+  ];
 
   const stats = [
     {
@@ -141,7 +152,23 @@ export function UsageProfilePage({
       <section className="usage-profile__activity">
         <div className="usage-profile__section-head">
           <h2>{t("usage.activity")}</h2>
-          <span>{t("usage.localOnly")}</span>
+          <div
+            className="usage-profile__view-switcher"
+            role="group"
+            aria-label={t("usage.view.aria")}
+          >
+            {timelineViews.map((view) => (
+              <button
+                key={view.id}
+                type="button"
+                className={timelineView === view.id ? "is-active" : undefined}
+                aria-pressed={timelineView === view.id}
+                onClick={() => setTimelineView(view.id)}
+              >
+                {view.label}
+              </button>
+            ))}
+          </div>
         </div>
         <Heatmap
           days={heatmap}
