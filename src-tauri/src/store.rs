@@ -153,6 +153,9 @@ pub struct AppSettings {
     /// the normal local-CLI spawn path.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub acp_server_addr: Option<String>,
+    /// Run Pi RPC on a POSIX server through the system OpenSSH client.
+    #[serde(default)]
+    pub remote_runtime: RemoteRuntimeSettings,
     /// Max warm/live agent processes (I02). Default 3.
     #[serde(default = "default_max_concurrent_agents")]
     pub max_concurrent_agents: u32,
@@ -216,6 +219,54 @@ pub struct AppSettings {
     pub use_leader: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteRuntimeSettings {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub verified: bool,
+    #[serde(default)]
+    pub host: String,
+    #[serde(default)]
+    pub user: String,
+    #[serde(default = "default_ssh_port")]
+    pub port: u16,
+    #[serde(default)]
+    pub identity_file: String,
+    #[serde(default = "default_remote_pi_path")]
+    pub pi_path: String,
+    #[serde(default = "default_remote_cwd")]
+    pub cwd: String,
+}
+
+fn default_ssh_port() -> u16 {
+    22
+}
+
+fn default_remote_pi_path() -> String {
+    "pi".into()
+}
+
+fn default_remote_cwd() -> String {
+    "~".into()
+}
+
+impl Default for RemoteRuntimeSettings {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            verified: false,
+            host: String::new(),
+            user: String::new(),
+            port: default_ssh_port(),
+            identity_file: String::new(),
+            pi_path: default_remote_pi_path(),
+            cwd: default_remote_cwd(),
+        }
+    }
+}
+
 fn default_composer_prefs_scope() -> String {
     "global".into()
 }
@@ -268,6 +319,7 @@ impl Default for AppSettings {
             default_open_target: default_open_target(),
             composer_prefs_scope: default_composer_prefs_scope(),
             acp_server_addr: None,
+            remote_runtime: RemoteRuntimeSettings::default(),
             max_concurrent_agents: default_max_concurrent_agents(),
             agent_idle_minutes: default_agent_idle_minutes(),
             stream_stall_seconds: default_stream_stall_seconds(),

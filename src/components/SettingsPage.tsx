@@ -142,6 +142,8 @@ export interface SettingsPageProps {
   /** API mode: remote ACP server `host:port` (empty = local CLI spawn). */
   acpServerAddr: string;
   onAcpServerAddr: (v: string) => void;
+  remoteRuntime: api.RemoteRuntimeSettings;
+  onRemoteRuntime: (value: api.RemoteRuntimeSettings) => void;
   /** Max warm/live agent processes (I02). */
   maxConcurrentAgents?: number;
   onMaxConcurrentAgents?: (v: number) => void;
@@ -385,6 +387,162 @@ function AcpServerField({
   );
 }
 
+function RemoteRuntimePanel({
+  value,
+  onSave,
+  t,
+}: {
+  value: api.RemoteRuntimeSettings;
+  onSave: (value: api.RemoteRuntimeSettings) => void;
+  t: (key: string, vars?: Vars) => string;
+}) {
+  const [draft, setDraft] = useState(value);
+  const [testing, setTesting] = useState(false);
+  const [result, setResult] = useState<api.RemoteRuntimeProbe | null>(null);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => setDraft(value), [value]);
+
+  const update = <K extends keyof api.RemoteRuntimeSettings>(
+    key: K,
+    next: api.RemoteRuntimeSettings[K],
+  ) => {
+    setDraft((current) => ({ ...current, [key]: next, verified: false }));
+    setSaved(false);
+    setResult(null);
+  };
+
+  const test = async () => {
+    setTesting(true);
+    setResult(null);
+    try {
+      const probe = await api.remoteRuntimeTest(draft);
+      setResult(probe);
+      if (probe.ok) {
+        setDraft((current) => ({ ...current, verified: true }));
+      }
+    } catch (error) {
+      setResult({ ok: false, error: String(error) });
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  return (
+    <div className="settings-card remote-runtime">
+      <div className="settings-row">
+        <div className="settings-row__text">
+          <div className="settings-row__label">{t("remoteRuntime.title")}</div>
+          <div className="settings-row__desc">{t("remoteRuntime.description")}</div>
+        </div>
+        <UiCheck
+          checked={draft.enabled}
+          onChange={() => update("enabled", !draft.enabled)}
+          ariaLabel={t("remoteRuntime.enable")}
+        />
+      </div>
+      <div className="remote-runtime__fields">
+        <label>
+          <span>{t("remoteRuntime.host")}</span>
+          <input
+            className="settings-input"
+            value={draft.host}
+            onChange={(event) => update("host", event.target.value)}
+            placeholder={t("remoteRuntime.hostPlaceholder")}
+            spellCheck={false}
+          />
+        </label>
+        <label>
+          <span>{t("remoteRuntime.user")}</span>
+          <input
+            className="settings-input"
+            value={draft.user}
+            onChange={(event) => update("user", event.target.value)}
+            placeholder={t("remoteRuntime.userPlaceholder")}
+            spellCheck={false}
+          />
+        </label>
+        <label>
+          <span>{t("remoteRuntime.port")}</span>
+          <input
+            className="settings-input"
+            type="number"
+            min={1}
+            max={65535}
+            value={draft.port}
+            onChange={(event) =>
+              update("port", Math.min(65535, Math.max(1, Number(event.target.value) || 22)))
+            }
+          />
+        </label>
+        <label>
+          <span>{t("remoteRuntime.cwd")}</span>
+          <input
+            className="settings-input"
+            value={draft.cwd}
+            onChange={(event) => update("cwd", event.target.value)}
+            placeholder={t("remoteRuntime.cwdPlaceholder")}
+            spellCheck={false}
+          />
+        </label>
+        <label>
+          <span>{t("remoteRuntime.piPath")}</span>
+          <input
+            className="settings-input"
+            value={draft.piPath}
+            onChange={(event) => update("piPath", event.target.value)}
+            placeholder={t("remoteRuntime.piPathPlaceholder")}
+            spellCheck={false}
+          />
+        </label>
+        <label>
+          <span>{t("remoteRuntime.identity")}</span>
+          <input
+            className="settings-input"
+            value={draft.identityFile}
+            onChange={(event) => update("identityFile", event.target.value)}
+            placeholder={t("remoteRuntime.identityPlaceholder")}
+            spellCheck={false}
+          />
+        </label>
+      </div>
+      <p className="settings-row__hint">{t("remoteRuntime.security")}</p>
+      <p className="settings-row__hint">{t("remoteRuntime.scope")}</p>
+      {result ? (
+        <p
+          className={"settings-row__hint" + (result.ok ? " is-success" : " is-danger")}
+          role="status"
+        >
+          {result.ok
+            ? t("remoteRuntime.testOk", { version: result.version || "Pi" })
+            : t("remoteRuntime.testFail", { error: result.error || "Unknown error" })}
+        </p>
+      ) : null}
+      <div className="remote-runtime__actions">
+        <button
+          type="button"
+          className="btn btn--ghost"
+          disabled={testing || !draft.host.trim() || !draft.user.trim()}
+          onClick={() => void test()}
+        >
+          {testing ? t("remoteRuntime.testing") : t("remoteRuntime.test")}
+        </button>
+        <button
+          type="button"
+          className="btn btn--solid"
+          disabled={draft.enabled && !draft.verified}
+          onClick={() => {
+            onSave(draft);
+            setSaved(true);
+          }}
+        >
+          {saved ? t("remoteRuntime.saved") : t("common.save")}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /** App-styled checkbox (no native OS control). */
 function UiCheck({
   checked,
@@ -486,6 +644,8 @@ export function SettingsPage({
   onCliBlur,
   acpServerAddr,
   onAcpServerAddr,
+  remoteRuntime,
+  onRemoteRuntime,
   maxConcurrentAgents = 3,
   onMaxConcurrentAgents,
   agentIdleMinutes = 30,
@@ -1886,6 +2046,11 @@ export function SettingsPage({
                 />
               </div>
             </div>
+            <RemoteRuntimePanel
+              value={remoteRuntime}
+              onSave={onRemoteRuntime}
+              t={t}
+            />
             <div className="settings-card pi-runtime__protocol">
               <div>
                 <h3>{t("piRuntime.protocol")}</h3>

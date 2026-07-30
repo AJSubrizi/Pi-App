@@ -243,6 +243,56 @@
   gap: 8px;
 }
 
+.setup-remote {
+  display: grid;
+  gap: 12px;
+}
+
+.setup-remote > .btn {
+  justify-self: start;
+}
+
+.setup-remote__fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 14px;
+  border-radius: 12px;
+  background: var(--bg-elevated);
+}
+
+.setup-remote__fields label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.setup-remote__fields input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.setup-remote__fields p {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--text-tertiary);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.setup-remote__fields .btn {
+  grid-column: 1 / -1;
+  justify-self: end;
+}
+
+@media (max-width: 640px) {
+  .setup-remote__fields {
+    grid-template-columns: 1fr;
+  }
+}
+
 .setup-actions--footer {
   flex-direction: row;
   justify-content: flex-end;

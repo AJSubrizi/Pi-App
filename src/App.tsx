@@ -1,4 +1,6 @@
 import {
+  lazy,
+  Suspense,
   useCallback,
   useEffect,
   useMemo,
@@ -294,15 +296,18 @@ import {
 } from "@/lib/a11yFocus";
 import { Spinner } from "@/components/ui/spinner";
 import { UserMenu } from "@/components/UserMenu";
-import {
-  SettingsPage,
-  type SettingsSectionId,
-} from "@/components/SettingsPage";
+import type { SettingsSectionId } from "@/components/SettingsPage";
 import { Tip } from "@/components/ui/tooltip";
 import {
   WindowControls,
   toggleMaximizeFromTitlebar,
 } from "@/components/WindowControls";
+
+const SettingsPage = lazy(() =>
+  import("@/components/SettingsPage").then((module) => ({
+    default: module.SettingsPage,
+  })),
+);
 
 function joinAtPath(root: string, rel: string): string {
   if (!root) return rel;
@@ -798,6 +803,16 @@ export default function App() {
   }>({ found: false, path: null, version: null, source: "", cliAuthPresent: false });
   const [manualCliPath, setManualCliPath] = useState("");
   const [acpServerAddr, setAcpServerAddr] = useState("");
+  const [remoteRuntime, setRemoteRuntime] = useState<api.RemoteRuntimeSettings>({
+    enabled: false,
+    verified: false,
+    host: "",
+    user: "",
+    port: 22,
+    identityFile: "",
+    piPath: "pi",
+    cwd: "~",
+  });
   const [maxConcurrentAgents, setMaxConcurrentAgents] = useState(3);
   const [agentIdleMinutes, setAgentIdleMinutes] = useState(30);
   const [streamStallSeconds, setStreamStallSeconds] = useState(120);
@@ -1099,6 +1114,18 @@ export default function App() {
       );
       setManualCliPath(settings.manualCliPath || cli.path || "");
       setAcpServerAddr(settings.acpServerAddr || "");
+      setRemoteRuntime(
+        settings.remoteRuntime || {
+          enabled: false,
+          verified: false,
+          host: "",
+          user: "",
+          port: 22,
+          identityFile: "",
+          piPath: "pi",
+          cwd: "~",
+        },
+      );
       setMaxConcurrentAgents(
         typeof settings.maxConcurrentAgents === "number" &&
           settings.maxConcurrentAgents >= 1
@@ -1155,19 +1182,23 @@ export default function App() {
       });
       // Pi owns provider credentials and authentication. A usable Pi runtime
       // is sufficient for entering the workbench.
-      const authOk = !!cli.found;
+      const remoteReady =
+        !!settings.remoteRuntime?.enabled &&
+        !!settings.remoteRuntime?.verified;
+      const runtimeReady = !!cli.found || remoteReady;
+      const authOk = runtimeReady;
       setSetup({
-        cli: cli.found,
+        cli: runtimeReady,
         auth: authOk,
         project: p.some((x) => (x as Project).trusted) || p.length > 0,
       });
 
       // ── Setup gate: CLI is hard-required; account may be deferred ──
       const cliSeed: SetupCliInfo = {
-        found: cli.found,
+        found: runtimeReady,
         path: cli.path,
-        version: cli.version,
-        source: cli.source || "",
+        version: remoteReady ? "Remote Pi over SSH" : cli.version,
+        source: remoteReady ? "ssh" : cli.source || "",
         cliAuthPresent: !!cli.cliAuthPresent,
       };
       setSetupCliSeed(cliSeed);
@@ -1176,7 +1207,7 @@ export default function App() {
       const legacyDone =
         !!settings.onboardingDone || !!settings.setupSkipped;
 
-      if (cli.found && !wizardCompleted && legacyDone) {
+      if (runtimeReady && !wizardCompleted && legacyDone) {
         // Migrate older installs that already completed onboarding.
         try {
           await api.settingsSet({
@@ -1188,7 +1219,7 @@ export default function App() {
           /* ignore */
         }
         setAppGate("ready");
-      } else if (!cli.found || !wizardCompleted) {
+      } else if (!runtimeReady || !wizardCompleted) {
         // No CLI means setup is required. Pi handles provider configuration.
         setAppGate("setup");
       } else {
@@ -6981,6 +7012,17 @@ export default function App() {
               cliAuthPresent: false,
             }
           }
+          initialRemote={remoteRuntime}
+          onRemoteConfigured={(value) => {
+            setRemoteRuntime(value);
+            void api.settingsGet().then((settings) =>
+              api.settingsSet({
+                ...settings,
+                remoteRuntime: value,
+                acpServerAddr: null,
+              }),
+            );
+          }}
           onComplete={(cli, name) => {
             setUserName(name);
             setCliInfo({
@@ -7003,7 +7045,14 @@ export default function App() {
       )}
 
       {appGate === "ready" && (appView === "settings" ? (
-        <SettingsPage
+        <Suspense
+          fallback={
+            <div className="settings-loading" role="status">
+              {tr("common.loading")}
+            </div>
+          }
+        >
+          <SettingsPage
           section={settingsSection}
           onSection={(id) => {
             setSettingsSection(id);
@@ -7105,6 +7154,17 @@ export default function App() {
             setAcpServerAddr(v);
             void api.settingsGet().then((s) =>
               api.settingsSet({ ...s, acpServerAddr: v.trim() || null }),
+            );
+          }}
+          remoteRuntime={remoteRuntime}
+          onRemoteRuntime={(value) => {
+            setRemoteRuntime(value);
+            void api.settingsGet().then((settings) =>
+              api.settingsSet({
+                ...settings,
+                remoteRuntime: value,
+                acpServerAddr: null,
+              }),
             );
           }}
           maxConcurrentAgents={maxConcurrentAgents}
@@ -7243,7 +7303,8 @@ export default function App() {
                 : tr("piExt.askDraft"),
             });
           }}
-        />
+          />
+        </Suspense>
       ) : (
       <div className="workbench">
         {/* LEFT — fully hideable (not icon-rail); open via top-bar icon when closed */}
@@ -7279,6 +7340,7 @@ export default function App() {
               <button
                 type="button"
                 className="chrome-btn chrome-btn--traffic main__pane-toggle is-on"
+                aria-label={tr("main.leftPaneHide")}
                 onClick={() =>
                   setLayout((l) => {
                     const n = { ...l, sidebarCollapsed: true };
@@ -7300,6 +7362,7 @@ export default function App() {
               <button
                 type="button"
                 className="chrome-btn"
+                aria-label={tr("sidebar.search")}
                 onClick={() => {
                   setShowSearch(true);
                   setSearchQuery("");
@@ -7358,6 +7421,7 @@ export default function App() {
                 <button
                   type="button"
                   className="tree-l1__action"
+                  aria-label={tr("sidebar.addProject")}
                   onClick={() => void addProject(false)}
                 >
                   <IconPlus size={15} />
@@ -7925,6 +7989,7 @@ export default function App() {
                   <button
                     type="button"
                     className="chrome-btn chrome-btn--traffic main__pane-toggle"
+                    aria-label={tr("main.leftPaneShow")}
                     onClick={() =>
                       setLayout((l) => {
                         const n = openWorkbenchPane(
@@ -8010,7 +8075,7 @@ export default function App() {
                   </span>
                 </Tip>
               )}
-              {activeProject && mainPane === "chat" && (
+              {activeProject && mainPane === "chat" && !remoteRuntime.enabled && (
                 <OpenLocationButton
                   path={activeProject.path}
                   target={defaultOpenTarget || "finder"}
@@ -8080,9 +8145,11 @@ export default function App() {
               ) : null}
               <Tip
                 label={
-                  layout.asideCollapsed
-                    ? tr("main.rightPaneShow")
-                    : tr("main.rightPaneHide")
+                  remoteRuntime.enabled
+                    ? tr("remoteRuntime.localToolsUnavailable")
+                    : layout.asideCollapsed
+                      ? tr("main.rightPaneShow")
+                      : tr("main.rightPaneHide")
                 }
               >
                 <button
@@ -8090,6 +8157,14 @@ export default function App() {
                   className={
                     "chrome-btn main__pane-toggle" +
                     (!layout.asideCollapsed ? " is-on" : "")
+                  }
+                  disabled={remoteRuntime.enabled}
+                  aria-label={
+                    remoteRuntime.enabled
+                      ? tr("remoteRuntime.localToolsUnavailable")
+                      : layout.asideCollapsed
+                        ? tr("main.rightPaneShow")
+                        : tr("main.rightPaneHide")
                   }
                   onClick={() =>
                     setLayout((l) => {
@@ -8133,6 +8208,17 @@ export default function App() {
             />
           ) : (
           <>
+          {remoteRuntime.enabled && (
+            <div className="conn-bar conn-bar--remote" role="status">
+              <strong>{tr("remoteRuntime.active")}</strong>
+              <span>
+                {tr("remoteRuntime.activeTarget", {
+                  target: `${remoteRuntime.user}@${remoteRuntime.host}`,
+                  cwd: remoteRuntime.cwd,
+                })}
+              </span>
+            </div>
+          )}
           {activeProject && isProjectPathMissing(activeProject.pathOk) && (
             <div className="conn-bar">
               <span style={{ fontSize: 12, opacity: 0.9, marginRight: 8 }}>
@@ -8889,6 +8975,7 @@ export default function App() {
                   <button
                     ref={composerPlusTriggerRef}
                     type="button"
+                    aria-label={tr("composer.add")}
                     className={
                       "icon-btn icon-btn--plus" +
                       (composerMenuOpen ? " is-open" : "")

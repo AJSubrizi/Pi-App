@@ -131,7 +131,8 @@ const en = {
   "piExt.package.voice.description":
     "Dictate prompts locally, review the transcription, then send it to Pi.",
   "piRuntime.title": "Pi runtime",
-  "piRuntime.description": "Each live workspace runs the local Pi CLI in RPC mode.",
+  "piRuntime.description":
+    "Run Pi locally or connect securely to a server through OpenSSH.",
   "piRuntime.path": "CLI path",
   "piRuntime.detected": "Detected",
   "piRuntime.missing": "Pi was not found. Install it or set the executable path.",
@@ -139,6 +140,35 @@ const en = {
   "piRuntime.protocol": "Protocol",
   "piRuntime.protocolBody": "JSONL over stdin/stdout via `pi --mode rpc`. Sessions remain native Pi JSONL files.",
   "piRuntime.docs": "Open Pi documentation",
+  "remoteRuntime.title": "Remote Pi over SSH",
+  "remoteRuntime.description":
+    "Run the agent on a Linux or macOS server while this app remains the interface.",
+  "remoteRuntime.enable": "Use remote Pi runtime",
+  "remoteRuntime.host": "Host",
+  "remoteRuntime.hostPlaceholder": "server.example.com",
+  "remoteRuntime.user": "SSH user",
+  "remoteRuntime.userPlaceholder": "developer",
+  "remoteRuntime.port": "Port",
+  "remoteRuntime.cwd": "Remote workspace",
+  "remoteRuntime.cwdPlaceholder": "/home/developer/project",
+  "remoteRuntime.piPath": "Remote Pi executable",
+  "remoteRuntime.piPathPlaceholder": "pi or /usr/local/bin/pi",
+  "remoteRuntime.identity": "Identity file",
+  "remoteRuntime.identityPlaceholder": "Optional · ~/.ssh/id_ed25519",
+  "remoteRuntime.security":
+    "Uses your system OpenSSH client, ssh-agent and known_hosts. Passwords and private-key contents are never stored.",
+  "remoteRuntime.scope":
+    "Remote mode currently covers chat and agent execution. Local file browser, Git, terminal and checkpoints stay unavailable for remote workspaces.",
+  "remoteRuntime.test": "Test connection",
+  "remoteRuntime.testing": "Testing…",
+  "remoteRuntime.testOk": "Connected · {version}",
+  "remoteRuntime.testFail": "Connection failed: {error}",
+  "remoteRuntime.saved": "Saved",
+  "remoteRuntime.active": "Remote runtime",
+  "remoteRuntime.activeTarget": "{target} · {cwd}",
+  "remoteRuntime.localToolsUnavailable":
+    "Local files, Git, terminal and checkpoints are unavailable in remote mode.",
+  "setup.remote.toggle": "Use Pi on a remote server",
 
   // Window chrome (Windows self-drawn controls)
   "window.minimize": "Minimize",
@@ -1206,6 +1236,8 @@ const en = {
   "providerConnect.finishLogin": "Finish login",
   "providerConnect.configureKey": "Configure key",
   "providerConnect.review": "Review & connect",
+  "providerConnect.reviewProvider": "Review and connect {name}",
+  "providerConnect.configureProvider": "Configure {name}",
   "providerConnect.reviewTitle": "Connect {name}",
   "providerConnect.package": "Package",
   "providerConnect.authentication": "Authentication",
@@ -1508,6 +1540,7 @@ const en = {
   "usage.view.cumulative": "Cumulative",
   "usage.noActivity": "No local activity yet",
   "usage.heatmapAria": "Local token activity heatmap",
+  "usage.scrollHint": "Scroll horizontally to see the full year.",
   "usage.estimatedTokens": "Estimated tokens",
   "usage.insights": "Activity details",
   "usage.reasoning": "Most used reasoning",

@@ -1323,17 +1323,21 @@ impl SessionManager {
 
         // Orphan chats (no project): use $HOME, never process cwd.
         // Dock-launched macOS apps often have cwd `/`, which confuses the agent.
-        let cwd = project_path
-            .clone()
-            .map(std::path::PathBuf::from)
-            .unwrap_or_else(|| {
-                let home = crate::process_util::user_home();
-                if home.is_dir() {
-                    home
-                } else {
-                    std::env::current_dir().unwrap_or_else(|_| ".".into())
-                }
-            });
+        let cwd = if settings.remote_runtime.enabled {
+            std::path::PathBuf::from(settings.remote_runtime.cwd.trim())
+        } else {
+            project_path
+                .clone()
+                .map(std::path::PathBuf::from)
+                .unwrap_or_else(|| {
+                    let home = crate::process_util::user_home();
+                    if home.is_dir() {
+                        home
+                    } else {
+                        std::env::current_dir().unwrap_or_else(|_| ".".into())
+                    }
+                })
+        };
 
         // Ensure app session meta
         let mut meta = if let Some(id) = app_session_id {
@@ -1433,7 +1437,7 @@ impl SessionManager {
                 .as_ref()
                 .map(|s| s.app_session_id == meta.id)
                 .unwrap_or(false);
-            if same_focus {
+            if same_focus || settings.remote_runtime.enabled {
                 None
             } else {
                 Self::take_reusable_acp(&self.inner, &cwd, &project_path, &prefs, policy)
@@ -1584,7 +1588,7 @@ impl SessionManager {
 
             // Real ACP cold spawn
             let probe = cli_probe::probe_cli(settings.manual_cli_path.as_deref());
-            if !probe.found {
+            if !settings.remote_runtime.enabled && !probe.found {
                 {
                     let mut guard = self.inner.lock();
                     if let Some(s) = guard.as_mut() {
@@ -1599,7 +1603,11 @@ impl SessionManager {
                 return Ok(snap);
             }
 
-            let cli_path = std::path::PathBuf::from(probe.path.unwrap());
+            let cli_path = if settings.remote_runtime.enabled {
+                std::path::PathBuf::from("ssh")
+            } else {
+                std::path::PathBuf::from(probe.path.unwrap())
+            };
             let spawn_opts = crate::acp_client::SpawnOptions {
                 model_id: Some(agent_model.clone()),
                 effort: Some(prefs.effort.clone()),

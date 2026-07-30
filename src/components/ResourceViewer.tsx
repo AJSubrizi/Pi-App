@@ -2703,6 +2703,7 @@ export function ResourceViewer({
               <button
                 type="button"
                 className="chrome-btn"
+                aria-label={tr("common.close")}
                 onClick={onClose}
               >
                 <IconClose size={14} />
@@ -2719,6 +2720,7 @@ export function ResourceViewer({
             <button
               type="button"
               className="chrome-btn"
+              aria-label={tr("common.dismiss")}
               onClick={() => setError(null)}
             >
               <IconClose size={12} />

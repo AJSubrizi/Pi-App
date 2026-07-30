@@ -38,6 +38,7 @@ mod process_limits;
 mod process_util;
 mod project_rules;
 mod providers;
+mod remote_runtime;
 mod repository_trust;
 mod secrets;
 mod session_content_search;
@@ -291,6 +292,7 @@ pub fn run() {
             speech::speech_status,
             speech::speech_install,
             speech::speech_transcribe,
+            remote_runtime::remote_runtime_test,
             commands::git_file_diff,
             commands::git_status,
             commands::git_numstat,

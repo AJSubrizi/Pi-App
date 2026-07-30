@@ -69,6 +69,12 @@ describe("layout prefs", () => {
       sidebarCollapsed: true,
       asideCollapsed: false,
     });
+    expect(
+      fitWorkbenchToViewport({ ...open, asideCollapsed: true }, true),
+    ).toMatchObject({
+      sidebarCollapsed: true,
+      asideCollapsed: true,
+    });
   });
 
   it("does not collapse desktop panes", () => {

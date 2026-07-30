@@ -28,6 +28,8 @@ type Props = {
   platform: "mac" | "win" | "other";
   useCustomWindowChrome: boolean;
   initialCli: SetupCliInfo;
+  initialRemote: api.RemoteRuntimeSettings;
+  onRemoteConfigured: (value: api.RemoteRuntimeSettings) => void;
   onComplete: (cli: SetupCliInfo, userName: string) => void;
 };
 
@@ -45,6 +47,8 @@ export function SetupWizard({
   platform,
   useCustomWindowChrome,
   initialCli,
+  initialRemote,
+  onRemoteConfigured,
   onComplete,
 }: Props) {
   const [step, setStep] = useState<Step>(initialCli.found ? "models" : "runtime");
@@ -62,6 +66,9 @@ export function SetupWizard({
   const [modelIds, setModelIds] = useState<string[]>([]);
   const [modelsSkipped, setModelsSkipped] = useState(false);
   const [userName, setUserName] = useState("");
+  const [remoteOpen, setRemoteOpen] = useState(false);
+  const [remote, setRemote] = useState(initialRemote);
+  const [remoteTesting, setRemoteTesting] = useState(false);
 
   useEffect(() => {
     void api.cliInstallCommands().then(setInstallCmds).catch(() => null);
@@ -170,6 +177,33 @@ export function SetupWizard({
       setError(String(e));
     }
   }, [recheck]);
+
+  const testRemote = useCallback(async () => {
+    setRemoteTesting(true);
+    setError(null);
+    try {
+      const result = await api.remoteRuntimeTest(remote);
+      if (!result.ok) {
+        setError(result.error || tr("remoteRuntime.testFail", { error: "Unknown error" }));
+        return;
+      }
+      const verified = { ...remote, enabled: true, verified: true };
+      setRemote(verified);
+      onRemoteConfigured(verified);
+      setCli({
+        found: true,
+        path: null,
+        version: result.version || "Remote Pi over SSH",
+        source: "ssh",
+        cliAuthPresent: true,
+      });
+      setStep("models");
+    } catch (reason) {
+      setError(String(reason));
+    } finally {
+      setRemoteTesting(false);
+    }
+  }, [onRemoteConfigured, remote, tr]);
 
   const copyCmd = useCallback(async () => {
     const cmd =
@@ -324,6 +358,95 @@ export function SetupWizard({
 
               {!cli.found && !installing && (
                 <p className="setup-hint">{tr("setup.manualHint")}</p>
+              )}
+
+              {!cli.found && !installing && (
+                <div className="setup-remote">
+                  <button
+                    type="button"
+                    className="btn btn--ghost"
+                    aria-expanded={remoteOpen}
+                    onClick={() => setRemoteOpen((open) => !open)}
+                  >
+                    {tr("setup.remote.toggle")}
+                  </button>
+                  {remoteOpen ? (
+                    <div className="setup-remote__fields">
+                      <label>
+                        <span>{tr("remoteRuntime.host")}</span>
+                        <input
+                          value={remote.host}
+                          placeholder={tr("remoteRuntime.hostPlaceholder")}
+                          onChange={(event) =>
+                            setRemote((current) => ({
+                              ...current,
+                              host: event.target.value,
+                              verified: false,
+                            }))
+                          }
+                        />
+                      </label>
+                      <label>
+                        <span>{tr("remoteRuntime.user")}</span>
+                        <input
+                          value={remote.user}
+                          placeholder={tr("remoteRuntime.userPlaceholder")}
+                          onChange={(event) =>
+                            setRemote((current) => ({
+                              ...current,
+                              user: event.target.value,
+                              verified: false,
+                            }))
+                          }
+                        />
+                      </label>
+                      <label>
+                        <span>{tr("remoteRuntime.cwd")}</span>
+                        <input
+                          value={remote.cwd}
+                          placeholder={tr("remoteRuntime.cwdPlaceholder")}
+                          onChange={(event) =>
+                            setRemote((current) => ({
+                              ...current,
+                              cwd: event.target.value,
+                              verified: false,
+                            }))
+                          }
+                        />
+                      </label>
+                      <label>
+                        <span>{tr("remoteRuntime.identity")}</span>
+                        <input
+                          value={remote.identityFile}
+                          placeholder={tr("remoteRuntime.identityPlaceholder")}
+                          onChange={(event) =>
+                            setRemote((current) => ({
+                              ...current,
+                              identityFile: event.target.value,
+                              verified: false,
+                            }))
+                          }
+                        />
+                      </label>
+                      <p>{tr("remoteRuntime.security")}</p>
+                      <button
+                        type="button"
+                        className="btn btn--primary"
+                        disabled={
+                          remoteTesting ||
+                          !remote.host.trim() ||
+                          !remote.user.trim() ||
+                          !remote.cwd.trim()
+                        }
+                        onClick={() => void testRemote()}
+                      >
+                        {remoteTesting
+                          ? tr("remoteRuntime.testing")
+                          : tr("remoteRuntime.test")}
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
               )}
 
               <div className="setup-actions">

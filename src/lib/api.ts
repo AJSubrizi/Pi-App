@@ -1003,6 +1003,7 @@ export interface AppSettings {
   /** API mode: `host:port` of a remote ACP server. When set, sessions connect
    *  over TCP instead of spawning the local CLI. Empty/unset = local spawn. */
   acpServerAddr?: string | null;
+  remoteRuntime?: RemoteRuntimeSettings;
   /** Max warm/live agent processes (default 3). */
   maxConcurrentAgents?: number;
   /** Recycle idle agent processes after N minutes (default 30). */
@@ -1033,6 +1034,27 @@ export interface AppSettings {
   lastSessionId?: string | null;
   /** Project of lastSessionId when it belonged to one (hint only). */
   lastProjectId?: string | null;
+}
+
+export interface RemoteRuntimeSettings {
+  enabled: boolean;
+  verified: boolean;
+  host: string;
+  user: string;
+  port: number;
+  identityFile: string;
+  piPath: string;
+  cwd: string;
+}
+
+export interface RemoteRuntimeProbe {
+  ok: boolean;
+  version?: string | null;
+  error?: string | null;
+}
+
+export async function remoteRuntimeTest(settings: RemoteRuntimeSettings) {
+  return invoke<RemoteRuntimeProbe>("remote_runtime_test", { settings });
 }
 
 export interface ReasoningEffort {

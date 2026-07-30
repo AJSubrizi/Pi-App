@@ -240,6 +240,9 @@ export function ProviderConnectionsPanel({
                   <button
                     type="button"
                     className="btn btn--ghost"
+                    aria-label={tr("providerConnect.configureProvider", {
+                      name: provider.name,
+                    })}
                     onClick={() => setInstalled(provider)}
                   >
                     {provider.auth === "oauth"
@@ -250,6 +253,9 @@ export function ProviderConnectionsPanel({
                   <button
                     type="button"
                     className="btn btn--ghost"
+                    aria-label={tr("providerConnect.reviewProvider", {
+                      name: provider.name,
+                    })}
                     onClick={() => setSelected(provider)}
                   >
                     {tr("providerConnect.review")}

@@ -60,7 +60,7 @@ export function fitWorkbenchToViewport(
   layout: LayoutPrefs,
   narrow: boolean,
 ): LayoutPrefs {
-  if (!narrow || layout.sidebarCollapsed || layout.asideCollapsed) {
+  if (!narrow || layout.sidebarCollapsed) {
     return layout;
   }
   return { ...layout, sidebarCollapsed: true };

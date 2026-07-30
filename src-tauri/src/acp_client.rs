@@ -320,6 +320,9 @@ impl AcpClient {
         opts: SpawnOptions,
     ) -> Result<(Arc<Self>, mpsc::UnboundedReceiver<AcpEvent>), AgentError> {
         let settings = crate::store::load_settings();
+        if settings.remote_runtime.enabled {
+            return Self::spawn_ssh(settings.remote_runtime, opts);
+        }
         Self::spawn_with_home(cli_path, cwd, &settings.session_data_mode, opts)
     }
 
@@ -450,6 +453,114 @@ impl AcpClient {
             });
         }
 
+        Ok((client, event_rx))
+    }
+
+    /// Run Pi on a remote POSIX host through the user's system OpenSSH client.
+    /// Authentication stays in ssh-agent / OpenSSH config; the app persists no
+    /// passwords or private-key contents.
+    pub fn spawn_ssh(
+        settings: crate::store::RemoteRuntimeSettings,
+        opts: SpawnOptions,
+    ) -> Result<(Arc<Self>, mpsc::UnboundedReceiver<AcpEvent>), AgentError> {
+        let ssh = crate::remote_runtime::ssh_executable().ok_or_else(|| {
+            AgentError::new(
+                AgentErrorCode::CliNotFound,
+                "OpenSSH client not found. Install the Windows OpenSSH Client feature or add ssh to PATH.",
+            )
+        })?;
+        crate::remote_runtime::validate(&settings)
+            .map_err(|error| AgentError::new(AgentErrorCode::CliNotFound, error))?;
+
+        let mut extra_args = Vec::new();
+        if let Some(model) = opts
+            .model_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty() && *value != "auto")
+        {
+            extra_args.extend(["--model".into(), model.into()]);
+        }
+        if let Some(effort) = opts.effort.as_deref().map(str::trim).filter(|value| {
+            matches!(
+                *value,
+                "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max"
+            )
+        }) {
+            extra_args.extend(["--thinking".into(), effort.into()]);
+        }
+        let remote_command = crate::remote_runtime::pi_rpc_command(&settings, &extra_args);
+        let mut command = Command::new(ssh);
+        crate::remote_runtime::configure_ssh_command(&mut command, &settings, &remote_command)
+            .map_err(|error| AgentError::new(AgentErrorCode::CliNotFound, error))?;
+        command
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .kill_on_drop(true);
+        crate::process_util::apply_no_window_tokio(&mut command);
+
+        let mut child = command.spawn().map_err(|error| {
+            AgentError::new(
+                AgentErrorCode::CliNotFound,
+                format!("failed to start remote Pi through SSH: {error}"),
+            )
+        })?;
+        let stdin = child
+            .stdin
+            .take()
+            .ok_or_else(|| AgentError::new(AgentErrorCode::AgentCrashed, "no stdin on ssh"))?;
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| AgentError::new(AgentErrorCode::AgentCrashed, "no stdout on ssh"))?;
+        let stderr = child
+            .stderr
+            .take()
+            .ok_or_else(|| AgentError::new(AgentErrorCode::AgentCrashed, "no stderr on ssh"))?;
+        let (event_tx, event_rx) = mpsc::unbounded_channel();
+        let target = format!("{}@{}", settings.user.trim(), settings.host.trim());
+        let cwd = PathBuf::from(settings.cwd.trim());
+        let client = Arc::new(Self {
+            child: AsyncMutex::new(Some(child)),
+            stdin: AsyncMutex::new(Some(Box::new(stdin) as Box<dyn AsyncWrite + Unpin + Send>)),
+            next_id: AtomicU64::new(1),
+            pending: ParkingMutex::new(HashMap::new()),
+            event_tx: event_tx.clone(),
+            agent_session_id: ParkingMutex::new(None),
+            cli_path: PathBuf::from(format!("ssh://{target}")),
+            cwd,
+            stopped: AtomicBool::new(false),
+            reader_alive: AtomicBool::new(true),
+            stderr_tail: ParkingMutex::new(Vec::new()),
+            dialect: TransportDialect::PiRpc,
+            pi_settled_waiters: ParkingMutex::new(Vec::new()),
+            pi_ui_requests: ParkingMutex::new(HashMap::new()),
+        });
+        client.start_read_loop(Box::new(stdout));
+        {
+            let remote = Arc::clone(&client);
+            tokio::spawn(async move {
+                let mut reader = BufReader::new(stderr);
+                let mut line = String::new();
+                loop {
+                    line.clear();
+                    match reader.read_line(&mut line).await {
+                        Ok(0) => break,
+                        Ok(_) => {
+                            let value = line.trim_end();
+                            if !value.is_empty() {
+                                remote.push_stderr(value);
+                                let _ = remote.event_tx.send(AcpEvent::Stderr {
+                                    line: value.to_string(),
+                                });
+                            }
+                        }
+                        Err(_) => break,
+                    }
+                }
+            });
+        }
         Ok((client, event_rx))
     }
 
@@ -1481,7 +1592,8 @@ impl AcpClient {
         &self,
         resume_session_id: Option<&str>,
     ) -> Result<(String, bool), AgentError> {
-        if !self.cwd.is_dir() {
+        let remote = self.cli_path.to_string_lossy().starts_with("ssh://");
+        if !remote && !self.cwd.is_dir() {
             return Err(AgentError::new(
                 AgentErrorCode::AgentCrashed,
                 format!("project cwd is not a directory: {}", self.cwd.display()),

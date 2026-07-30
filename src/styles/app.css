@@ -3407,6 +3407,16 @@ html.platform-mac[data-theme="light"] .settings-page__content {
   app-region: no-drag;
 }
 
+.settings-loading {
+  display: grid;
+  min-width: 0;
+  min-height: 100%;
+  place-items: center;
+  background: var(--bg-main);
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
 .settings-page__main {
   width: 100%;
   /* ~53 weeks × (cell+gap) + labels needs ≥ ~860px content for a full year heatmap */
@@ -3579,24 +3589,22 @@ html.platform-mac[data-theme="light"] .settings-page__content {
 .usage-profile__monogram {
   display: grid;
   place-items: center;
-  width: 64px;
-  height: 64px;
+  width: auto;
+  height: auto;
   margin-bottom: 12px;
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--accent) 72%, var(--bg-elevated));
-  color: var(--accent-fg);
-  font-size: 24px;
-  font-weight: 520;
-  letter-spacing: -0.04em;
+  color: var(--text-primary);
+  font-size: 28px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
 }
 
 .usage-profile__name input {
   width: min(360px, 70vw);
   padding: 2px 8px;
-  border: 0;
+  border: 1px solid color-mix(in srgb, var(--text-primary) 10%, transparent);
   border-radius: 7px;
   outline: none;
-  background: transparent;
+  background: color-mix(in srgb, var(--bg-elevated) 46%, transparent);
   color: var(--text-primary);
   text-align: center;
   font: inherit;
@@ -3703,6 +3711,13 @@ html.platform-mac[data-theme="light"] .settings-page__content {
   padding: 2px 0 0;
   overflow-x: auto;
   scrollbar-width: thin;
+}
+
+.usage-profile__scroll-hint {
+  display: none;
+  margin: 8px 0 0;
+  color: var(--text-tertiary);
+  font-size: 11px;
 }
 
 .usage-profile__details {
@@ -15690,6 +15705,60 @@ html[data-theme="light"] .rim-sidebar {
   line-height: 1.6;
 }
 
+.remote-runtime {
+  padding-bottom: 16px;
+}
+
+.remote-runtime__fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  padding: 16px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.remote-runtime__fields label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.remote-runtime > .settings-row__hint {
+  margin: 0;
+  padding: 4px 16px;
+}
+
+.remote-runtime > .settings-row__hint.is-success {
+  color: var(--text-primary);
+}
+
+.remote-runtime__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 16px 0;
+}
+
+.conn-bar--remote {
+  gap: 10px;
+}
+
+.conn-bar--remote strong {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.conn-bar--remote span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 @media (max-width: 720px) {
   /* The workbench starts with both side panes collapsed on narrow screens.
    * When reopened, each pane overlays the canvas instead of crushing it. */
@@ -15750,18 +15819,26 @@ html[data-theme="light"] .rim-sidebar {
     padding: 0;
   }
 
+  .settings-page__nav-item {
+    flex-basis: auto;
+    width: auto;
+    min-width: max-content;
+    gap: 7px;
+    padding: 0 10px;
+  }
+
   .settings-page__search {
     display: none;
   }
 
   .settings-page__nav-label {
-    position: absolute;
-    width: 1px;
-    height: 1px;
+    position: static;
+    width: auto;
+    height: auto;
     padding: 0;
-    margin: -1px;
-    overflow: hidden;
-    clip: rect(0, 0, 0, 0);
+    margin: 0;
+    overflow: visible;
+    clip: auto;
     white-space: nowrap;
     border: 0;
   }
@@ -15782,6 +15859,14 @@ html[data-theme="light"] .rim-sidebar {
   .pi-ext__install-row,
   .pi-runtime__protocol {
     grid-template-columns: 1fr;
+  }
+
+  .remote-runtime__fields {
+    grid-template-columns: 1fr;
+  }
+
+  .usage-profile__scroll-hint {
+    display: block;
   }
 
   .pi-home__principle .btn,
@@ -15858,7 +15943,7 @@ html[data-theme="light"] .rim-sidebar {
 
 /* Drifting dotted lattice — echoes the thinking-orb dot language. */
 .composer-wrap--welcome::before {
-  content: "";
+  content: none;
   position: absolute;
   inset: -40px;
   z-index: 0;
@@ -15887,7 +15972,7 @@ html[data-theme="light"] .rim-sidebar {
 
 /* Breathing top spotlight — a vignette, not a blob. */
 .composer-wrap--welcome::after {
-  content: "";
+  content: none;
   position: absolute;
   left: 50%;
   top: 30%;
@@ -15957,7 +16042,7 @@ html[data-theme="light"] .rim-sidebar {
 
 /* Soft breathing halo behind the glyph. */
 .composer-welcome-mark::before {
-  content: "";
+  content: none;
   position: absolute;
   left: 50%;
   top: 50%;
@@ -15987,17 +16072,15 @@ html[data-theme="light"] .rim-sidebar {
 
 .composer-welcome-mark .pi-logo {
   display: block;
-  filter: drop-shadow(0 2px 10px rgba(0, 0, 0, 0.35));
   animation: welcome-mark-float 7s ease-in-out 0.7s infinite;
 }
 
 [data-theme="light"] .composer-welcome-mark .pi-logo {
-  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.12));
+  filter: none;
 }
 
 @keyframes welcome-mark-in {
   from {
-    opacity: 0;
     transform: translateY(10px) scale(0.94);
   }
   to {
@@ -16033,18 +16116,17 @@ html[data-theme="light"] .rim-sidebar {
   animation: welcome-composer-in 720ms cubic-bezier(0.22, 1, 0.36, 1) 0.12s both;
   box-shadow:
     0 1px 0 rgba(255, 255, 255, 0.04) inset,
-    0 12px 40px rgba(0, 0, 0, 0.28);
+    0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
 [data-theme="light"] .composer-wrap--welcome .composer {
   box-shadow:
     0 1px 0 rgba(255, 255, 255, 0.6) inset,
-    0 12px 36px rgba(0, 0, 0, 0.1);
+    0 4px 12px rgba(0, 0, 0, 0.08);
 }
 
 @keyframes welcome-composer-in {
   from {
-    opacity: 0;
     transform: translateY(14px) scale(0.985);
   }
   to {
@@ -16059,7 +16141,6 @@ html[data-theme="light"] .rim-sidebar {
   box-shadow:
     0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent),
     0 10px 32px rgba(0, 0, 0, 0.22);
-  transform: translateY(-1px);
 }
 
 .composer--drop-ready:focus-within {
@@ -16091,7 +16172,6 @@ html[data-theme="light"] .rim-sidebar {
 }
 
 .icon-btn--primary:hover:not(:disabled) {
-  transform: translateY(-1px);
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
 }
 
@@ -16121,7 +16201,7 @@ html[data-theme="light"] .rim-sidebar {
 }
 
 .nav-item:hover:not(:disabled):not(.nav-item--active) {
-  transform: translateX(2px);
+  color: var(--text-primary);
 }
 
 .nav-item__icon {
@@ -16198,7 +16278,7 @@ html[data-theme="light"] .rim-sidebar {
   border: 1px solid var(--border-subtle);
   background: var(--bg-elevated);
   color: var(--text-secondary);
-  border-radius: 999px;
+  border-radius: 9px;
   padding: 7px 14px;
   font: inherit;
   font-size: 13px;
@@ -16215,7 +16295,6 @@ html[data-theme="light"] .rim-sidebar {
   color: var(--text-primary);
   border-color: color-mix(in srgb, var(--accent) 42%, var(--border-subtle));
   background: var(--bg-hover);
-  transform: translateY(-1px);
 }
 
 .welcome-suggest__chip:active {

@@ -182,6 +182,9 @@ export function UsageProfilePage({
             tokens: t("usage.estimatedTokens"),
           }}
         />
+        <p className="usage-profile__scroll-hint">
+          {t("usage.scrollHint")}
+        </p>
       </section>
 
       <div className="usage-profile__details">
