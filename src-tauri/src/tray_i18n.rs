@@ -1,33 +1,10 @@
 //! Tray / menu-bar copy — mirrors `tray.*` keys in `src/i18n/messages.ts`.
 //! Native menus cannot use the frontend catalog; keep both sides in sync.
+//!
+//! The product ships English only, matching `Locale` in `src/i18n/messages.ts`.
+//! Adding a locale here means adding it there too, and reintroducing a lookup.
 
-use crate::store;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Locale {
-    Zh,
-    ZhTw,
-    En,
-}
-
-impl Locale {
-    pub fn parse(raw: &str) -> Self {
-        match raw.trim().to_ascii_lowercase().as_str() {
-            "en" | "en-us" | "en_us" | "en-gb" => Locale::En,
-            "zh-tw" | "zh_tw" | "zh-hant" | "zh_hant" => Locale::ZhTw,
-            "zh" | "zh-cn" | "zh_cn" | "zh-hans" | "zh_hans" => Locale::Zh,
-            // Default product locale is en (matches AppSettings::default).
-            _ => Locale::En,
-        }
-    }
-}
-
-/// Current app locale from durable settings.
-pub fn app_locale() -> Locale {
-    Locale::parse(&store::load_settings().locale)
-}
-
-/// Static tray strings for one locale.
+/// Static tray strings.
 pub struct TrayStrings {
     pub recent: &'static str,
     pub no_recent: &'static str,
@@ -65,50 +42,8 @@ const EN: TrayStrings = TrayStrings {
     usage_unknown: "Usage  ·  —",
 };
 
-const ZH: TrayStrings = TrayStrings {
-    recent: "最近",
-    no_recent: "暂无最近会话",
-    untitled: "未命名",
-    more: "更多",
-    settings: "设置…",
-    doctor: "Doctor",
-    account: "账户",
-    new_chat: "新对话",
-    open_app: "打开 Pi",
-    quit: "退出 Pi",
-    tooltip: "Pi",
-    usage_with_reset: "额度  ·  剩余 {pct}%  ·  {time}",
-    usage_pct: "额度  ·  剩余 {pct}%",
-    usage_unknown: "额度  ·  —",
-};
-
-const ZH_TW: TrayStrings = TrayStrings {
-    recent: "最近",
-    no_recent: "尚無最近對話",
-    untitled: "未命名",
-    more: "更多",
-    settings: "設定…",
-    doctor: "Doctor",
-    account: "帳戶",
-    new_chat: "新對話",
-    open_app: "開啟 Pi",
-    quit: "結束 Pi",
-    tooltip: "Pi",
-    usage_with_reset: "額度  ·  剩餘 {pct}%  ·  {time}",
-    usage_pct: "額度  ·  剩餘 {pct}%",
-    usage_unknown: "額度  ·  —",
-};
-
-pub fn strings(locale: Locale) -> &'static TrayStrings {
-    match locale {
-        Locale::En => &EN,
-        Locale::Zh => &ZH,
-        Locale::ZhTw => &ZH_TW,
-    }
-}
-
 pub fn t() -> &'static TrayStrings {
-    strings(app_locale())
+    &EN
 }
 
 /// Fill `{pct}` / `{time}` placeholders in tray usage templates.
@@ -128,21 +63,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn locale_parse() {
-        assert_eq!(Locale::parse("en"), Locale::En);
-        assert_eq!(Locale::parse("EN-US"), Locale::En);
-        assert_eq!(Locale::parse("zh"), Locale::Zh);
-        assert_eq!(Locale::parse(""), Locale::En);
-        assert_eq!(Locale::parse("zh-TW"), Locale::ZhTw);
-        assert_eq!(Locale::parse("zh-Hant"), Locale::ZhTw);
-        assert_eq!(strings(Locale::ZhTw).settings, "設定…");
-    }
-
-    #[test]
     fn usage_templates_fill() {
         let s = format_usage(EN.usage_with_reset, Some(73.2), Some("04-15 09:05"));
         assert_eq!(s, "Usage  ·  73% left  ·  04-15 09:05");
-        let z = format_usage(ZH.usage_pct, Some(73.0), None);
-        assert_eq!(z, "额度  ·  剩余 73%");
+        let p = format_usage(EN.usage_pct, Some(73.0), None);
+        assert_eq!(p, "Usage  ·  73% left");
     }
 }

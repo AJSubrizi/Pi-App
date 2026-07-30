@@ -1,5 +1,5 @@
 /**
- * Scheduled automations (Codex-style "已安排").
+ * Scheduled automations (Codex-style "Scheduled").
  * Host stores metadata; shell fires when the app is open.
  */
 

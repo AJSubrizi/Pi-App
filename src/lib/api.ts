@@ -924,7 +924,7 @@ export async function sessionSetPinned(id: string, pinned: boolean) {
   return invoke("session_set_pinned", { id, pinned });
 }
 
-/** Bind session to a project, or clear (`projectId: null`) for orphan / 其他会话. */
+/** Bind session to a project, or clear (`projectId: null`) to leave it under “Other chats”. */
 export async function sessionSetProject(
   id: string,
   projectId: string | null,

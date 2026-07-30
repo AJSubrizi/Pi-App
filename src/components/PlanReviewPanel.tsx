@@ -44,7 +44,7 @@ export type PlanReviewPanelLabels = {
 export type PlanReviewPanelProps = {
   plan: PlanReviewState;
   labels: PlanReviewPanelLabels;
-  /** When set, forces expand (e.g. user clicked 详情 during progress). */
+  /** When set, forces expand (e.g. user clicked details during progress). */
   forceExpandKey?: number | null;
   onApprove?: () => void;
   onRequestChanges?: () => void;
@@ -112,7 +112,7 @@ export function PlanReviewPanel({
     setExpanded(defaultExpanded);
   }, [defaultExpanded, plan.rpcId, plan.title]);
 
-  // 详情 / planFocusKey: force expand so steps+detail are visible.
+  // details / planFocusKey: force expand so steps+detail are visible.
   useEffect(() => {
     if (forceExpandKey == null) return;
     setExpanded(true);

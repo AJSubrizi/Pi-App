@@ -121,7 +121,7 @@
   /*
    * Floating menus / popovers.
    * Glass still used by selects / user sheet / slash where appropriate.
-   * Context menus (右键) use solid --menu-context-* below.
+   * Context menus (right-click) use solid --menu-context-* below.
    */
   --menu-surface: var(--glass-surface);
   --menu-surface-solid: var(--glass-surface-solid);

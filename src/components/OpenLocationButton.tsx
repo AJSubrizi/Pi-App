@@ -1,5 +1,5 @@
 /**
- * Codex-style split “打开位置” control:
+ * Codex-style split “open location” control:
  * - Leading app icon of last-used target + label
  * - Primary click opens path with that target
  * - Caret opens menu (each option has a real app icon)

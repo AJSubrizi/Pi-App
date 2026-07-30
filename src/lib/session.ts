@@ -155,7 +155,6 @@ export function isGenericToolLabel(s: string | undefined | null): boolean {
     !t ||
     t === "tool" ||
     t === "tools" ||
-    t === "工具" ||
     t === "unknown" ||
     t === "function"
   );
@@ -1372,7 +1371,7 @@ export function formatTurnErrorBody(
       .split(/\r?\n/)
       .map((l) => l.trim())
       .find((l) => l && !/connection refused|worker quit|hyper_util|reqwest/i.test(l)) ||
-    (locale === "en" ? "Request failed. Please retry." : "请求失败，请重试。");
+    "Request failed. Please retry.";
   return first.length > 200 ? `${first.slice(0, 200)}…` : first;
 }
 
@@ -1424,10 +1423,10 @@ export function presentErrorBanner(
     const lower = `${error.message}\n${body}`.toLowerCase();
     const timeout =
       error.message === "turn_timeout" ||
-      /timeout|超时/.test(lower);
+      /timeout/.test(lower);
     const disconnected =
       error.message === "agent_disconnected" ||
-      /disconnect|中断|rpc channel closed/i.test(lower);
+      /disconnect|rpc channel closed/i.test(lower);
     const deckCode = deckCodeFromAgent(error.code, { timeout, disconnected });
     const deck = buildErrorDeck(deckCode, locale);
     return bannerFromDeck(deck, error.code, null);
@@ -1440,7 +1439,7 @@ export function presentErrorBanner(
     const code = coded[1] as AgentErrorCode;
     const rest = stripErrorNoise(coded[2] || "");
     const lower = rest.toLowerCase();
-    const timeout = rest === "turn_timeout" || /timeout|超时/.test(lower);
+    const timeout = rest === "turn_timeout" || /timeout/.test(lower);
     const disconnected =
       rest === "agent_disconnected" || /disconnect|中断/i.test(lower);
     const deck = buildErrorDeck(

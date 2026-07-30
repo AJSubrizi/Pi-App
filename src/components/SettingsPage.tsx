@@ -1,6 +1,6 @@
 /**
  * Full-page settings shell (ChatGPT-desktop style): left nav + content.
- * Back control returns to the workbench ("返回应用").
+ * Back control returns to the workbench.
  */
 
 import {

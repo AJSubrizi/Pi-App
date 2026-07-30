@@ -149,7 +149,7 @@ export interface ResourceViewerProps {
    * Live plan snapshot for Plan review mode (exit_plan_mode / progress).
    */
   plan?: PlanReviewState | null;
-  /** Increment / change to force switch into Plan mode (详情 / auto-open). */
+  /** Increment / change to force switch into Plan mode (details / auto-open). */
   planFocusKey?: number | null;
   onApprovePlan?: () => void;
   onRequestPlanChanges?: () => void;
@@ -1350,7 +1350,7 @@ export function ResourceViewer({
   const rulesPanelActive = activePanelKind === "rules";
   const planPanelActive = activePanelKind === "plan";
 
-  // External “open plan in resources” (详情 / auto-open on review).
+  // External “open plan in resources” (details / auto-open on review).
   useEffect(() => {
     if (planFocusKey == null) return;
     if (lastPlanFocusKey.current === planFocusKey) return;
@@ -2468,7 +2468,7 @@ export function ResourceViewer({
 
   /**
    * Single chrome row (Pi desktop / Codex):
-   *   [ file tabs … ] [ 打开位置 ] [ tree ] [ close ]
+   *   [ file tabs … ] [ open location ] [ tree ] [ close ]
    * No breadcrumb title row — basename lives only in the tab.
    * Nested path is available via tab title attribute.
    */

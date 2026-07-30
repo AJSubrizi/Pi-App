@@ -1950,8 +1950,8 @@ html.platform-mac[data-theme="light"] .settings-page__content {
 
 /*
  * Account card layout:
- *   [avatar]  Name                    重置 MM-DD HH:mm   ← top-right
- *             Pi Heavy         72% 剩余           ← remain beside tier
+ *   [avatar]  Name                    Resets MM-DD HH:mm  ← top-right
+ *             Pi Heavy         72% left            ← remain beside tier
  *             ████████░░░░░░░░
  */
 .user-menu__account {
@@ -2539,7 +2539,7 @@ html.platform-mac[data-theme="light"] .settings-page__content {
   transform: none;
   isolation: auto;
 }
-/* Top row: 未选项目 | 添加项目 */
+/* Top row: no project selected | add project */
 .cpm__actions {
   display: flex;
   flex-direction: row;
@@ -12646,7 +12646,7 @@ textarea::-webkit-scrollbar-thumb:active,
   font-weight: 600;
 }
 
-/* ===== Scheduled automations page (Codex-style 已安排) ===== */
+/* ===== Scheduled automations page (Codex-style “Scheduled”) ===== */
 .auto-page {
   flex: 1;
   min-height: 0;
@@ -12903,7 +12903,7 @@ textarea::-webkit-scrollbar-thumb:active,
 
 /*
  * Mute paused rows with color, not opacity — opacity creates a stacking
- * context that traps the dropdown under the next list item (穿透).
+ * context that traps the dropdown under the next list item (bleed-through).
  */
 .auto-row--paused .auto-row__title {
   color: var(--text-secondary, var(--text-tertiary));

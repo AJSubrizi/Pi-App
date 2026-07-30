@@ -126,7 +126,7 @@ export function FilePathCard({
     }
 
     // Prefer absolute paths first (most reliable), then relative tokens.
-    // Relative like `知识库/wiki/...` is resolved by host against project
+    // A relative path like `docs/wiki/...` is resolved by the host against the project
     // and project parent (sibling folders such as a shared knowledge base).
     const tokens: string[] = [];
     if (isAbsoluteFsPath(path)) tokens.push(path);

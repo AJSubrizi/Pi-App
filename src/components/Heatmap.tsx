@@ -152,12 +152,10 @@ function buildGrid(
 export function Heatmap({
   days,
   metric = "requests",
-  locale = "en",
   labels,
 }: {
   days: HeatmapDay[];
   metric?: Metric;
-  locale?: string;
   labels: {
     less: string;
     more: string;
@@ -221,7 +219,7 @@ export function Heatmap({
 
   const cell = useMemo(() => {
     if (weeks.length === 0) return MIN_CELL;
-    // Reserve a little right padding so the last month label ("7月") is not clipped.
+    // Reserve a little right padding so the last month label is not clipped.
     const rightPad = 12;
     if (containerWidth <= 0) return MIN_CELL;
     const available = Math.max(0, containerWidth - LABEL_COL - rightPad);
@@ -231,14 +229,13 @@ export function Heatmap({
     return Math.max(MIN_CELL, Math.min(MAX_CELL, size));
   }, [containerWidth, weeks.length]);
 
-  const dayLabels = useMemo(() => {
-    if (locale === "zh") return ["日", "一", "二", "三", "四", "五", "六"];
-    return ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-  }, [locale]);
+  const dayLabels = useMemo(
+    () => ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
+    [],
+  );
 
   const monthName = (mm: string) => {
     const idx = Number(mm) - 1;
-    if (locale === "zh") return `${idx + 1}月`;
     return (
       ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][
         idx

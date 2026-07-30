@@ -10,7 +10,7 @@
 #   scripts/changelog-for-release.py → releaseBody for tauri-action
 # Before tagging, ensure CHANGELOG has a section:
 #   ## [X.Y.Z] - YYYY-MM-DD
-# with bilingual (EN + 中文) notes under Added/Fixed/Changed as needed.
+# with notes under Added/Fixed/Changed as needed.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

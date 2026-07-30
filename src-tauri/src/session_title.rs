@@ -7,13 +7,8 @@ use crate::store::{self, SessionMeta};
 
 const PLACEHOLDERS: &[&str] = &[
     "New chat",
-    "新会话",
-    "新对话",
-    "新對話",
     "Untitled",
-    "未命名",
     "New conversation",
-    "新建会话",
 ];
 
 pub fn is_placeholder_title(title: &str) -> bool {
@@ -75,18 +70,22 @@ mod tests {
 
     #[test]
     fn placeholders() {
-        assert!(is_placeholder_title("新会话"));
-        assert!(is_placeholder_title("新对话"));
-        assert!(is_placeholder_title("新對話"));
         assert!(is_placeholder_title("New chat"));
-        assert!(!is_placeholder_title("修权限条 bug"));
-        assert!(!is_placeholder_title("馬斯克最近有發什麼貼文"));
+        assert!(is_placeholder_title("Untitled"));
+        assert!(!is_placeholder_title("fix the permission bar bug"));
     }
 
+    /// The UI is English-only, but prompts are not: titles must survive
+    /// multi-byte input. `heuristic_title` caps on chars, never bytes.
     #[test]
-    fn heuristic_uses_first_line() {
-        let t = heuristic_title("  帮我改一下登录页样式\n第二行");
-        assert!(t.contains("登录") || t.contains("帮我"));
-        assert!(t.chars().count() <= 28);
+    fn heuristic_uses_first_line_and_counts_chars() {
+        let t = heuristic_title("  restyle the login page\nsecond line");
+        assert!(t.contains("login"));
+        assert!(!t.contains("second"));
+
+        let cjk = heuristic_title("帮我改一下登录页样式\n第二行");
+        assert!(cjk.contains("登录"));
+        assert!(!cjk.contains("第二行"));
+        assert!(cjk.chars().count() <= 28);
     }
 }

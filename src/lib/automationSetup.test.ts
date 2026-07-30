@@ -12,7 +12,8 @@ describe("automationSetup", () => {
     const s = aiCreateSeedPrompt();
     expect(s).not.toMatch(/```/);
     expect(s.toLowerCase()).not.toContain("frequency");
-    expect(s).toMatch(/定期|多久/);
+    // Plain guidance: says what to run and how often, without schema wording.
+    expect(s.toLowerCase()).toMatch(/how often|what should run/);
   });
 
   it("wraps user text with silent prefix without user-facing schema words in body only", () => {

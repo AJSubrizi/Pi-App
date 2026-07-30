@@ -10,7 +10,7 @@ export const AUTOMATION_FENCE_LANG = "pi-automation";
 
 /** Visible composer seed — natural language only. */
 export function aiCreateSeedPrompt(_productName = "Pi"): string {
-  return "用一两句话说：要定期做什么、多久跑一次（例如「每天早上 9 点查 @cgnot996 的最新动态」或「3 分钟后做一次…」）。";
+  return "In a sentence or two: what should run, and how often (e.g. “check the release feed every weekday at 9am”, or “once, in 3 minutes”).";
 }
 
 /**
@@ -30,7 +30,7 @@ export function automationSetupAgentPrefix(): string {
     "Rules:",
     "- weekdays: 0=Sun … 6=Sat only when frequency is weekly; else [].",
     "- prompt: actionable standalone instructions (not a chat reply).",
-    "- For relative delays (e.g. in 3 minutes / 一小时后): set frequency to once, time to local HH:MM of that moment, AND nextRunAt to ISO-8601 UTC of that instant.",
+    "- For relative delays (e.g. in 3 minutes, in an hour): set frequency to once, time to local HH:MM of that moment, AND nextRunAt to ISO-8601 UTC of that instant.",
     "- For wall-clock recurring (daily 09:00): nextRunAt may be null (shell computes).",
     "- Do not explain field names. Do not put the fence mid-sentence.",
   ].join("\n");

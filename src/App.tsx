@@ -773,7 +773,7 @@ export default function App() {
   /** Chat file/url card → open in right resource pane. */
   const [resourceOpenTarget, setResourceOpenTarget] =
     useState<ResourceOpenTarget | null>(null);
-  /** Bump to force ResourceViewer into Plan review mode (详情 / auto-open). */
+  /** Bump to force ResourceViewer into Plan review mode (details / auto-open). */
   const [planFocusKey, setPlanFocusKey] = useState(0);
   /** Live drag-drop target for zone overlays (null = not dragging). */
   const [dragZone, setDragZone] = useState<"sidebar" | "main" | null>(null);
@@ -1391,7 +1391,7 @@ export default function App() {
   /**
    * After any turn, if the last assistant message contains a pi-automation
    * fence, strip it from the bubble and call automation_create.
-   * Applies to all sessions (not only “用 AI 创建”), so normal chat can schedule.
+   * Applies to all sessions (not only AI-created ones), so normal chat can schedule.
    * Deduped per assistant message id.
    */
   const tryApplyAutomationFromSession = useCallback(
@@ -2626,7 +2626,7 @@ export default function App() {
   /**
    * Draft new chat (Codex-style): clear UI only.
    * No store row / CLI until first successful send via ensureConnected.
-   * Pass `null` for a project-less session (listed under “其他会话”).
+   * Pass `null` for a project-less session (listed under “Other chats”).
    * Omit / pass undefined to use the active project (requires one).
    */
   const newChat = async (
@@ -3299,7 +3299,7 @@ export default function App() {
         const proj = s.projectId
           ? projects.find((p) => p.id === s.projectId) ?? null
           : null;
-        // Same project context when possible; orphan → “其他会话” draft.
+        // Same project context when possible; orphan → “Other chats” draft.
         if (proj) await newChat(proj, { switchToChat: true });
         else await newChat(null, { switchToChat: true });
       } else if (!archived && s.projectId) {
@@ -3482,9 +3482,7 @@ export default function App() {
         tr("session.placeholderTitle"),
         tr("session.untitled"),
         "New chat",
-        "新会话",
         "Untitled",
-        "未命名",
       ];
       return placeholders.some((p) => p.toLowerCase() === t.toLowerCase());
     },
@@ -4927,7 +4925,7 @@ export default function App() {
     });
   }, [tr, writePlanForViewing]);
 
-  /** Open resource pane Plan review (replaces scroll-to-card “详情”). */
+  /** Open resource pane Plan review (replaces the scroll-to-card details link). */
   const openPlanInResource = useCallback(() => {
     setLayout((l) => {
       if (!l.asideCollapsed) return l;
@@ -4980,8 +4978,8 @@ export default function App() {
       }
       try {
         const base = (source.title || tr("session.untitled")).trim();
-        // Avoid double-prefix when forking a fork (any locale).
-        const title = /^(fork of|分叉：|分叉:)\s*/i.test(base)
+        // Avoid double-prefix when forking a fork.
+        const title = /^fork of\s*/i.test(base)
           ? base
           : tr("session.forkTitleOf", { name: base || "chat" });
         const meta = await api.sessionFork(source.id, {

@@ -229,7 +229,7 @@ export function readPlainEditorText(el: HTMLElement): string {
  * Returns null when there is no active slash (e.g. `https://`).
  *
  * Contenteditable almost always serializes a trailing `\n` (from `<br>`).
- * Without trimming, `/目标\n` fails `$` anchor and filtering looks "broken".
+ * Without trimming, a trailing newline fails the `$` anchor and filtering looks "broken".
  */
 export function detectSlashQuery(
   textBeforeCursor: string,

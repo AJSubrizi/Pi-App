@@ -188,7 +188,7 @@ pub async fn pick_cli_binary() -> Result<Option<String>, String> {
         // Every other target never reassigns, hence the explicit allow — do not
         // let `cargo fix` strip the `mut`, it breaks the Windows build.
         #[allow(unused_mut)]
-        let mut dlg = rfd::FileDialog::new().set_title("Select Pi binary / 选择 Pi 可执行文件");
+        let mut dlg = rfd::FileDialog::new().set_title("Select Pi binary");
         #[cfg(target_os = "windows")]
         {
             dlg = dlg.add_filter("Executable", &["exe", "cmd", "bat"]);
@@ -432,7 +432,7 @@ pub async fn session_set_pinned(id: String, pinned: bool) -> Result<SessionMeta,
     store::set_session_pinned(&id, pinned)
 }
 
-/// Move session under a project (or clear project → orphan / 「其他会话」).
+/// Move session under a project (or clear it → listed under “Other chats”).
 #[tauri::command]
 pub async fn session_set_project(
     app: tauri::AppHandle,
@@ -2717,7 +2717,7 @@ pub async fn pick_directory() -> Result<Option<String>, String> {
     // rfd must run off the async runtime (main-thread dialog on macOS via spawn_blocking)
     let folder = tauri::async_runtime::spawn_blocking(|| {
         rfd::FileDialog::new()
-            .set_title("选择项目目录 / Choose project folder")
+            .set_title("Choose project folder")
             .pick_folder()
     })
     .await
@@ -2730,7 +2730,7 @@ pub async fn pick_directory() -> Result<Option<String>, String> {
 pub async fn pick_attach_files() -> Result<Vec<String>, String> {
     let files = tauri::async_runtime::spawn_blocking(|| {
         rfd::FileDialog::new()
-            .set_title("附加文件 / Attach files")
+            .set_title("Attach files")
             .pick_files()
     })
     .await
@@ -2747,7 +2747,7 @@ pub async fn pick_attach_files() -> Result<Vec<String>, String> {
 pub async fn pick_attach_folder() -> Result<Option<String>, String> {
     let folder = tauri::async_runtime::spawn_blocking(|| {
         rfd::FileDialog::new()
-            .set_title("附加文件夹 / Attach folder")
+            .set_title("Attach folder")
             .pick_folder()
     })
     .await
@@ -4312,7 +4312,7 @@ pub async fn path_reveal(path: String) -> Result<(), String> {
 pub async fn project_add_dialog(trust: bool) -> Result<Option<Project>, String> {
     let folder = tauri::async_runtime::spawn_blocking(|| {
         rfd::FileDialog::new()
-            .set_title("添加项目 / Add project")
+            .set_title("Add project")
             .pick_folder()
     })
     .await
@@ -4342,7 +4342,7 @@ pub async fn session_import_transcript_file(
 ) -> Result<Option<store::SessionMeta>, String> {
     let path = tauri::async_runtime::spawn_blocking(|| {
         rfd::FileDialog::new()
-            .set_title("Import conversation / 导入对话")
+            .set_title("Import conversation")
             .add_filter("Transcript", &["md", "txt", "json", "markdown"])
             .pick_file()
     })

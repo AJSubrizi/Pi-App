@@ -29,7 +29,7 @@ import {
   IconRename,
   IconRewind,
 } from "@/components/icons";
-/** Compact message footer time, e.g. `星期二15:23` / `Tue 15:23`. */
+/** Compact message footer time, e.g. `Tue 15:23`. */
 function formatMessageTime(
   iso: string | null | undefined,
   locale: string,
@@ -231,7 +231,7 @@ function UserMessageBody({
   findActiveOccurrence,
 }: {
   content: string;
-  /** Short badge word, e.g. 已安排 / Scheduled */
+  /** Short badge word, e.g. “Scheduled”. */
   scheduledLabel: string;
   findQuery?: string;
   findActiveOccurrence?: number | null;

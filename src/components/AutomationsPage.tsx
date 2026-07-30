@@ -1,5 +1,5 @@
 /**
- * Scheduled automations workbench — Codex-style “已安排”.
+ * Scheduled automations workbench — Codex-style “Scheduled”.
  * List + filter + AI create entry + manual form panel.
  */
 

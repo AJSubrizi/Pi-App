@@ -586,7 +586,7 @@ pub fn read_absolute_file(absolute: &str) -> Result<FsReadResult, String> {
 }
 
 /// Open a path for chat cards: absolute file, project-relative, sibling under
-/// project parent (e.g. `知识库/...` next to `ai-center/`), or suffix search.
+/// project parent (e.g. `docs/...` next to `ai-center/`), or suffix search.
 /// Strip agent ellipsis truncation: `.../a/b/c.jpg` → `a/b/c.jpg`.
 /// Does **not** strip a leading `/` from real absolute paths.
 fn strip_path_ellipsis(path: &str) -> String {
@@ -686,10 +686,10 @@ pub fn open_path_smart(project_root: Option<&str>, path: &str) -> Result<FsReadR
                 return read_path(canon, name);
             }
 
-            // 3) Sibling *path* under parent — e.g. path already starts with `知识库/…`
+            // 3) Sibling *path* under parent — e.g. path already starts with `docs/…`
             //    project = .../document/ai-center
-            //    path    = 知识库/wiki/.../x.md
-            //    real    = .../document/知识库/wiki/.../x.md
+            //    path    = docs/wiki/.../x.md
+            //    real    = .../document/docs/wiki/.../x.md
             if let Some(parent) = root_pb.parent() {
                 if parent.is_dir() {
                     let sibling = parent.join(rel);
@@ -708,7 +708,7 @@ pub fn open_path_smart(project_root: Option<&str>, path: &str) -> Result<FsReadR
                     //    (shared knowledge base layout):
                     //    project = .../document/ai-center
                     //    path    = raw/articles/x/foo/README.md
-                    //    real    = .../document/知识库/raw/articles/x/foo/README.md
+                    //    real    = .../document/docs/raw/articles/x/foo/README.md
                     //    Only exact join under each sibling — no recursive scan.
                     if let Ok(rd) = fs::read_dir(parent) {
                         for ent in rd.flatten() {
@@ -742,7 +742,7 @@ pub fn open_path_smart(project_root: Option<&str>, path: &str) -> Result<FsReadR
             }
 
             // 5) Suffix under parent when first segment is a direct child of parent
-            //    (e.g. first segment `知识库` under `document/`).
+            //    (e.g. first segment `docs` under `document/`).
             if let Some(parent) = root_pb.parent() {
                 if parent.is_dir() {
                     if let Some(first) = Path::new(rel).components().next() {

@@ -192,7 +192,7 @@ export const IconEdit = wrap(TbEdit);
 export const IconNotes = wrap(TbNotes);
 export const IconImagine = wrap(TbWand);
 export const IconAutomations = wrap(TbBolt);
-/** Scheduled / “已安排” nav — calendar clock. */
+/** Scheduled nav — calendar clock. */
 export const IconScheduled = wrap(TbCalendarTime);
 export const IconClock = wrap(TbClock);
 export const IconSkills = wrap(TbTool);
