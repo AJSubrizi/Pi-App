@@ -1,82 +1,89 @@
-# Pi 对齐：模型 / 推理 / 权限 / 模式
+# Pi alignment: models / effort / permissions / modes
 
-源码：`src/li./agentCatalog.ts`（静态兜底）、`src-tauri/src/models_catalog.rs`、`src-tauri/src/agent_prefs.rs`。
+Source: `src/lib/agentCatalog.ts` (static fallback), `src-tauri/src/models_catalog.rs`, `src-tauri/src/agent_prefs.rs`.
 
-## 模型
+> [!WARNING]
+> **Parts of this page describe the CLI this shell was forked from, not Pi.**
+> `pi --help` (0.82.x) has no `--reasoning-effort`, `--always-approve`,
+> `--no-auto-update` or `agent … stdio` subcommand. It exposes `--thinking`,
+> `--approve` / `--no-approve`, `--mode rpc`, and tool allow/deny lists via
+> `--tools` / `--exclude-tools` / `--no-tools`. Verify against `pi --help`
+> before relying on any spawn line below.
 
-**UI 只展示真正可用的模型。服务商是后端渠道，只在设置 → Providers & Models 切换。**
+## Models
 
-| 来源 | 说明 |
-|------|------|
-| `models_cache.json` | CLI 官方目录 |
-| 静态兜底 | `pi-4.5` |
+**The UI only lists models that are actually available. Providers are a backend routing concern and are switched only in Settings → Providers & Models.**
 
-探测：`scripts/probe-models.sh`。Host：`models_list_available`。
+| Source | Notes |
+|--------|-------|
+| `models_cache.json` | Official CLI catalog |
+| Static fallback | `pi-4.5` |
 
-Spawn 顺序（CLI 0.2.x）：
+Probe: `scripts/probe-models.sh`. Host command: `models_list_available`.
+
+Spawn order (CLI 0.2.x — see the warning above):
 
 ```text
 pi agent --model <id> --reasoning-effort <e> [--always-approve] stdio
 ```
 
-Flags **必须在** `stdio` 之前。连接后 `session/set_model` 再对齐一次。
+Flags **must come before** `stdio`. After connecting, `session/set_model` aligns the model once more.
 
-## 推理强度（effort）
+## Reasoning effort
 
-CLI `models_cache.json` 每模型可带 `info.reasoning_efforts: [{id,value,label,description,default}]`。Host 经 `AvailableModel.reasoningEfforts`（`isDefault`）下发；composer 列表优先用该数组，空则回退静态 `PI_FALLBACK_EFFORTS`（`low` | `medium` | `high`）。展示标签优先用 catalog `label`，否则 i18n `effort.high|medium|low`。
+Each model in the CLI's `models_cache.json` may carry `info.reasoning_efforts: [{id,value,label,description,default}]`. The host passes it through as `AvailableModel.reasoningEfforts` (with `isDefault`); the composer list prefers that array and falls back to the static `PI_FALLBACK_EFFORTS` (`low` | `medium` | `high`) when it is empty. Display labels prefer the catalog `label`, otherwise the i18n keys `effort.high|medium|low`.
 
-Spawn：`--reasoning-effort <id>`。无模型级默认时 App 默认 **`medium`**；有 `default: true` 时用模型默认。中途修改：soft-disconnect agent → 下一条消息重连。无 `session/set_effort` RPC。
+Spawn: `--reasoning-effort <id>`. With no model-level default the app defaults to **`medium`**; when a model marks one `default: true`, that wins. Changing it mid-session soft-disconnects the agent and reconnects on the next message — there is no `session/set_effort` RPC.
 
-### 连接加速（Host）
+### Connection speed-ups (host)
 
-| 手段 | 说明 |
-|------|------|
-| 默认 medium effort | 比 high 更短 thinking / TTFT，比 low 更稳 |
-| `pi --no-auto-update agent … stdio` | 跳过启动时更新检查 |
-| 进程复用 | 同 cwd + effort + YOLO 标志时，切会话只 `session/load\|new`，不 respawn CLI |
-| 打开会话预热 | `openSession` 后台 `session_connect`，首发跳过冷启动 |
+| Technique | Notes |
+|-----------|-------|
+| Default to medium effort | Shorter thinking / TTFT than high, steadier than low |
+| `pi --no-auto-update agent … stdio` | Skips the update check at startup |
+| Process reuse | Same cwd + effort + YOLO flag: switching chats only does `session/load\|new`, without respawning the CLI |
+| Warm up on open | `openSession` runs `session_connect` in the background so the first send skips cold start |
 
-## 会话模式（mode）— 产品态
+## Session modes
 
-| App | 作用 |
-|-----|------|
-| `agent` | 默认编码 agent |
-| `plan` | 计划模式（ACP `session/set_mode`） |
-| `ask` | 询问 / 偏只读协作 |
+| App | Purpose |
+|-----|---------|
+| `agent` | Default coding agent |
+| `plan` | Plan mode (ACP `session/set_mode`) |
+| `ask` | Question / mostly read-only collaboration |
 
-实现：
+Implementation:
 
-1. 连接成功后 `session/set_mode`（尝试 `plan` / `ask` / `agent` 等候选 modeId）。  
-2. 中途切换：优先 `set_mode`；失败则 soft-respawn。  
-3. 按 `composerPrefsScope` 记忆。
+1. After a successful connect, `session/set_mode` (trying candidate mode ids such as `plan` / `ask` / `agent`).
+2. Switching mid-session prefers `set_mode`, and soft-respawns if that fails.
+3. Remembered according to `composerPrefsScope`.
 
-## 权限（含 YOLO）
+## Permissions (including YOLO)
 
-| App ID | Agent 配置 `[ui] permission_mode` | Claude `defaultMode` | Spawn |
-|--------|-----------------------------------|----------------------|-------|
+| App ID | Agent config `[ui] permission_mode` | Claude `defaultMode` | Spawn |
+|--------|-------------------------------------|----------------------|-------|
 | `ask` | `default` | `default` | — |
 | `accept_edits` | `acceptEdits` | `acceptEdits` | — |
-| `allow_for_session` | `default` + Host 会话缓存 | `default` | — |
+| `allow_for_session` | `default` + host session cache | `default` | — |
 | `dont_ask` | `dontAsk` | `dontAsk` | — |
 | `always_approve` | `always-approve` + `yolo=true` | `bypassPermissions` | `--always-approve` |
 
-**Independent 模式**（默认）：写入 `~/.pi-app/agent-home/config.toml` 与 `agent-home/.claude/settings.json`，agent 进程侧真正按策略执行。
+**Independent mode** (the default): writes `~/.pi-app/agent-home/config.toml` and `agent-home/.claude/settings.json`, so the agent process really does enforce the policy.
 
-**Shared 模式**：不改写用户 `~/.pi/config.toml`；Host 策略 + YOLO 时的 `--always-approve`。
+**Shared mode**: never rewrites the user's `~/.pi/config.toml`; relies on the host policy plus `--always-approve` for YOLO.
 
-中途改权限：同步配置 + soft-respawn（含 YOLO 降级）。Host 在收到 `session/request_permission` 时仍按 live policy 自动放行/拒绝。
+Changing permissions mid-session syncs the config and soft-respawns (including downgrading out of YOLO). On `session/request_permission` the host still auto-allows or auto-denies according to the live policy.
 
-注意：读工具与部分只读 shell 在 agent 内建白名单下仍可能不弹窗（Pi 设计）。
+Note: read tools and some read-only shell commands may still not prompt, because the agent allow-lists them internally (Pi's design).
 
-**下载默认放行（Host）**：`curl -o/-O`、`wget`、`aria2c` 等把资源写到**项目目录内**的 shell，Host 在非 `dont_ask`/`deny` 策略下自动批准，避免生图后 `curl` 落盘卡在权限弹窗直至 600s 超时。项目外路径仍须审批（仅 `always_approve` 例外）。
+**Downloads are allowed by default (host)**: shell commands such as `curl -o/-O`, `wget` or `aria2c` that write **inside the project directory** are auto-approved under any policy other than `dont_ask` / `deny`. This stops a post-image-generation `curl` from hanging on a permission prompt until the 600s timeout. Paths outside the project still need approval, with `always_approve` the only exception.
 
-## 偏好记忆范围
+## Preference scope
 
-`composerPrefsScope` = `global` | `project` | `session`。
+`composerPrefsScope` = `global` | `project` | `session`.
 
-覆盖 model / effort / mode / permission。切换 chip → `composer_prefs_set` / `session_set_policy` / `session_set_model`。
+Covers model / effort / mode / permission. Switching a chip calls `composer_prefs_set` / `session_set_policy` / `session_set_model`.
 
-## 服务商
+## Providers
 
-自定义提供商 = 渠道路由，**不伪装成模型**。在 Providers & Models
-面板配置和切换；Pi package 适配器仍通过 Extensions 安装。
+A custom provider is a routing channel and **must not masquerade as a model**. Configure and switch them in the Providers & Models panel; Pi package adapters are still installed through Extensions.

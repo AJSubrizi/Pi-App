@@ -1,32 +1,32 @@
-# Agent GUI 对标纪要
+# Agent GUI reference notes
 
-本地参考克隆：`.refs/aider-desk`（gitignore，勿提交）。
+Local reference clone: `.refs/aider-desk` (gitignored — do not commit).
 
-## 借鉴来源
+## Where the ideas came from
 
-| 来源 | 借鉴点 | 落地 |
-|------|--------|------|
-| **AiderDesk** `ProjectFilesSection` / `FileViewerModal` | 项目文件树 + 读文件预览 + 搜索/刷新 | `ResourceViewer` + `fs_list_dir` / `fs_read_file` |
-| **Pi 权限文档** | `default` / `acceptEdits` / `dontAsk` / `bypassPermissions` | `PERMISSION_POLICIES` + Host `PermissionPolicy` |
-| **产品 sheet UI（参考图）** | 两 chip：模型+努力 / 访问（模式+权限合并）；窄宽压缩为短文案或仅图标 | `ComposerModelMenu` · `ComposerAccessMenu` |
-| **OpenHands Canvas / 通用三栏** | 左会话 / 中对话 / 右资源，侧栏可关 | `sidebar--hidden` / `aside--hidden` + 顶栏 icon |
-| **会话变更审阅（L06）** | Agent 写/改文件列表 + unified diff / 外开编辑器 | `ResourceViewer` Changes 模式 + `sessionChanges` + 可选 `git_file_diff` |
-| **工作区 git 变更** | 项目 `git status` 列表 + 点击看 diff | `git_status` / `git_show_file` + Changes → **Workspace** 段 |
-| **Plan 审阅** | 待审阅计划 Markdown 全文 + 批准/修改 | `ResourceViewer` **Plan** 模式 + sticky `PlanStatusBar` |
+| Source | Borrowed idea | Implemented as |
+|--------|---------------|----------------|
+| **AiderDesk** `ProjectFilesSection` / `FileViewerModal` | Project file tree + read-only file preview + search/refresh | `ResourceViewer` + `fs_list_dir` / `fs_read_file` |
+| **Pi permission docs** | `default` / `acceptEdits` / `dontAsk` / `bypassPermissions` | `PERMISSION_POLICIES` + host `PermissionPolicy` |
+| **Product sheet UI (reference mock)** | Two chips: model + effort / access (mode and permission merged); narrow widths collapse to short copy or icon only | `ComposerModelMenu` · `ComposerAccessMenu` |
+| **OpenHands Canvas / common three-column** | Chats left, conversation centre, resources right; side panels closable | `sidebar--hidden` / `aside--hidden` + top-bar icons |
+| **Session change review (L06)** | List of files the agent wrote/changed + unified diff / open in external editor | `ResourceViewer` Changes mode + `sessionChanges` + optional `git_file_diff` |
+| **Workspace git changes** | Project `git status` list + click to see the diff | `git_status` / `git_show_file` + Changes → **Workspace** section |
+| **Plan review** | Full pending-plan markdown + approve/request changes | `ResourceViewer` **Plan** mode + sticky `PlanStatusBar` |
 
-## 交互约定
+## Interaction rules
 
-1. 左、右栏**彻底关闭**（width 0，无 icon rail）；顶栏 `IconPanel` / `IconFiles` 开关。
-2. 右栏 = 当前项目资源查看器（会话项目路径），多格式预览（text/code/md/json/csv/html/image/svg/pdf/audio/video）。
-3. Composer 模型区合并为 ⚡ 菜单：模型 / 推理强度 / 授权模式；高级里放会话 mode。
-4. **Changes（会话 + 工作区）**：右栏 chrome 的 diff 图标 + 侧栏 **Files | Changes** 切换。  
-   - **Session**：`session://tool` 中 write/edit 类工具（`isEditToolKind`）与历史 `tool_step` 消息。  
-   - **Workspace**：项目路径 `git_status`（soft-fail：无 git / 非仓库）；刷新按钮；分支名提示。  
-   - 点击条目：优先工具 payload 的 before/after → 本地 unified diff；否则 `git_file_diff`；再否则 `git_show_file`（HEAD）+ 工作区内容；再否则当前文件内容。  
-   - 行操作：打开编辑器 / Reveal / 复制路径（**不做**危险 discard，避免误清工作区）。  
-   - 纯 helper：`src/lib/sessionChanges.ts`、`src/lib/workspaceGit.ts`。
-5. **Plan（资源审阅）**：顶条「在资源中打开」/ `exit_plan_mode` 就绪时自动开右栏 **Plan** 模式。  
-   - 正文：`MarkdownBody`（`planContent` 优先，否则 entries 合成 markdown）。  
-   - 操作：批准 / 请求修改 / 关闭（与顶条共用 `sessionResolvePlan`）。  
-   - 线程内保留紧凑预览卡；主审阅面在资源面板。  
-   - helper：`src/lib/planBody.ts`、`PlanReviewPanel`。
+1. Left and right panels close **completely** (width 0, no icon rail); the top bar's `IconPanel` / `IconFiles` toggle them.
+2. The right panel is the current project's resource viewer (session project path), with multi-format preview (text/code/md/json/csv/html/image/svg/pdf/audio/video).
+3. The composer's model area collapses into the ⚡ menu: model / reasoning effort / permission mode; session mode lives under advanced.
+4. **Changes (session + workspace)**: diff icon in the right-panel chrome + a **Files | Changes** toggle in the sidebar.
+   - **Session**: write/edit-class tools from `session://tool` (`isEditToolKind`) plus historical `tool_step` messages.
+   - **Workspace**: `git_status` on the project path (soft-fails when there is no git / not a repository); refresh button; branch name hint.
+   - Clicking an entry: prefer the tool payload's before/after → local unified diff; else `git_file_diff`; else `git_show_file` (HEAD) + working-tree content; else the current file content.
+   - Row actions: open in editor / reveal / copy path. Discard is deliberately **not** offered, so the working tree cannot be wiped by accident.
+   - Pure helpers: `src/lib/sessionChanges.ts`, `src/lib/workspaceGit.ts`.
+5. **Plan (resource review)**: the top bar's "open in resources", or `exit_plan_mode` becoming ready, switches the right panel to **Plan** mode automatically.
+   - Body: `MarkdownBody` (`planContent` when present, otherwise markdown synthesised from entries).
+   - Actions: approve / request changes / close (sharing `sessionResolvePlan` with the top bar).
+   - A compact preview card stays in the thread; the full review surface is the resource panel.
+   - Helpers: `src/lib/planBody.ts`, `PlanReviewPanel`.

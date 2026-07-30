@@ -1,26 +1,26 @@
-# 应用内弹窗（禁止 window.confirm / prompt）
+# In-app dialogs (no window.confirm / prompt)
 
-**强制**：Tauri WebView 下 **`window.confirm` / `window.prompt` / `window.alert` 不可靠**（常无对话框、恒为 false、或阻塞异常）。  
-用户确认、输入、危险操作 **必须** 使用应用内弹窗，禁止再引入浏览器原生对话框。
+**Mandatory**: under the Tauri WebView, **`window.confirm` / `window.prompt` / `window.alert` are unreliable** — often no dialog appears, the result is always false, or the call blocks strangely.
+Confirmations, text input and destructive actions **must** use in-app dialogs. Do not reintroduce native browser dialogs.
 
-## 视觉：复用现有面板样式
+## Visuals: reuse the panel styles that already exist
 
-**不强制** 毛玻璃 / 半透明浮层。新浮层 **优先复用** 应用内已有面板样式，与邻近控件保持一致：
+Frosted glass and translucency are **not** required. A new overlay should **reuse an existing in-app panel style** and stay consistent with the controls next to it:
 
-| 场景 | 优先样式 | 参考 |
-|------|----------|------|
-| Composer 芯片菜单（模型 / 权限 / 项目） | `.cmm__pop` + `.cmm__opt` / `.cmm__section` | `ComposerModelMenu`、`ComposerProjectMenu` |
-| 右键 / 行操作 / 位置菜单 | 实心 `.menu-panel` + context tokens（`--menu-context-*`） | `ContextMenu`、`OpenLocationButton` |
-| 确认 / 输入 / 业务对话框 | `.modal` · `GlassModal` · `setAppDialog` | `App.tsx`、`GlassModal` |
-| 搜索 / 侧栏表单 / 斜杠 | 现有 `.search-panel` / `.auto-panel` / `.slash-palette` | 对应组件 |
+| Case | Preferred style | Reference |
+|------|-----------------|-----------|
+| Composer chip menus (model / permission / project) | `.cmm__pop` + `.cmm__opt` / `.cmm__section` | `ComposerModelMenu`, `ComposerProjectMenu` |
+| Context menu / row actions / location menu | Solid `.menu-panel` + context tokens (`--menu-context-*`) | `ContextMenu`, `OpenLocationButton` |
+| Confirm / input / feature dialogs | `.modal` · `GlassModal` · `setAppDialog` | `App.tsx`, `GlassModal` |
+| Search / sidebar forms / slash | The existing `.search-panel` / `.auto-panel` / `.slash-palette` | Corresponding components |
 
-布局 token（圆角、pad、item 间距）仍可用 `--menu-*` / `--modal-*`；材质以**该区域既有实现**为准，不要为「统一毛玻璃」另起一套。
+Layout tokens (radius, padding, item spacing) can still come from `--menu-*` / `--modal-*`. For material, follow **whatever that area already does** — do not start a second system in the name of "unified frosted glass".
 
-**可选**：存量仍有 `.glass-surface` / `--glass-*`（部分 modal、历史浮层）。新代码不要求套用；也**不要**再写「浮层禁止不透明底」之类规则。
+**Optional**: `.glass-surface` / `--glass-*` still exist on some modals and older overlays. New code is not required to adopt them, and rules like "overlays must never be opaque" should **not** be reintroduced.
 
-## 公共壳：`GlassModal`
+## Shared shell: `GlassModal`
 
-业务对话框可用公共壳（名字历史遗留，不代表必须毛玻璃）：
+Feature dialogs can use the shared shell. The name is historical and does not imply the frosted look is mandatory:
 
 ```tsx
 import { GlassModal } from "@/components/GlassModal";
@@ -42,13 +42,13 @@ import { GlassModal } from "@/components/GlassModal";
     </>
   }
 >
-  {/* 业务内容 */}
+  {/* dialog content */}
 </GlassModal>
 ```
 
-结构：`.overlay` → `.modal.glass-modal[--sm|--md|--lg]` → `header.modal-head` + body + `.modal-actions`。
+Structure: `.overlay` → `.modal.glass-modal[--sm|--md|--lg]` → `header.modal-head` + body + `.modal-actions`.
 
-存量也可用同一 DOM/CSS（不强制立刻迁组件）：
+Existing code may use the same DOM/CSS directly; migrating components immediately is not required:
 
 ```html
 <div class="overlay">
@@ -56,9 +56,9 @@ import { GlassModal } from "@/components/GlassModal";
 </div>
 ```
 
-## 首选：App 级 `appDialog`（`src/App.tsx`）
+## Preferred: the app-level `appDialog` (`src/App.tsx`)
 
-工作台内主流程（项目 / 会话重命名、YOLO 二次确认等）使用：
+Main workbench flows (renaming a project or chat, the YOLO double-confirm, and similar) use:
 
 ```ts
 setAppDialog({
@@ -66,11 +66,11 @@ setAppDialog({
   title: tr("…"),
   message: tr("…", { name }),
   confirmLabel: tr("…"), // optional
-  danger: true,          // optional → 危险按钮样式
+  danger: true,          // optional → destructive button style
   onConfirm: () => { void doSomething(); },
 });
 
-// 或输入
+// or for input
 setAppDialog({
   kind: "prompt",
   title: tr("…"),
@@ -80,59 +80,59 @@ setAppDialog({
 });
 ```
 
-- 渲染：`createPortal` → `.app-dialog-overlay` + `.modal.app-dialog`。  
-- 文案：全部走 `src/i18n/`（见 [i18n.md](./i18n.md)）。  
-- **禁止** 在 `onConfirm` / `onSubmit` 里再套 `window.confirm`。
+- Rendering: `createPortal` → `.app-dialog-overlay` + `.modal.app-dialog`.
+- Copy: always through `src/i18n/` (see [i18n.md](./i18n.md)).
+- **Never** nest a `window.confirm` inside `onConfirm` / `onSubmit`.
 
-## 子页面 / 独立面板
+## Sub-pages and standalone panels
 
-若组件拿不到 `setAppDialog`（如 `AutomationsPage`）：
+When a component cannot reach `setAppDialog` (for example `AutomationsPage`):
 
-1. **优先**：通过 props 回调把确认上抛到 `App`（`onRequestConfirm`），由 `appDialog` 统一处理。  
-2. **可接受**：组件内用同一套 DOM/CSS 自建确认（`createPortal` + `overlay` / `modal app-dialog`），或 `GlassModal`。  
-3. 参考：`AutomationsPage` 删除确认（禁止 `window.confirm`）。
+1. **Preferred**: bubble the confirmation up to `App` through a prop callback (`onRequestConfirm`) and let `appDialog` handle it centrally.
+2. **Acceptable**: build the confirmation inside the component using the same DOM/CSS (`createPortal` + `overlay` / `modal app-dialog`), or `GlassModal`.
+3. Reference: the `AutomationsPage` delete confirmation (which avoids `window.confirm`).
 
-## 浮层清单（改样式时勿漏）
+## Overlay inventory (do not miss one when restyling)
 
-| 类型 | 选择器 / 组件 |
-|------|----------------|
-| App 确认/输入 | `.modal.app-dialog` · `setAppDialog` |
-| Compact keep-note / Doctor / Status / MCP | `setAppDialog` prompt · `.modal` · `GlassModal` · `DoctorModal` |
-| 文件详情 | `.modal.file-path-details` |
-| 搜索面板 | `.search-panel` |
-| 模型 / 权限 / 项目 / 用户 / 斜杠 / + | `.cmm__pop` · `.menu-panel` · `.slash-palette` · `.composer-plus` |
-| 上下文 / 附件 / 打开位置 / Select | `.ctx-menu` · `.att-menu` · `.open-loc-menu` · `.c-select__menu` |
-| 自动化表单侧栏 / 行菜单 | `.auto-panel` · `.auto-row__menu` |
-| Toast / 权限条 / 拖放卡 | `.app-toast` · `.perm-bar` · `.drop-overlay__card` |
-| 左栏 | `.sidebar` |
+| Type | Selector / component |
+|------|----------------------|
+| App confirm/input | `.modal.app-dialog` · `setAppDialog` |
+| Compact keep-note / Doctor / Status | `setAppDialog` prompt · `.modal` · `GlassModal` · `DoctorModal` |
+| File details | `.modal.file-path-details` |
+| Search panel | `.search-panel` |
+| Model / permission / project / user / slash / + | `.cmm__pop` · `.menu-panel` · `.slash-palette` · `.composer-plus` |
+| Context / attachments / open location / Select | `.ctx-menu` · `.att-menu` · `.open-loc-menu` · `.c-select__menu` |
+| Automation form sidebar / row menu | `.auto-panel` · `.auto-row__menu` |
+| Toast / permission bar / drop card | `.app-toast` · `.perm-bar` · `.drop-overlay__card` |
+| Left column | `.sidebar` |
 
-## 禁止清单
+## Forbidden
 
-| API / 模式 | 状态 |
-|------------|------|
-| `window.confirm(...)` | **禁止** |
-| `window.prompt(...)` | **禁止** |
-| `window.alert(...)` | **禁止**（用户可见错误用 toast / error banner / 应用内 dialog） |
-| `confirm` / `prompt` 全局别名 | **禁止** |
+| API / pattern | Status |
+|---------------|--------|
+| `window.confirm(...)` | **Forbidden** |
+| `window.prompt(...)` | **Forbidden** |
+| `window.alert(...)` | **Forbidden** — use a toast, an error banner or an in-app dialog |
+| Global `confirm` / `prompt` aliases | **Forbidden** |
 
-存量调用发现即改（搜索 `window.confirm`、`window.prompt`）。
+Fix any surviving call as soon as you find one (search for `window.confirm`, `window.prompt`).
 
-## 验收
+## Acceptance
 
-- [ ] 新增删除 / 信任 / 危险开关等路径均有应用内确认，无 `window.confirm`。  
-- [ ] 确认框文案中英键齐全。  
-- [ ] Tauri 真机：点确认执行、点取消/遮罩关闭、无「无反应」。  
-- [ ] 危险操作（删除任务、YOLO、移除项目）使用 `danger` 样式并写清后果。  
-- [ ] 新浮层与同区域既有面板（`.cmm__pop` / `.menu-panel` / `.modal`）观感一致，不另造透明材质规范。
+- [ ] Every new delete / trust / destructive-toggle path has an in-app confirmation, and no `window.confirm`.
+- [ ] All dialog copy goes through i18n keys — no hard-coded strings.
+- [ ] On a real Tauri build: confirm executes, cancel and overlay-click close it, and nothing "does nothing".
+- [ ] Destructive actions (deleting a task, YOLO, removing a project) use the `danger` style and spell out the consequence.
+- [ ] New overlays look like the existing panels in the same area (`.cmm__pop` / `.menu-panel` / `.modal`) rather than inventing another translucency spec.
 
-## 相关源码
+## Related source
 
-- `src/components/GlassModal.tsx` — 公共对话框壳  
-- `src/App.tsx` — `AppDialog` 类型、`setAppDialog`、portal 渲染  
-- `src/styles/tokens.css` — `--menu-*` / `--modal-*` / 可选 `--glass-*`  
-- `src/styles/app.css` — modal / menu / cmm 布局  
-- `src/components/ComposerModelMenu.tsx` / `ComposerProjectMenu.tsx` — composer 芯片菜单范例  
-- `src/components/StatusModal.tsx` / `McpStatusModal.tsx` — GlassModal 范例（MCP 弹窗可跳转 Settings → Extensions）
-- `src/components/ExtensionsPanel.tsx` — Settings → Extensions 全页技能 / MCP 管理  
-- `src/components/AutomationsPage.tsx` — 子页面自建删除确认范例  
-- `src/i18n/messages.ts` — `common.cancel` / `common.confirm` / `common.close` 等  
+- `src/components/GlassModal.tsx` — shared dialog shell
+- `src/App.tsx` — the `AppDialog` type, `setAppDialog`, portal rendering
+- `src/styles/tokens.css` — `--menu-*` / `--modal-*` / optional `--glass-*`
+- `src/styles/app.css` — modal / menu / cmm layout
+- `src/components/ComposerModelMenu.tsx` / `ComposerProjectMenu.tsx` — composer chip menu examples
+- `src/components/StatusModal.tsx` — GlassModal example
+- `src/components/ExtensionsPanel.tsx` — Settings → Extensions, full-page skill / MCP management
+- `src/components/AutomationsPage.tsx` — sub-page with its own delete confirmation
+- `src/i18n/messages.ts` — `common.cancel` / `common.confirm` / `common.close`, etc.

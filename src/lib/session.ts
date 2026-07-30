@@ -1441,7 +1441,7 @@ export function presentErrorBanner(
     const lower = rest.toLowerCase();
     const timeout = rest === "turn_timeout" || /timeout/.test(lower);
     const disconnected =
-      rest === "agent_disconnected" || /disconnect|中断/i.test(lower);
+      rest === "agent_disconnected" || /disconnect/i.test(lower);
     const deck = buildErrorDeck(
       deckCodeFromAgent(code, { timeout, disconnected }),
       locale,
@@ -1453,10 +1453,10 @@ export function presentErrorBanner(
     { code: undefined, message: cleaned, content: undefined },
     locale,
   );
-  const isTimeoutish = /timeout|超时|中断|disconnect/i.test(summary);
+  const isTimeoutish = /timeout|disconnect/i.test(summary);
   if (isTimeoutish) {
     const deck = buildErrorDeck(
-      /disconnect|中断/i.test(summary)
+      /disconnect/i.test(summary)
         ? "AGENT_DISCONNECTED"
         : "TURN_TIMEOUT",
       locale,
