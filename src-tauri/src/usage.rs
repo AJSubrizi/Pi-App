@@ -42,7 +42,7 @@ fn estimated_tokens(text: &str) -> u64 {
     if text.is_empty() {
         return 0;
     }
-    ((text.chars().count() as u64) + 3) / 4
+    (text.chars().count() as u64).div_ceil(4)
 }
 
 fn tool_name(line: &str) -> Option<&str> {
@@ -103,7 +103,11 @@ pub async fn usage_profile() -> Result<UsageProfile, String> {
     let mut total_tool_calls = 0_u64;
 
     for session in &sessions {
-        if let Some(model) = session.model_id.as_deref().filter(|value| !value.is_empty()) {
+        if let Some(model) = session
+            .model_id
+            .as_deref()
+            .filter(|value| !value.is_empty())
+        {
             models.insert(model.to_string());
         }
         if let Some(effort) = session.effort.as_deref().filter(|value| !value.is_empty()) {

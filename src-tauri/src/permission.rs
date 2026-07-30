@@ -7,8 +7,10 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum PermissionPolicy {
     /// Pi CLI `default` — ask every tool that needs approval (unless session cache hits).
+    #[default]
     Ask,
     AllowOnce,
     AllowForSession,
@@ -19,12 +21,6 @@ pub enum PermissionPolicy {
     Deny,
     /// Pi CLI `bypassPermissions` / YOLO — settings only, never default chip.
     AlwaysApprove,
-}
-
-impl Default for PermissionPolicy {
-    fn default() -> Self {
-        Self::Ask
-    }
 }
 
 impl PermissionPolicy {
@@ -73,19 +69,6 @@ pub fn is_edit_tool(tool_name: &str) -> bool {
     ) || t.contains("edit")
         || t.contains("write")
         || t.contains("replace")
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PermissionRequest {
-    pub request_id: u64,
-    pub session_id: String,
-    pub tool_call_id: String,
-    pub tool_name: String,
-    pub title: String,
-    pub preview: String,
-    pub scope_key: String,
-    pub outside_project: bool,
 }
 
 /// Build scope_key = tool_name + ":" + normalize(path_or_command_prefix).
@@ -564,10 +547,6 @@ impl SessionAllowCache {
 
     pub fn is_allowed(&self, key: &str) -> bool {
         self.keys.contains(key)
-    }
-
-    pub fn clear(&mut self) {
-        self.keys.clear();
     }
 }
 

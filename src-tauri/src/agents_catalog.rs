@@ -2,9 +2,9 @@
 //!
 //! Sources mirror CLI `--agent <NAME>` resolution:
 //! - Built-ins: explore, plan, general-purpose
-//! - User: `~/.grok/agents/*.md`
-//! - Project: `<cwd>/.grok/agents/*.md`
-//! - Bundled reference: `~/.grok/bundled/agents/*.md` (same names as built-ins)
+//! - User: `~/.pi/agents/*.md`
+//! - Project: `<cwd>/.pi/agents/*.md`
+//! - Bundled reference: `~/.pi/bundled/agents/*.md` (same names as built-ins)
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -40,31 +40,6 @@ pub struct AgentsCatalogResult {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub project_dir: Option<String>,
     pub bundled_dir: String,
-}
-
-/// Pure: normalize settings value → spawn name, or `None` for CLI default.
-pub fn normalize_preferred_agent(raw: &str) -> Option<String> {
-    let name = raw.trim();
-    if name.is_empty() {
-        return None;
-    }
-    let lower = name.to_ascii_lowercase();
-    if matches!(
-        lower.as_str(),
-        "default" | "none" | "cli-default" | "pi-build"
-    ) {
-        return None;
-    }
-    if name.chars().any(|c| c == '\0' || c == '\n' || c == '\r') {
-        return None;
-    }
-    Some(name.to_string())
-}
-
-/// Pure: top-level CLI args `["--agent", name]` when set.
-pub fn agent_spawn_cli_args(raw: &str) -> Option<Vec<String>> {
-    let name = normalize_preferred_agent(raw)?;
-    Some(vec!["--agent".into(), name])
 }
 
 /// File stem for agent def (`explore.md` → `explore`).
@@ -121,7 +96,7 @@ fn scan_agent_dir(dir: &Path) -> Vec<(String, PathBuf)> {
             out.push((name, path));
         }
     }
-    out.sort_by(|a, b| a.0.to_ascii_lowercase().cmp(&b.0.to_ascii_lowercase()));
+    out.sort_by_key(|a| a.0.to_ascii_lowercase());
     out
 }
 
@@ -193,19 +168,19 @@ pub fn merge_agent_catalog(
     agents
 }
 
-fn user_grok_home() -> PathBuf {
-    crate::process_util::user_home().join(".grok")
+fn user_pi_home() -> PathBuf {
+    crate::process_util::user_home().join(".pi")
 }
 
 /// Live catalog for Settings agent picker.
 pub fn list_agents_catalog(project_path: Option<&str>) -> AgentsCatalogResult {
-    let pi = user_grok_home();
+    let pi = user_pi_home();
     let user_dir = pi.join("agents");
     let bundled_dir = pi.join("bundled").join("agents");
     let project_dir = project_path
         .map(str::trim)
         .filter(|s| !s.is_empty())
-        .map(|p| PathBuf::from(p).join(".grok").join("agents"));
+        .map(|p| PathBuf::from(p).join(".pi").join("agents"));
 
     let user = scan_agent_dir(&user_dir);
     let bundled = scan_agent_dir(&bundled_dir);
@@ -230,47 +205,6 @@ mod tests {
     use std::path::PathBuf;
 
     #[test]
-    fn normalize_empty_and_sentinels() {
-        assert!(normalize_preferred_agent("").is_none());
-        assert!(normalize_preferred_agent("  ").is_none());
-        assert!(normalize_preferred_agent("default").is_none());
-        assert!(normalize_preferred_agent("NONE").is_none());
-        assert!(normalize_preferred_agent("pi-build").is_none());
-        assert!(normalize_preferred_agent("cli-default").is_none());
-        assert!(normalize_preferred_agent("ex\nplore").is_none());
-    }
-
-    #[test]
-    fn normalize_keeps_names() {
-        assert_eq!(
-            normalize_preferred_agent("  explore  ").as_deref(),
-            Some("explore")
-        );
-        assert_eq!(
-            normalize_preferred_agent("general-purpose").as_deref(),
-            Some("general-purpose")
-        );
-        assert_eq!(
-            normalize_preferred_agent("/tmp/a.md").as_deref(),
-            Some("/tmp/a.md")
-        );
-    }
-
-    #[test]
-    fn spawn_args_top_level() {
-        assert!(agent_spawn_cli_args("").is_none());
-        assert!(agent_spawn_cli_args("default").is_none());
-        assert_eq!(
-            agent_spawn_cli_args("explore"),
-            Some(vec!["--agent".into(), "explore".into()])
-        );
-        assert_eq!(
-            agent_spawn_cli_args("  plan  "),
-            Some(vec!["--agent".into(), "plan".into()])
-        );
-    }
-
-    #[test]
     fn file_name_stems() {
         assert_eq!(
             agent_name_from_file_name("explore.md").as_deref(),
@@ -291,19 +225,13 @@ mod tests {
 
     #[test]
     fn merge_priority_project_user_bundled_builtin() {
-        let user = vec![(
-            "explore".into(),
-            PathBuf::from("/u/.grok/agents/explore.md"),
-        )];
-        let project = vec![(
-            "explore".into(),
-            PathBuf::from("/p/.grok/agents/explore.md"),
-        )];
+        let user = vec![("explore".into(), PathBuf::from("/u/.pi/agents/explore.md"))];
+        let project = vec![("explore".into(), PathBuf::from("/p/.pi/agents/explore.md"))];
         let bundled = vec![(
             "plan".into(),
-            PathBuf::from("/u/.grok/bundled/agents/plan.md"),
+            PathBuf::from("/u/.pi/bundled/agents/plan.md"),
         )];
-        let custom = vec![("custom".into(), PathBuf::from("/u/.grok/agents/custom.md"))];
+        let custom = vec![("custom".into(), PathBuf::from("/u/.pi/agents/custom.md"))];
         let user_all = [user, custom].concat();
         let agents = merge_agent_catalog(BUILTIN_AGENT_NAMES, &user_all, &project, &bundled);
         let by: std::collections::HashMap<_, _> =
@@ -311,7 +239,7 @@ mod tests {
         assert_eq!(by["explore"].source, AgentCatalogSource::Project);
         assert_eq!(
             by["explore"].path.as_deref(),
-            Some("/p/.grok/agents/explore.md")
+            Some("/p/.pi/agents/explore.md")
         );
         assert_eq!(by["custom"].source, AgentCatalogSource::User);
         assert_eq!(by["plan"].source, AgentCatalogSource::Bundled);

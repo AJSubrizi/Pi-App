@@ -1,4 +1,4 @@
-//! Pi CLI hooks discovery under `~/.grok/hooks` and `<project>/.grok/hooks`.
+//! Pi CLI hooks discovery under `~/.pi/hooks` and `<project>/.pi/hooks`.
 //!
 //! Management is list / reveal / open-folder only — no visual JSON editor.
 //! Hook file format lives in the Pi CLI user guide (`10-hooks.md`).
@@ -19,7 +19,7 @@ pub struct HookEntry {
     pub name: String,
     /// Absolute path.
     pub path: String,
-    /// `user` (global `~/.grok/hooks`) or `project` (`<cwd>/.grok/hooks`).
+    /// `user` (global `~/.pi/hooks`) or `project` (`<cwd>/.pi/hooks`).
     pub scope: String,
     /// `file` | `dir`.
     pub kind: String,
@@ -47,49 +47,27 @@ pub struct HooksListResult {
     pub docs_path: Option<String>,
 }
 
-/// `~/.grok/hooks` — always-trusted personal hooks.
+/// `~/.pi/hooks` — always-trusted personal hooks.
 pub fn user_hooks_dir() -> PathBuf {
-    user_home().join(".grok").join("hooks")
+    user_home().join(".pi").join("hooks")
 }
 
-/// `<project>/.grok/hooks` when `project_path` is a non-empty path.
+/// `<project>/.pi/hooks` when `project_path` is a non-empty path.
 pub fn project_hooks_dir(project_path: &str) -> Option<PathBuf> {
     let root = project_path.trim();
     if root.is_empty() {
         return None;
     }
-    Some(PathBuf::from(root).join(".grok").join("hooks"))
+    Some(PathBuf::from(root).join(".pi").join("hooks"))
 }
 
 /// Local user-guide page shipped with the CLI install (optional).
 pub fn hooks_docs_path() -> PathBuf {
     user_home()
-        .join(".grok")
+        .join(".pi")
         .join("docs")
         .join("user-guide")
         .join("10-hooks.md")
-}
-
-/// Join a hooks directory with a relative file name (pure; no FS access).
-/// Rejects empty names, absolute paths, and parent-directory traversal.
-pub fn join_hooks_path(dir: &Path, name: &str) -> Option<PathBuf> {
-    let n = name.trim();
-    if n.is_empty() || n == "." || n == ".." {
-        return None;
-    }
-    if n.contains('/') || n.contains('\\') {
-        return None;
-    }
-    let p = Path::new(n);
-    if p.is_absolute() {
-        return None;
-    }
-    if p.components()
-        .any(|c| matches!(c, std::path::Component::ParentDir))
-    {
-        return None;
-    }
-    Some(dir.join(n))
 }
 
 fn file_mtime_ms(meta: &fs::Metadata) -> u64 {
@@ -226,44 +204,18 @@ mod tests {
     use std::io::Write;
 
     #[test]
-    fn user_hooks_dir_joins_home_dot_grok_hooks() {
+    fn user_hooks_dir_joins_home_dot_pi_hooks() {
         let dir = user_hooks_dir();
         let s = dir.to_string_lossy();
-        assert!(
-            s.ends_with(".grok/hooks") || s.ends_with(".grok\\hooks"),
-            "{s}"
-        );
+        assert!(s.ends_with(".pi/hooks") || s.ends_with(".pi\\hooks"), "{s}");
     }
 
     #[test]
     fn project_hooks_dir_joins_project_root() {
         let d = project_hooks_dir("/tmp/my-app").expect("path");
-        assert_eq!(d, PathBuf::from("/tmp/my-app/.grok/hooks"));
+        assert_eq!(d, PathBuf::from("/tmp/my-app/.pi/hooks"));
         assert!(project_hooks_dir("").is_none());
         assert!(project_hooks_dir("   ").is_none());
-    }
-
-    #[test]
-    fn join_hooks_path_accepts_simple_names() {
-        let base = PathBuf::from("/tmp/hooks");
-        assert_eq!(
-            join_hooks_path(&base, "session-start.json"),
-            Some(PathBuf::from("/tmp/hooks/session-start.json"))
-        );
-        assert_eq!(
-            join_hooks_path(&base, "  note.md  "),
-            Some(PathBuf::from("/tmp/hooks/note.md"))
-        );
-    }
-
-    #[test]
-    fn join_hooks_path_rejects_traversal_and_empty() {
-        let base = PathBuf::from("/tmp/hooks");
-        assert!(join_hooks_path(&base, "").is_none());
-        assert!(join_hooks_path(&base, "..").is_none());
-        assert!(join_hooks_path(&base, "../etc/passwd").is_none());
-        assert!(join_hooks_path(&base, "a/b.json").is_none());
-        assert!(join_hooks_path(&base, "a\\b.json").is_none());
     }
 
     #[test]

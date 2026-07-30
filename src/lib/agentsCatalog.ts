@@ -3,8 +3,8 @@
  *
  * Sources (CLI `--agent <NAME>`):
  * - Built-ins: explore, plan, general-purpose
- * - User: ~/.grok/agents/*.md
- * - Project: <project>/.grok/agents/*.md
+ * - User: ~/.pi/agents/*.md
+ * - Project: <project>/.pi/agents/*.md
  *
  * Runtime selection is spawn-time only (`pi --agent NAME agent stdio`).
  * Changing the preferred agent requires reconnect / new session — no mid-turn
@@ -151,10 +151,10 @@ export function resolveAgentCatalogDirs(
   const home = (userHome ?? "").trim().replace(/[/\\]+$/g, "");
   const sep =
     home.includes("\\") && !home.includes("/") ? "\\" : "/";
-  const pi = home ? `${home}${sep}.grok` : `.grok`;
+  const pi = home ? `${home}${sep}.pi` : `.pi`;
   const user = `${pi}${sep}agents`;
   const bundled = `${pi}${sep}bundled${sep}agents`;
   const proj = (projectPath ?? "").trim().replace(/[/\\]+$/g, "");
-  const project = proj ? `${proj}${sep}.grok${sep}agents` : null;
+  const project = proj ? `${proj}${sep}.pi${sep}agents` : null;
   return { user, project, bundled };
 }

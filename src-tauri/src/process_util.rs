@@ -97,7 +97,7 @@ pub fn looks_runnable(path: &Path) -> bool {
         if let Ok(meta) = std::fs::metadata(path) {
             return meta.permissions().mode() & 0o111 != 0;
         }
-        return false;
+        false
     }
     #[cfg(not(unix))]
     {
@@ -138,7 +138,7 @@ pub fn enriched_path_env() -> Option<String> {
     let home_s = home.to_string_lossy();
     #[cfg(target_os = "windows")]
     {
-        push(&mut parts, &format!(r"{home_s}\.grok\bin"));
+        push(&mut parts, &format!(r"{home_s}\.pi\bin"));
         push(&mut parts, &format!(r"{home_s}\.local\bin"));
         push(&mut parts, &format!(r"{home_s}\.cargo\bin"));
         push(&mut parts, &format!(r"{home_s}\AppData\Local\pnpm"));
@@ -153,7 +153,7 @@ pub fn enriched_path_env() -> Option<String> {
     }
     #[cfg(not(target_os = "windows"))]
     {
-        push(&mut parts, &format!("{home_s}/.grok/bin"));
+        push(&mut parts, &format!("{home_s}/.pi/bin"));
         push(&mut parts, &format!("{home_s}/.local/bin"));
         push(&mut parts, &format!("{home_s}/.cargo/bin"));
         push(&mut parts, &format!("{home_s}/.bun/bin"));

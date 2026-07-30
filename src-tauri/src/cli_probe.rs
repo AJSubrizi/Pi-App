@@ -124,7 +124,7 @@ fn push_bin_in_dir(
 }
 
 /// Resolve `which` using the process PATH and, if needed, an enriched PATH
-/// (GUI apps often miss `~/.grok/bin` / Homebrew / WinGet).
+/// (GUI apps often miss `~/.pi/bin` / Homebrew / WinGet).
 fn which_pi_variants() -> Vec<PathBuf> {
     let mut found = Vec::new();
     let names = binary_names();

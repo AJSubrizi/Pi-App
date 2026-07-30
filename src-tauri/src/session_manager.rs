@@ -662,8 +662,6 @@ impl SessionManager {
         s.last_activity = Instant::now();
     }
 
-    /// Stream chunk or tool activity — advances stall deadline (I06).
-
     /// Soft signal when a non-ask turn ends with zero tool events (diagnostic aid for #52).
     /// Call **before** stream buffers are cleared.
     fn empty_run_signal_from_live(
@@ -694,9 +692,7 @@ impl SessionManager {
     fn try_finish_deferred_prompt_complete(
         s: &mut LiveSession,
     ) -> Option<Option<(String, String, String)>> {
-        let Some(stop_reason) = s.deferred_prompt_complete.clone() else {
-            return None;
-        };
+        let stop_reason = s.deferred_prompt_complete.clone()?;
         let awaiting_perm = s.fsm.state() == SessionState::AwaitingPermission;
         if should_defer_prompt_complete(
             awaiting_perm,
@@ -1397,7 +1393,7 @@ impl SessionManager {
                         .expect("create session")
                 })
         } else {
-            store::create_session(None, Some("New chat".into()), false).map_err(|e| e)?
+            store::create_session(None, Some("New chat".into()), false)?
         };
 
         // Resolve model / effort / permission / mode for this project+session scope.
@@ -1661,7 +1657,6 @@ impl SessionManager {
             let spawn_opts = crate::acp_client::SpawnOptions {
                 model_id: Some(agent_model.clone()),
                 effort: Some(prefs.effort.clone()),
-                permission_policy: Some(prefs.permission_policy.clone()),
             };
 
             let spawned = if direct_remote {
@@ -1876,7 +1871,7 @@ impl SessionManager {
                 self.handle_acp_event_on_background(app, &sid, ev).await;
                 return;
             }
-            if let AcpEvent::ProcessExited { .. } = &ev {
+            if let AcpEvent::ProcessExited = &ev {
                 let mut parked = self.parked.lock();
                 parked.retain(|_, p| p.process_id != process_id);
                 let mut bg = self.background.lock();
@@ -2188,13 +2183,13 @@ impl SessionManager {
                 Self::emit_empty_run_if_any(app, empty_run);
 
                 // Live tool activity for UI — prefer human call text over bare "tool".
-                let live_title = if !title.is_empty() && title.to_ascii_lowercase() != "tool" {
+                let live_title = if !title.is_empty() && !title.eq_ignore_ascii_case("tool") {
                     title.clone()
                 } else if let Some(ref d) = detail {
                     d.clone()
                 } else if let Some(ref p) = path_out {
                     p.clone()
-                } else if !kind.is_empty() && kind.to_ascii_lowercase() != "tool" {
+                } else if !kind.is_empty() && !kind.eq_ignore_ascii_case("tool") {
                     kind.replace('_', " ")
                 } else {
                     String::new()
@@ -2357,7 +2352,7 @@ impl SessionManager {
                 }
                 Self::emit_state(app, &self.snapshot());
             }
-            AcpEvent::ProcessExited { .. } => {
+            AcpEvent::ProcessExited => {
                 {
                     let mut guard = self.inner.lock();
                     if let Some(s) = guard.as_mut() {
@@ -2457,7 +2452,7 @@ impl SessionManager {
                 reason,
                 status,
             } => {
-                let cap = max_retries.min(HOST_PROVIDER_MAX_RETRIES).max(1);
+                let cap = max_retries.clamp(1, HOST_PROVIDER_MAX_RETRIES);
                 let abort = {
                     let mut guard = self.inner.lock();
                     if let Some(s) = guard.as_mut() {
@@ -2834,7 +2829,7 @@ impl SessionManager {
                     }),
                 );
             }
-            AcpEvent::ProcessExited { .. } => {
+            AcpEvent::ProcessExited => {
                 let mut bg = self.background.lock();
                 if let Some(mut s) = bg.remove(app_session_id) {
                     let _ = s.fsm.crash("Agent process exited (background)");
@@ -3410,13 +3405,6 @@ impl SessionManager {
         Ok(snap)
     }
 
-    /// Update live Host policy (in-memory). Prefer `apply_permission_policy` for full sync.
-    pub fn set_permission_policy(&self, policy: PermissionPolicy) {
-        if let Some(s) = self.inner.lock().as_mut() {
-            s.policy = policy;
-        }
-    }
-
     /// Soft-drop live agent so next send re-spawns with new spawn flags / config.
     /// Keeps `agent_session_id` so reconnect can `session/load`; if load fails,
     /// journal bootstrap still fills the gap.
@@ -3445,15 +3433,6 @@ impl SessionManager {
             acp.kill().await;
             Self::emit_state(app, &self.snapshot());
         }
-    }
-
-    /// Counts of tracked live shell / background / parked entries (alive or not).
-    /// Used by diagnostics and unit tests — not the same as `active_process_count`.
-    pub fn tracked_agent_map_counts(&self) -> (usize, usize, usize) {
-        let live = self.inner.lock().is_some() as usize;
-        let background = self.background.lock().len();
-        let parked = self.parked.lock().len();
-        (live, background, parked)
     }
 
     /// Drop every warm agent process (live + background + parked).
@@ -3485,6 +3464,16 @@ impl SessionManager {
             }),
         );
         Self::emit_state(app, &self.snapshot());
+    }
+
+    /// Counts of tracked live shell / background / parked entries (alive or not).
+    /// Test-only accessor: not the same as `active_process_count`.
+    #[cfg(test)]
+    pub fn tracked_agent_map_counts(&self) -> (usize, usize, usize) {
+        let live = self.inner.lock().is_some() as usize;
+        let background = self.background.lock().len();
+        let parked = self.parked.lock().len();
+        (live, background, parked)
     }
 
     /// Take live ACP + all background/parked agents out of maps (no kill).
@@ -3741,9 +3730,7 @@ impl SessionManager {
                     option_id: option_id.unwrap_or_else(|| "allow_once".into()),
                 },
             };
-            acp.respond_permission(rpc_id, outcome)
-                .await
-                .map_err(|e| e)?;
+            acp.respond_permission(rpc_id, outcome).await?;
         }
         let snap = self.snapshot();
         Self::emit_state(&app, &snap);
@@ -3916,7 +3903,7 @@ mod legacy_permission_ui_tests {
             "type": "extension_ui_request",
             "method": "select",
             "title": "Permission Required",
-            "message": "Current agent requested tool 'xai_grok_run_terminal_command'",
+            "message": "Current agent requested tool 'xai_pi_run_terminal_command'",
             "options": ["Yes", "Yes, allow for this session", "No"]
         });
         assert_eq!(

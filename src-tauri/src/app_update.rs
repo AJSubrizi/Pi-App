@@ -8,8 +8,7 @@ use serde::Serialize;
 use serde_json::Value;
 
 const OWNER_REPO: &str = "AJSubrizi/Pi-App";
-const DEFAULT_RELEASES_URL: &str =
-    "https://api.github.com/repos/AJSubrizi/Pi-App/releases/latest";
+const DEFAULT_RELEASES_URL: &str = "https://api.github.com/repos/AJSubrizi/Pi-App/releases/latest";
 const DEFAULT_RELEASES_PAGE: &str = "https://github.com/AJSubrizi/Pi-App/releases";
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(12);
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(20);
@@ -55,7 +54,7 @@ pub fn sanitize_release_url(url: &str, tag: &str) -> String {
     let u = url.trim();
     let lower = u.to_ascii_lowercase();
     let on_pi = lower.contains("github.com/ajsubrizi/pi-app");
-    let legacy = lower.contains("ronglecat") || lower.contains(concat!("grok", "-app"));
+    let legacy = lower.contains("ronglecat") || lower.contains(concat!("pi", "-app"));
     if on_pi && !legacy {
         return u.to_string();
     }
@@ -70,7 +69,7 @@ pub fn sanitize_release_url(url: &str, tag: &str) -> String {
 fn asset_score(name: &str) -> i32 {
     let n = name.to_ascii_lowercase();
     // Prefer Pi_* installers; reject obvious non-Pi brand prefixes.
-    if n.starts_with("grok") {
+    if n.starts_with("pi") {
         return -1000;
     }
     let mut score = 0i32;
@@ -179,8 +178,12 @@ pub fn parse_github_release(current_version: &str, v: &Value) -> Result<AppUpdat
         .as_array()
         .map(|arr| {
             arr.iter()
-                .filter_map(|a| a.get("name").and_then(|n| n.as_str()).map(|s| s.to_string()))
-                .filter(|n| !n.to_ascii_lowercase().starts_with("grok"))
+                .filter_map(|a| {
+                    a.get("name")
+                        .and_then(|n| n.as_str())
+                        .map(|s| s.to_string())
+                })
+                .filter(|n| !n.to_ascii_lowercase().starts_with("pi"))
                 .collect()
         })
         .unwrap_or_default();
@@ -216,7 +219,7 @@ pub async fn check_app_update() -> Result<AppUpdateCheck, String> {
         return Err("update check URL must be https (or localhost for tests)".into());
     }
     let lower = url.to_ascii_lowercase();
-    if lower.contains("ronglecat") || lower.contains(concat!("grok", "-app")) {
+    if lower.contains("ronglecat") || lower.contains(concat!("pi", "-app")) {
         return Err("refusing non-Pi update endpoint".into());
     }
 
@@ -288,8 +291,8 @@ mod tests {
             "body": "fix",
             "assets": [
                 {
-                    "name": "Grok_0.2.1_x64.dmg",
-                    "browser_download_url": "https://example.com/Grok.dmg"
+                    "name": "Pi_0.2.1_x64.dmg",
+                    "browser_download_url": "https://example.com/Pi.dmg"
                 },
                 {
                     "name": "Pi_0.2.1_aarch64.dmg",
@@ -300,7 +303,10 @@ mod tests {
         let up = parse_github_release("0.2.0", &sample).unwrap();
         assert!(up.update_available);
         assert!(up.html_url.contains("AJSubrizi/Pi-App"));
-        assert!(up.asset_names.iter().all(|n| !n.to_ascii_lowercase().starts_with("grok")));
+        assert!(up
+            .asset_names
+            .iter()
+            .all(|n| !n.to_ascii_lowercase().starts_with("pi")));
         if let Some(d) = &up.download_url {
             assert!(d.contains("Pi_"));
         }

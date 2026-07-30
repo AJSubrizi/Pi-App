@@ -1,8 +1,8 @@
 /**
  * Pure helpers for Settings → Extensions → Agents / Personas.
- * Definition files live under ~/.grok/agents (+ project .grok/agents)
- * and ~/.grok/personas (+ project .grok/personas). Bundled agents are
- * under ~/.grok/bundled/agents (read-only reference).
+ * Definition files live under ~/.pi/agents (+ project .pi/agents)
+ * and ~/.pi/personas (+ project .pi/personas). Bundled agents are
+ * under ~/.pi/bundled/agents (read-only reference).
  *
  * Runtime selection uses CLI flags / config — the App only lists and opens
  * files (no fake "set active agent" without ACP session switch support).
@@ -25,7 +25,7 @@ export type PersonaDefLike = {
   scope: PersonaScope;
 };
 
-/** Relative dir segments under a GROK home root. */
+/** Relative dir segments under a PI home root. */
 export const AGENTS_DIR_SEGMENTS = ["agents"] as const;
 export const PERSONAS_DIR_SEGMENTS = ["personas"] as const;
 export const BUNDLED_AGENTS_SEGMENTS = ["bundled", "agents"] as const;
@@ -59,12 +59,12 @@ function joinPath(...parts: string[]): string {
   return segs.join(sep);
 }
 
-/** `~/.grok` style root from a user home directory. */
-export function grokHomeFromUserHome(userHome: string): string {
+/** `~/.pi` style root from a user home directory. */
+export function piHomeFromUserHome(userHome: string): string {
   const home = (userHome ?? "").trim().replace(/[/\\]+$/g, "");
-  if (!home) return ".grok";
+  if (!home) return ".pi";
   const sep = home.includes("\\") && !home.includes("/") ? "\\" : "/";
-  return `${home}${sep}.grok`;
+  return `${home}${sep}.pi`;
 }
 
 /**
@@ -79,11 +79,11 @@ export function resolveAgentsDirs(
   project: string | null;
   bundled: string;
 } {
-  const pi = grokHomeFromUserHome(userHome);
+  const pi = piHomeFromUserHome(userHome);
   const user = joinPath(pi, "agents");
   const bundled = joinPath(pi, "bundled", "agents");
   const proj = (projectPath ?? "").trim().replace(/[/\\]+$/g, "");
-  const project = proj ? joinPath(proj, ".grok", "agents") : null;
+  const project = proj ? joinPath(proj, ".pi", "agents") : null;
   return { user, project, bundled };
 }
 
@@ -96,11 +96,11 @@ export function resolvePersonasDirs(
   project: string | null;
   bundled: string;
 } {
-  const pi = grokHomeFromUserHome(userHome);
+  const pi = piHomeFromUserHome(userHome);
   const user = joinPath(pi, "personas");
   const bundled = joinPath(pi, "bundled", "personas");
   const proj = (projectPath ?? "").trim().replace(/[/\\]+$/g, "");
-  const project = proj ? joinPath(proj, ".grok", "personas") : null;
+  const project = proj ? joinPath(proj, ".pi", "personas") : null;
   return { user, project, bundled };
 }
 

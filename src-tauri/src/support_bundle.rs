@@ -74,7 +74,7 @@ pub fn write_support_bundle(doctor_json: &str) -> Result<PathBuf, String> {
                 Some((modified, p))
             })
             .collect();
-        entries.sort_by(|a, b| b.0.cmp(&a.0));
+        entries.sort_by_key(|a| std::cmp::Reverse(a.0));
         for (i, (_mtime, path)) in entries.into_iter().take(MAX_LOG_FILES).enumerate() {
             let name = path
                 .file_name()
@@ -455,7 +455,7 @@ fn append_app_logs(zip: &mut ZipWriter<fs::File>, opts: SimpleFileOptions) -> Re
             Some((modified, p))
         })
         .collect();
-    entries.sort_by(|a, b| b.0.cmp(&a.0));
+    entries.sort_by_key(|a| std::cmp::Reverse(a.0));
     for (i, (_mtime, path)) in entries.into_iter().take(MAX_LOG_FILES).enumerate() {
         let name = path
             .file_name()
@@ -480,7 +480,7 @@ fn append_agent_session_files(
 ) -> Result<(), String> {
     let mut files: Vec<(SystemTime, PathBuf, String)> = Vec::new();
     collect_agent_files(agent_dir, agent_dir, &mut files, 0)?;
-    files.sort_by(|a, b| b.0.cmp(&a.0));
+    files.sort_by_key(|a| std::cmp::Reverse(a.0));
 
     let mut total: u64 = 0;
     let mut count = 0usize;
@@ -572,7 +572,7 @@ fn collect_agent_files(
     Ok(())
 }
 
-/// Wipe App-owned data under the data root. Does not touch ~/.grok (CLI home).
+/// Wipe App-owned data under the data root. Does not touch ~/.pi (CLI home).
 ///
 /// `keep_secrets`: when true, leave secrets.json, OS keychain app secrets, and accounts/ in place.
 pub fn reset_app_data(keep_secrets: bool) -> Result<serde_json::Value, String> {
@@ -752,10 +752,8 @@ mod tests {
     #[test]
     fn session_bundle_includes_messages_without_secrets() {
         let _g = ENV_LOCK.lock().unwrap();
-        let tmp = std::env::temp_dir().join(format!(
-            "pi-app-session-bundle-test-{}",
-            std::process::id()
-        ));
+        let tmp =
+            std::env::temp_dir().join(format!("pi-app-session-bundle-test-{}", std::process::id()));
         let _ = fs::remove_dir_all(&tmp);
         fs::create_dir_all(tmp.join("sessions")).unwrap();
         fs::create_dir_all(tmp.join("logs")).unwrap();

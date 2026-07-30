@@ -15,7 +15,7 @@ use std::time::{Duration, Instant};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-use crate::paths::{agent_config_toml, ensure_app_dirs, extensions_file, resolve_agent_grok_home};
+use crate::paths::{agent_config_toml, ensure_app_dirs, extensions_file, resolve_agent_pi_home};
 use crate::store;
 
 const MCP_LIST_TIMEOUT_SECS: u64 = 8;
@@ -86,21 +86,6 @@ pub fn enable_all(map: &mut HashMap<String, bool>, names: &[String]) {
     }
 }
 
-/// Merge overlay flags into base (overlay wins). Pure helper for tests.
-pub fn merge_enable_maps(
-    base: &HashMap<String, bool>,
-    overlay: &HashMap<String, bool>,
-) -> HashMap<String, bool> {
-    let mut out = base.clone();
-    for (k, v) in overlay {
-        let key = k.trim();
-        if !key.is_empty() {
-            out.insert(key.to_string(), *v);
-        }
-    }
-    out
-}
-
 /// Filter server defs by App prefs (default-on).
 pub fn filter_enabled_mcp<'a>(
     defs: &'a [McpServerDef],
@@ -108,15 +93,6 @@ pub fn filter_enabled_mcp<'a>(
 ) -> Vec<&'a McpServerDef> {
     defs.iter()
         .filter(|d| is_enabled(&prefs.mcp, &d.name))
-        .collect()
-}
-
-/// Filter skill names by App prefs (default-on).
-pub fn filter_enabled_skill_names(names: &[String], prefs: &ExtensionsPrefs) -> Vec<String> {
-    names
-        .iter()
-        .filter(|n| is_enabled(&prefs.skills, n))
-        .cloned()
         .collect()
 }
 
@@ -237,10 +213,10 @@ fn file_mtime_ms(path: &Path) -> u128 {
 /// `project_cwd` scopes project-level servers when present.
 pub fn list_mcp_server_defs(project_cwd: Option<&str>) -> Vec<McpServerDef> {
     let settings = store::load_settings();
-    let config_path = resolve_agent_grok_home(&settings.session_data_mode).join("config.toml");
-    // Also watch user ~/.grok/config.toml — list often sources from there.
+    let config_path = resolve_agent_pi_home(&settings.session_data_mode).join("config.toml");
+    // Also watch user ~/.pi/config.toml — list often sources from there.
     let user_config = crate::process_util::user_home()
-        .join(".grok")
+        .join(".pi")
         .join("config.toml");
     let mtime = file_mtime_ms(&config_path).max(file_mtime_ms(&user_config));
 
@@ -278,21 +254,21 @@ pub fn list_mcp_server_defs(project_cwd: Option<&str>) -> Vec<McpServerDef> {
     defs
 }
 
-/// Read MCP server defs from agent-home + user `~/.grok/config.toml`.
+/// Read MCP server defs from agent-home + user `~/.pi/config.toml`.
 /// Later files do not override earlier names (agent-home wins over user when
 /// independent mode has mirrored sections; otherwise user config is the source).
 fn load_mcp_defs_from_configs(session_data_mode: &str) -> Vec<McpServerDef> {
     let mut by_name: HashMap<String, McpServerDef> = HashMap::new();
     // User config first, then agent-home (independent) so App-managed home wins.
     let user_cfg = crate::process_util::user_home()
-        .join(".grok")
+        .join(".pi")
         .join("config.toml");
     if let Ok(raw) = fs::read_to_string(&user_cfg) {
         for d in parse_mcp_servers_from_toml(&raw) {
             by_name.insert(d.name.clone(), d);
         }
     }
-    let agent_cfg = resolve_agent_grok_home(session_data_mode).join("config.toml");
+    let agent_cfg = resolve_agent_pi_home(session_data_mode).join("config.toml");
     if agent_cfg != user_cfg {
         if let Ok(raw) = fs::read_to_string(&agent_cfg) {
             for d in parse_mcp_servers_from_toml(&raw) {
@@ -788,7 +764,7 @@ pub fn toml_quote(s: &str) -> String {
 /// Path of the config.toml the App manages for MCP (respects session_data_mode).
 pub fn mcp_agent_config_path(session_data_mode: &str) -> PathBuf {
     if session_data_mode == "shared" {
-        resolve_agent_grok_home(session_data_mode).join("config.toml")
+        resolve_agent_pi_home(session_data_mode).join("config.toml")
     } else {
         let _ = ensure_app_dirs();
         agent_config_toml()
@@ -971,13 +947,13 @@ fn strip_mcp_server_file(path: &Path, name: &str) -> Result<bool, String> {
 }
 
 /// Remove an MCP server section from agent PI_AGENT_HOME config (and user
-/// `~/.grok/config.toml` when distinct) plus App prefs.
+/// `~/.pi/config.toml` when distinct) plus App prefs.
 pub fn remove_mcp_server(name: &str) -> Result<(), String> {
     let name = validate_mcp_server_name(name)?.to_string();
     let settings = store::load_settings();
     let agent_path = mcp_agent_config_path(&settings.session_data_mode);
     let user_path = crate::process_util::user_home()
-        .join(".grok")
+        .join(".pi")
         .join("config.toml");
 
     let mut touched = false;
@@ -985,7 +961,7 @@ pub fn remove_mcp_server(name: &str) -> Result<(), String> {
         touched = true;
         tracing::info!("extensions: mcp remove {} → {}", name, agent_path.display());
     }
-    // Independent mode may still list user-scoped servers from ~/.grok.
+    // Independent mode may still list user-scoped servers from ~/.pi.
     if user_path != agent_path && strip_mcp_server_file(&user_path, &name)? {
         touched = true;
         tracing::info!("extensions: mcp remove {} → {}", name, user_path.display());
@@ -1287,12 +1263,12 @@ fn trailing_nl(text: &str) -> &'static str {
 }
 
 /// Write App enable prefs into the agent PI_AGENT_HOME config.toml `enabled` flags.
-/// Independent mode: agent-home. Shared mode: user `~/.grok/config.toml` (user-initiated).
+/// Independent mode: agent-home. Shared mode: user `~/.pi/config.toml` (user-initiated).
 pub fn sync_mcp_enabled_to_agent_config(
     session_data_mode: &str,
     prefs: &ExtensionsPrefs,
 ) -> Result<(), String> {
-    let home = resolve_agent_grok_home(session_data_mode);
+    let home = resolve_agent_pi_home(session_data_mode);
     let path = if session_data_mode == "shared" {
         home.join("config.toml")
     } else {
@@ -1366,27 +1342,6 @@ mod tests {
         assert!(!is_enabled(&m2, "foo"));
         set_enabled(&mut m2, "foo", true);
         assert!(is_enabled(&m2, "foo"));
-    }
-
-    #[test]
-    fn merge_and_enable_all() {
-        let mut base = HashMap::new();
-        set_enabled(&mut base, "a", false);
-        set_enabled(&mut base, "b", true);
-        let mut over = HashMap::new();
-        set_enabled(&mut over, "a", true);
-        set_enabled(&mut over, "c", false);
-        let m = merge_enable_maps(&base, &over);
-        assert!(is_enabled(&m, "a"));
-        assert!(is_enabled(&m, "b"));
-        assert!(!is_enabled(&m, "c"));
-        assert!(is_enabled(&m, "unknown"));
-
-        let mut all = HashMap::new();
-        set_enabled(&mut all, "x", false);
-        enable_all(&mut all, &["x".into(), "y".into()]);
-        assert!(is_enabled(&all, "x"));
-        assert!(is_enabled(&all, "y"));
     }
 
     #[test]
@@ -1568,15 +1523,6 @@ enabled = true
     }
 
     #[test]
-    fn filter_skill_names() {
-        let names = vec!["help".into(), "imagine".into(), "code-review".into()];
-        let mut prefs = ExtensionsPrefs::default();
-        set_enabled(&mut prefs.skills, "imagine", false);
-        let f = filter_enabled_skill_names(&names, &prefs);
-        assert_eq!(f, vec!["help".to_string(), "code-review".to_string()]);
-    }
-
-    #[test]
     fn parse_mcp_servers_from_toml_stdio_and_http() {
         let raw = r#"
 [ui]
@@ -1603,7 +1549,7 @@ enabled = true
         let chrome = defs.iter().find(|d| d.name == "chrome-devtools").unwrap();
         assert_eq!(chrome.command.as_deref(), Some("/usr/local/bin/npx"));
         assert_eq!(
-            chrome.args.as_ref().map(|a| a.as_slice()),
+            chrome.args.as_deref(),
             Some(
                 [
                     "-y".to_string(),
@@ -1705,7 +1651,7 @@ enabled = true
     fn parse_mcp_doctor_json_shape() {
         let raw = r#"{
           "sources": [
-            {"path": "~/.grok/config.toml", "status": {"status": "found", "server_count": 2}}
+            {"path": "~/.pi/config.toml", "status": {"status": "found", "server_count": 2}}
           ],
           "servers": [
             {

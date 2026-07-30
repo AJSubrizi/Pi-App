@@ -84,7 +84,7 @@ mod host_permission_e2e {
     }
 
     #[test]
-    fn extract_path_from_grok_write_raw_input() {
+    fn extract_path_from_pi_write_raw_input() {
         let raw = serde_json::json!({
             "toolCall": {
                 "toolCallId": "call-1",

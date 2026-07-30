@@ -57,7 +57,7 @@ Full management surface: **Settings → Extensions** (`#/settings/extensions`).
 - **Prefs:** `{app_data}/extensions.json` — `mcp` / `skills` name → `bool`. Missing name = **enabled** (opt-out).
 - **UI:** Toggle persists immediately (`extensions_set_mcp` / `extensions_set_skill`). Bulk enable via `extensions_enable_all_*`.
 - **MCP inject (session open):** Host builds ACP `mcpServers` from `pi mcp list --json` (full command/args/env or url) filtered by prefs, and passes them on `session/new` / `session/load` (see `acp_client::open_session`).
-- **Dual write:** Independent mode also mirrors `enabled` under agent-home `config.toml` (`[mcp_servers.<name>]`). Shared mode updates `~/.grok/config.toml` enabled flags on user toggle.
+- **Dual write:** Independent mode also mirrors `enabled` under agent-home `config.toml` (`[mcp_servers.<name>]`). Shared mode updates `~/.pi/config.toml` enabled flags on user toggle.
 - **Live agent:** MCP pref change → `SessionManager::apply_extensions_mcp_change` soft-respawns so the next connect re-injects.
 - **Skills:** App filter only (slash palette / chips). Agent still discovers skill files on disk.
 

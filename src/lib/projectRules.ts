@@ -1,12 +1,12 @@
 /**
- * Pure helpers for project rule / instruction files (AGENTS.md, CLAUDE.md, .grok rules).
+ * Pure helpers for project rule / instruction files (AGENTS.md, CLAUDE.md, .pi rules).
  * Classification only — disk I/O lives in the Tauri host (`project_rules_*` commands).
  */
 
 export type ProjectRuleKind =
   | "agents_md"
   | "claude_md"
-  | "grok_rules"
+  | "pi_rules"
   | "nested_agents";
 
 /** One classified rule path (relative to project root). */
@@ -64,30 +64,30 @@ function isClaudeFileName(name: string): boolean {
 
 /**
  * True when path is a Pi rules file/dir pattern:
- * - `.grok/rules`
- * - `.grok/rules.md` / `.grok/rules.txt` / `.grok/rules.*`
- * - anything under `.grok/rules/`
+ * - `.pi/rules`
+ * - `.pi/rules.md` / `.pi/rules.txt` / `.pi/rules.*`
+ * - anything under `.pi/rules/`
  */
-export function isGrokRulesPath(relativePath: string): boolean {
+export function isPiRulesPath(relativePath: string): boolean {
   const p = normalizeRuleRelativePath(relativePath);
   if (!p) return false;
   const lower = p.toLowerCase();
-  if (lower === ".grok/rules") return true;
-  if (lower.startsWith(".grok/rules.")) return true;
-  if (lower.startsWith(".grok/rules/")) return true;
+  if (lower === ".pi/rules") return true;
+  if (lower.startsWith(".pi/rules.")) return true;
+  if (lower.startsWith(".pi/rules/")) return true;
   return false;
 }
 
 /**
- * True when path is an AGENTS.md under `.grok/` (not project root).
- * Matches `.grok/**\/AGENTS.md` (any depth).
+ * True when path is an AGENTS.md under `.pi/` (not project root).
+ * Matches `.pi/**\/AGENTS.md` (any depth).
  */
 export function isNestedAgentsPath(relativePath: string): boolean {
   const p = normalizeRuleRelativePath(relativePath);
   if (!p) return false;
   const lower = p.toLowerCase();
-  if (!lower.startsWith(".grok/")) return false;
-  if (isGrokRulesPath(p)) return false;
+  if (!lower.startsWith(".pi/")) return false;
+  if (isPiRulesPath(p)) return false;
   const name = baseName(p);
   return isAgentsFileName(name);
 }
@@ -114,8 +114,8 @@ export function classifyProjectRulePath(
     return null;
   }
 
-  if (isGrokRulesPath(p)) {
-    return { relativePath: p, kind: "grok_rules", name: baseName(p) };
+  if (isPiRulesPath(p)) {
+    return { relativePath: p, kind: "pi_rules", name: baseName(p) };
   }
 
   if (isNestedAgentsPath(p)) {
@@ -125,11 +125,11 @@ export function classifyProjectRulePath(
   return null;
 }
 
-/** Stable sort: agents_md → claude_md → grok_rules → nested_agents, then path. */
+/** Stable sort: agents_md → claude_md → pi_rules → nested_agents, then path. */
 const KIND_ORDER: Record<ProjectRuleKind, number> = {
   agents_md: 0,
   claude_md: 1,
-  grok_rules: 2,
+  pi_rules: 2,
   nested_agents: 3,
 };
 

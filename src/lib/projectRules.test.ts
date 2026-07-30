@@ -4,7 +4,7 @@ import {
   agentsMdTemplateBody,
   classifyProjectRulePath,
   hasRootAgentsMd,
-  isGrokRulesPath,
+  isPiRulesPath,
   isNestedAgentsPath,
   normalizeRuleRelativePath,
   preferredAgentsMdPath,
@@ -15,8 +15,8 @@ describe("normalizeRuleRelativePath", () => {
   it("strips ./ and backslashes", () => {
     expect(normalizeRuleRelativePath("./AGENTS.md")).toBe("AGENTS.md");
     expect(normalizeRuleRelativePath(".\\CLAUDE.md")).toBe("CLAUDE.md");
-    expect(normalizeRuleRelativePath("/.grok/rules/foo.md")).toBe(
-      ".grok/rules/foo.md",
+    expect(normalizeRuleRelativePath("/.pi/rules/foo.md")).toBe(
+      ".pi/rules/foo.md",
     );
     expect(normalizeRuleRelativePath("  a/b/  ")).toBe("a/b");
   });
@@ -35,26 +35,26 @@ describe("classifyProjectRulePath", () => {
     expect(classifyProjectRulePath("claude.md")?.kind).toBe("claude_md");
   });
 
-  it("classifies .grok/rules* paths", () => {
-    expect(classifyProjectRulePath(".grok/rules")?.kind).toBe("grok_rules");
-    expect(classifyProjectRulePath(".grok/rules.md")?.kind).toBe("grok_rules");
-    expect(classifyProjectRulePath(".grok/rules.txt")?.kind).toBe("grok_rules");
-    expect(classifyProjectRulePath(".grok/rules/base.md")?.kind).toBe(
-      "grok_rules",
+  it("classifies .pi/rules* paths", () => {
+    expect(classifyProjectRulePath(".pi/rules")?.kind).toBe("pi_rules");
+    expect(classifyProjectRulePath(".pi/rules.md")?.kind).toBe("pi_rules");
+    expect(classifyProjectRulePath(".pi/rules.txt")?.kind).toBe("pi_rules");
+    expect(classifyProjectRulePath(".pi/rules/base.md")?.kind).toBe(
+      "pi_rules",
     );
-    expect(classifyProjectRulePath(".grok/rules/team/coding.md")?.kind).toBe(
-      "grok_rules",
+    expect(classifyProjectRulePath(".pi/rules/team/coding.md")?.kind).toBe(
+      "pi_rules",
     );
   });
 
-  it("classifies nested AGENTS.md under .grok", () => {
-    expect(classifyProjectRulePath(".grok/AGENTS.md")?.kind).toBe(
+  it("classifies nested AGENTS.md under .pi", () => {
+    expect(classifyProjectRulePath(".pi/AGENTS.md")?.kind).toBe(
       "nested_agents",
     );
-    expect(classifyProjectRulePath(".grok/subdir/AGENTS.md")?.kind).toBe(
+    expect(classifyProjectRulePath(".pi/subdir/AGENTS.md")?.kind).toBe(
       "nested_agents",
     );
-    expect(classifyProjectRulePath(".grok/a/b/Agents.md")?.kind).toBe(
+    expect(classifyProjectRulePath(".pi/a/b/Agents.md")?.kind).toBe(
       "nested_agents",
     );
   });
@@ -63,18 +63,18 @@ describe("classifyProjectRulePath", () => {
     expect(classifyProjectRulePath("README.md")).toBeNull();
     expect(classifyProjectRulePath("docs/AGENTS.md")).toBeNull();
     expect(classifyProjectRulePath("src/lib/foo.ts")).toBeNull();
-    expect(classifyProjectRulePath(".grok/config.toml")).toBeNull();
-    expect(classifyProjectRulePath(".grok/hooks/x.json")).toBeNull();
+    expect(classifyProjectRulePath(".pi/config.toml")).toBeNull();
+    expect(classifyProjectRulePath(".pi/hooks/x.json")).toBeNull();
     expect(classifyProjectRulePath("")).toBeNull();
   });
 });
 
-describe("isGrokRulesPath / isNestedAgentsPath", () => {
-  it("does not treat nested agents as grok_rules", () => {
-    expect(isGrokRulesPath(".grok/AGENTS.md")).toBe(false);
-    expect(isNestedAgentsPath(".grok/AGENTS.md")).toBe(true);
-    expect(isNestedAgentsPath(".grok/rules/AGENTS.md")).toBe(false);
-    expect(isGrokRulesPath(".grok/rules/AGENTS.md")).toBe(true);
+describe("isPiRulesPath / isNestedAgentsPath", () => {
+  it("does not treat nested agents as pi_rules", () => {
+    expect(isPiRulesPath(".pi/AGENTS.md")).toBe(false);
+    expect(isNestedAgentsPath(".pi/AGENTS.md")).toBe(true);
+    expect(isNestedAgentsPath(".pi/rules/AGENTS.md")).toBe(false);
+    expect(isPiRulesPath(".pi/rules/AGENTS.md")).toBe(true);
   });
 });
 
@@ -82,26 +82,26 @@ describe("selectExistingProjectRules", () => {
   it("filters, dedupes, and orders by kind then path", () => {
     const list = selectExistingProjectRules([
       "README.md",
-      ".grok/rules/z.md",
+      ".pi/rules/z.md",
       "CLAUDE.md",
       "AGENTS.md",
       "./AGENTS.md",
-      ".grok/rules/a.md",
-      ".grok/nested/AGENTS.md",
+      ".pi/rules/a.md",
+      ".pi/nested/AGENTS.md",
       "src/x.ts",
     ]);
     expect(list.map((r) => r.relativePath)).toEqual([
       "AGENTS.md",
       "CLAUDE.md",
-      ".grok/rules/a.md",
-      ".grok/rules/z.md",
-      ".grok/nested/AGENTS.md",
+      ".pi/rules/a.md",
+      ".pi/rules/z.md",
+      ".pi/nested/AGENTS.md",
     ]);
     expect(list.map((r) => r.kind)).toEqual([
       "agents_md",
       "claude_md",
-      "grok_rules",
-      "grok_rules",
+      "pi_rules",
+      "pi_rules",
       "nested_agents",
     ]);
   });

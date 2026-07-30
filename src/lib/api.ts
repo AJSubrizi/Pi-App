@@ -1017,7 +1017,7 @@ export interface AppSettings {
   storeApiKeysInKeychain?: boolean;
   /**
    * OS-level sandbox for spawned agents: off | workspace | read-only | strict | devbox.
-   * Default "off". Passed as `pi --sandbox <profile>` / GROK_SANDBOX on spawn.
+   * Default "off". Passed as `pi --sandbox <profile>` / PI_SANDBOX on spawn.
    */
   sandboxProfile?: string;
 
@@ -1575,12 +1575,12 @@ export async function providerPing() {
   return invoke<{ ok: boolean; class: string; message: string }>("provider_ping");
 }
 
-export async function importGrokCli() {
-  return invoke("import_grok_cli_config");
+export async function importPiCli() {
+  return invoke("import_pi_cli_config");
 }
 
-export async function importGrokGo() {
-  return invoke("import_grok_go_config");
+export async function importPiGo() {
+  return invoke("import_pi_go_config");
 }
 
 // ── Doctor / skills / MCP ───────────────────────────────────────────────────
@@ -1748,7 +1748,7 @@ export interface ResetAppDataResult {
 
 /**
  * Wipe App data under the data root.
- * Does not touch ~/.grok. Confirm twice in the UI before calling.
+ * Does not touch ~/.pi. Confirm twice in the UI before calling.
  */
 export async function resetAppData(keepSecrets = true) {
   return invoke<ResetAppDataResult>("reset_app_data", {

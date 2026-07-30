@@ -65,12 +65,9 @@ impl JournalWriteThrottle {
         Self::new(DEFAULT_JOURNAL_FLUSH_MS)
     }
 
+    #[cfg(test)]
     pub fn min_interval(&self) -> Duration {
         self.min_interval
-    }
-
-    pub fn last_flush(&self) -> Option<Instant> {
-        self.last_flush
     }
 
     /// Whether a flush should run now.

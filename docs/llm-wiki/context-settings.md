@@ -9,7 +9,7 @@ agent profile:
 | `AGENTS.md` | Standing workflow, tool, and convention instructions |
 
 The target directory follows `sessionDataMode` through
-`paths::resolve_agent_grok_home`:
+`paths::resolve_agent_pi_home`:
 
 - independent: the App-owned agent profile;
 - shared: the same `PI_AGENT_HOME` used by Pi CLI sessions.

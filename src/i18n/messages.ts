@@ -532,7 +532,7 @@ const en = {
   "rules.count": "{n} rules",
   "rules.kind.agents_md": "AGENTS.md",
   "rules.kind.claude_md": "CLAUDE.md",
-  "rules.kind.grok_rules": ".pi/agent rules",
+  "rules.kind.pi_rules": ".pi/agent rules",
   "rules.kind.nested_agents": ".pi/agent AGENTS",
   "rules.needProject": "Select a project to manage rules.",
   "rules.needTauri": "Project rules require the desktop app.",
@@ -998,7 +998,7 @@ const en = {
     "Off by default: keys stay in the app data folder (mode 0600). Turn on to use the OS keychain — the system may ask once. Official login still uses Pi auth.",
   "settings.experimentalMemory": "Cross-session memory (experimental)",
   "settings.experimentalMemoryDesc":
-    "Let Pi remember project facts across chats via --experimental-memory / GROK_MEMORY. Experimental — may change. Off by default; when off, agents force --no-memory for isolation.",
+    "Let Pi remember project facts across chats via --experimental-memory / PI_MEMORY. Experimental — may change. Off by default; when off, agents force --no-memory for isolation.",
   "settings.clearWorkspaceMemory": "Clear workspace memory",
   "settings.clearWorkspaceMemoryDesc":
     "Run pi memory clear for the current project workspace (MEMORY.md, session logs, index). Does not delete chat history in the app.",
@@ -1168,7 +1168,7 @@ const en = {
   "managedSetup.desc":
     "Fetch and install organization-managed configuration (`pi setup`). Preview shows a sanitized summary; Install writes into ~/.pi/agent.",
   "managedSetup.authHint":
-    "Requires a team sign-in (`pi login`) or GROK_DEPLOYMENT_KEY (env or [endpoints] deployment_key in ~/.pi/agent/config.toml).",
+    "Requires a team sign-in (`pi login`) or PI_DEPLOYMENT_KEY (env or [endpoints] deployment_key in ~/.pi/agent/config.toml).",
   "managedSetup.preview": "Preview",
   "managedSetup.previewing": "Fetching preview…",
   "managedSetup.previewOk": "Preview ready (nothing written).",
@@ -1191,7 +1191,7 @@ const en = {
     "Install or locate the CLI under Settings → Runtime, then try again.",
   "managedSetup.error.missingAuthTitle": "Team login or deployment key required",
   "managedSetup.error.missingAuth":
-    "Sign in with a team account, or set GROK_DEPLOYMENT_KEY / [endpoints].deployment_key, then retry.",
+    "Sign in with a team account, or set PI_DEPLOYMENT_KEY / [endpoints].deployment_key, then retry.",
   "managedSetup.error.rejectedTitle": "Deployment key rejected",
   "managedSetup.error.rejected":
     "The deployment key was rejected or expired. Confirm it with your administrator.",
@@ -1261,7 +1261,7 @@ const en = {
   "providerConnect.copyLogin": "Copy login command",
   "providerConnect.copied": "Copied",
   "providerConnect.xai.description":
-    "Use an xAI or Grok subscription with browser or device OAuth.",
+    "Use an xAI or Pi subscription with browser or device OAuth.",
   "providerConnect.anthropic.description":
     "Connect a Claude subscription through Anthropic OAuth.",
   "providerConnect.openai.description":

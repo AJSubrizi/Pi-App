@@ -25,7 +25,7 @@ const FIXTURE = {
     ssh: false,
     color: {
       level: { status: "available", value: "none" },
-      availableThemes: ["groknight", "grokday"],
+      availableThemes: ["pinight", "piday"],
       totalThemes: 5,
     },
     keyboard: null,

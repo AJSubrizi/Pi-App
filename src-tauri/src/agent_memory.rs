@@ -1,6 +1,6 @@
 //! Cross-session memory (Pi CLI experimental) — spawn flags, env, config.
 //!
-//! CLI: `--experimental-memory` / `--no-memory`, `GROK_MEMORY`, `[memory] enabled`,
+//! CLI: `--experimental-memory` / `--no-memory`, `PI_MEMORY`, `[memory] enabled`,
 //! `pi memory clear`.
 
 use std::fs;
@@ -8,31 +8,8 @@ use std::path::Path;
 use std::process::Command;
 
 use crate::cli_probe;
-use crate::paths::{agent_config_toml, ensure_app_dirs, resolve_agent_grok_home};
+use crate::paths::{agent_config_toml, ensure_app_dirs, resolve_agent_pi_home};
 use crate::process_util;
-
-/// Top-level CLI flag (before `agent`) for the experimental_memory setting.
-pub fn memory_spawn_flag(enabled: bool) -> &'static str {
-    if enabled {
-        "--experimental-memory"
-    } else {
-        "--no-memory"
-    }
-}
-
-/// `GROK_MEMORY` env value for the agent process.
-pub fn memory_spawn_env_value(enabled: bool) -> &'static str {
-    if enabled {
-        "1"
-    } else {
-        "0"
-    }
-}
-
-/// When off, always force-disable so config cannot leak memory on.
-pub fn should_force_disable_memory(experimental_memory: bool) -> bool {
-    !experimental_memory
-}
 
 /// Upsert `[memory] enabled = bool` in a TOML-ish text blob.
 pub fn set_memory_enabled_in_toml(text: &str, enabled: bool) -> String {
@@ -86,7 +63,7 @@ pub fn sync_memory_to_agent_profile(
     experimental_memory: bool,
 ) -> Result<(), String> {
     if session_data_mode == "shared" {
-        // Never rewrite the user's personal ~/.grok/config.toml from the App.
+        // Never rewrite the user's personal ~/.pi/config.toml from the App.
         return Ok(());
     }
     let _ = ensure_app_dirs();
@@ -141,13 +118,13 @@ pub fn clear_workspace_memory(
         .filter(|p| p.is_dir())
         .unwrap_or_else(process_util::user_home);
 
-    let grok_home = resolve_agent_grok_home(session_data_mode);
+    let pi_home = resolve_agent_pi_home(session_data_mode);
     let args = memory_clear_cli_args(scope);
 
     let mut cmd = Command::new(&cli_path);
     cmd.args(&args)
         .current_dir(&work_dir)
-        .env("PI_AGENT_HOME", &grok_home);
+        .env("PI_AGENT_HOME", &pi_home);
     if let Some(path) = process_util::enriched_path_env() {
         cmd.env("PATH", path);
     }
@@ -180,25 +157,9 @@ pub fn clear_workspace_memory(
     })
 }
 
-/// Apply spawn flag + env on a tokio Command (top-level, before `agent`).
-pub fn apply_memory_to_command(cmd: &mut tokio::process::Command, enabled: bool) {
-    cmd.arg(memory_spawn_flag(enabled));
-    cmd.env("GROK_MEMORY", memory_spawn_env_value(enabled));
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn flags_and_env() {
-        assert_eq!(memory_spawn_flag(true), "--experimental-memory");
-        assert_eq!(memory_spawn_flag(false), "--no-memory");
-        assert_eq!(memory_spawn_env_value(true), "1");
-        assert_eq!(memory_spawn_env_value(false), "0");
-        assert!(should_force_disable_memory(false));
-        assert!(!should_force_disable_memory(true));
-    }
 
     #[test]
     fn upserts_memory_table() {

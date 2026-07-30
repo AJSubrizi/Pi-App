@@ -11,14 +11,14 @@
 //! Evaluation order is deny > ask > allow (Pi CLI docs). This module only
 //! manages the string-array keys; other `[permission]` keys (e.g. structured
 //! `rules`) are left untouched. Writes target the active PI_AGENT_HOME for the
-//! current `session_data_mode` (agent-home or `~/.grok`).
+//! current `session_data_mode` (agent-home or `~/.pi`).
 
 use std::fs;
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
-use crate::paths::{agent_config_toml, ensure_app_dirs, resolve_agent_grok_home};
+use crate::paths::{agent_config_toml, ensure_app_dirs, resolve_agent_pi_home};
 use crate::store;
 
 /// Snapshot of compact permission rules + config path metadata.
@@ -77,16 +77,6 @@ pub fn normalize_rule(raw: &str) -> Option<String> {
     Some(s.to_string())
 }
 
-/// Normalize an action name to `allow` | `deny` | `ask`.
-pub fn normalize_action(raw: &str) -> Option<&'static str> {
-    match raw.trim().to_ascii_lowercase().as_str() {
-        "allow" => Some("allow"),
-        "deny" => Some("deny"),
-        "ask" => Some("ask"),
-        _ => None,
-    }
-}
-
 /// Dedupe while preserving order (first wins). Trims each entry.
 pub fn dedupe_rules(rules: &[String]) -> Vec<String> {
     let mut out = Vec::new();
@@ -109,46 +99,6 @@ pub fn normalize_rules(rules: &PermissionRules) -> PermissionRules {
         deny: dedupe_rules(&rules.deny),
         ask: dedupe_rules(&rules.ask),
     }
-}
-
-/// Pure helper: add a rule to one action bucket (deduped).
-pub fn add_rule(
-    rules: &PermissionRules,
-    action: &str,
-    rule: &str,
-) -> Result<PermissionRules, String> {
-    let action = normalize_action(action).ok_or_else(|| format!("unknown action: {action}"))?;
-    let rule = normalize_rule(rule).ok_or_else(|| "rule text is empty".to_string())?;
-    let mut next = normalize_rules(rules);
-    let bucket = match action {
-        "allow" => &mut next.allow,
-        "deny" => &mut next.deny,
-        "ask" => &mut next.ask,
-        _ => unreachable!(),
-    };
-    if !bucket.iter().any(|r| r == &rule) {
-        bucket.push(rule);
-    }
-    Ok(next)
-}
-
-/// Pure helper: remove a rule from one action bucket (exact match after trim).
-pub fn remove_rule(
-    rules: &PermissionRules,
-    action: &str,
-    rule: &str,
-) -> Result<PermissionRules, String> {
-    let action = normalize_action(action).ok_or_else(|| format!("unknown action: {action}"))?;
-    let rule = normalize_rule(rule).ok_or_else(|| "rule text is empty".to_string())?;
-    let mut next = normalize_rules(rules);
-    let bucket = match action {
-        "allow" => &mut next.allow,
-        "deny" => &mut next.deny,
-        "ask" => &mut next.ask,
-        _ => unreachable!(),
-    };
-    bucket.retain(|r| r != &rule);
-    Ok(next)
 }
 
 /// Parse a TOML string array value (single-line or multi-line-joined): `["a", "b"]`.
@@ -392,7 +342,7 @@ pub fn set_permission_rules_in_toml(text: &str, rules: &PermissionRules) -> Stri
 /// Config path for the active session data mode.
 pub fn permission_config_path(session_data_mode: &str) -> PathBuf {
     if session_data_mode == "shared" {
-        resolve_agent_grok_home(session_data_mode).join("config.toml")
+        resolve_agent_pi_home(session_data_mode).join("config.toml")
     } else {
         let _ = ensure_app_dirs();
         agent_config_toml()
@@ -574,33 +524,8 @@ ask = ["Edit"]
     }
 
     #[test]
-    fn add_remove_rule_pure() {
-        let base = PermissionRules::default();
-        let a = add_rule(&base, "deny", "  Bash(rm *)  ").unwrap();
-        assert_eq!(a.deny, vec!["Bash(rm *)"]);
-        // Dedupe
-        let a2 = add_rule(&a, "deny", "Bash(rm *)").unwrap();
-        assert_eq!(a2.deny.len(), 1);
-        let b = add_rule(&a2, "allow", "Bash(git *)").unwrap();
-        let c = remove_rule(&b, "deny", "Bash(rm *)").unwrap();
-        assert!(c.deny.is_empty());
-        assert_eq!(c.allow, vec!["Bash(git *)"]);
-        assert!(add_rule(&base, "nope", "x").is_err());
-        assert!(add_rule(&base, "allow", "   ").is_err());
-    }
-
-    #[test]
     fn toml_quote_escapes() {
         assert_eq!(toml_quote(r#"a"b"#), r#""a\"b""#);
         assert_eq!(toml_quote(r"a\b"), r#""a\\b""#);
-    }
-
-    #[test]
-    fn normalize_action_and_dedupe() {
-        assert_eq!(normalize_action("ALLOW"), Some("allow"));
-        assert_eq!(normalize_action("Ask"), Some("ask"));
-        assert!(normalize_action("maybe").is_none());
-        let d = dedupe_rules(&["a".into(), " a ".into(), "b".into(), "".into()]);
-        assert_eq!(d, vec!["a", "b"]);
     }
 }

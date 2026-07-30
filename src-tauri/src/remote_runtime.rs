@@ -126,7 +126,7 @@ fn remote_path(value: &str) -> String {
 }
 
 pub fn ssh_executable() -> Option<PathBuf> {
-    which::which("ssh").ok().or_else(|| {
+    which::which("ssh").ok().or({
         #[cfg(target_os = "windows")]
         {
             let root = std::env::var_os("WINDIR")
@@ -173,7 +173,7 @@ pub fn configure_ssh_command(
 }
 
 pub fn pi_rpc_command(settings: &RemoteRuntimeSettings, extra_args: &[String]) -> String {
-    let mut parts = vec![
+    let mut parts = [
         format!("cd {}", remote_path(settings.cwd.trim())),
         format!(
             "exec {} --mode rpc --approve",
@@ -271,9 +271,11 @@ mod tests {
 
     #[test]
     fn rejects_option_and_control_character_injection() {
-        let mut settings = RemoteRuntimeSettings::default();
-        settings.host = "-oProxyCommand=bad".into();
-        settings.user = "dev".into();
+        let mut settings = RemoteRuntimeSettings {
+            host: "-oProxyCommand=bad".into(),
+            user: "dev".into(),
+            ..Default::default()
+        };
         assert!(validate(&settings).is_err());
         settings.host = "server.example".into();
         settings.cwd = "/work\nbad".into();
@@ -282,9 +284,11 @@ mod tests {
 
     #[test]
     fn direct_rpc_requires_wss_without_embedded_credentials() {
-        let mut settings = RemoteRuntimeSettings::default();
-        settings.transport = "direct".into();
-        settings.direct_url = "ws://server.example/rpc".into();
+        let mut settings = RemoteRuntimeSettings {
+            transport: "direct".into(),
+            direct_url: "ws://server.example/rpc".into(),
+            ..Default::default()
+        };
         assert_eq!(
             validate_direct(&settings),
             Err("REMOTE_TLS_REQUIRED".into())
@@ -294,6 +298,9 @@ mod tests {
         settings.direct_url = "wss://server.example/rpc".into();
         assert!(validate_direct(&settings).is_ok());
         settings.cwd = "\n".into();
-        assert_eq!(validate_direct(&settings), Err("REMOTE_VALUE_INVALID".into()));
+        assert_eq!(
+            validate_direct(&settings),
+            Err("REMOTE_VALUE_INVALID".into())
+        );
     }
 }

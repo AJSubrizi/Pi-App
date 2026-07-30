@@ -1,7 +1,7 @@
 //! Independent store under ~/.pi-app: projects, sessions index, settings, secrets.
 
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use chrono::{DateTime, Utc};
@@ -172,12 +172,12 @@ pub struct AppSettings {
     pub store_api_keys_in_keychain: bool,
     /// OS-level sandbox profile for spawned `pi agent` processes
     /// (`off` | `workspace` | `read-only` | `strict` | `devbox`). Default off.
-    /// Passed as top-level `pi --sandbox <profile>` / `GROK_SANDBOX` at spawn.
+    /// Passed as top-level `pi --sandbox <profile>` / `PI_SANDBOX` at spawn.
     #[serde(default = "default_sandbox_profile")]
     pub sandbox_profile: String,
-    /// Enable Pi CLI cross-session memory (`--experimental-memory` / `GROK_MEMORY=1`
+    /// Enable Pi CLI cross-session memory (`--experimental-memory` / `PI_MEMORY=1`
     /// / `[memory] enabled`). Default **false** — experimental; when off, spawn forces
-    /// `--no-memory` + `GROK_MEMORY=0` for isolation (esp. independent mode).
+    /// `--no-memory` + `PI_MEMORY=0` for isolation (esp. independent mode).
     #[serde(default)]
     pub experimental_memory: bool,
     /// Cap agent turns per process via top-level `pi --max-turns N`.
@@ -202,12 +202,12 @@ pub struct AppSettings {
     #[serde(default = "default_plan_enabled")]
     pub plan_enabled: bool,
     /// Allow Pi CLI subagent spawning (`Agent` / task tools). Default **true**
-    /// (CLI default). When false, spawn forces `--no-subagents` + `GROK_SUBAGENTS=0`
+    /// (CLI default). When false, spawn forces `--no-subagents` + `PI_SUBAGENTS=0`
     /// and independent mode writes `[subagents] enabled = false`.
     #[serde(default = "default_true")]
     pub subagents_enabled: bool,
     /// Preferred Pi CLI agent definition for new agent processes
-    /// (`explore` / `plan` / `general-purpose` / custom name under `~/.grok/agents`).
+    /// (`explore` / `plan` / `general-purpose` / custom name under `~/.pi/agents`).
     /// Empty / `default` / `none` → omit top-level `--agent` (CLI default).
     /// Applied at spawn only; changing it soft-respawns the live agent.
     #[serde(default)]
@@ -445,7 +445,7 @@ pub fn take_store_quarantine() -> Option<String> {
     LAST_STORE_QUARANTINE.lock().ok().and_then(|mut g| g.take())
 }
 
-fn write_json<T: Serialize>(path: &PathBuf, value: &T) -> Result<(), String> {
+fn write_json<T: Serialize>(path: &Path, value: &T) -> Result<(), String> {
     let s = serde_json::to_string_pretty(value).map_err(|e| e.to_string())?;
     // Exclusive lock + temp rename so shared-mode / dual-instance writes do not
     // leave a half-written index (E06).
@@ -976,7 +976,7 @@ pub struct AutomationInput {
 pub fn load_automations() -> Vec<Automation> {
     let _ = ensure_app_dirs();
     let mut list: Vec<Automation> = read_json(&automations_file());
-    list.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+    list.sort_by_key(|a| std::cmp::Reverse(a.updated_at));
     list
 }
 
@@ -1114,11 +1114,6 @@ pub fn delete_automation(id: &str) -> Result<(), String> {
 /// See [`crate::secrets`] for migration and storage details. Callers must not log values.
 pub fn load_secrets() -> SecretsFile {
     crate::secrets::load_secrets()
-}
-
-/// Persist app secrets. Prefer OS keychain for API keys; metadata may remain in secrets.json.
-pub fn save_secrets(s: &SecretsFile) -> Result<(), String> {
-    crate::secrets::save_secrets(s)
 }
 
 /// Redact secrets from a string for logs/Doctor export.

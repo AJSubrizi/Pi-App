@@ -12,7 +12,7 @@ use serde::Deserialize;
 use serde_json::Value;
 use uuid::Uuid;
 
-use crate::paths::resolve_agent_grok_home;
+use crate::paths::resolve_agent_pi_home;
 use crate::store::{self, ChatMessageStored, SessionMeta};
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -51,14 +51,12 @@ struct SummaryFile {
 #[derive(Debug, Deserialize)]
 struct SummaryInfo {
     #[serde(default)]
-    id: Option<String>,
-    #[serde(default)]
     cwd: Option<String>,
 }
 
 /// List CLI agent sessions under the active PI_AGENT_HOME (respects session_data_mode).
 pub fn list_cli_sessions(session_data_mode: &str) -> Result<Vec<CliSessionSummary>, String> {
-    let home = resolve_agent_grok_home(session_data_mode);
+    let home = resolve_agent_pi_home(session_data_mode);
     let sessions = home.join("sessions");
     if !sessions.is_dir() {
         return Ok(Vec::new());

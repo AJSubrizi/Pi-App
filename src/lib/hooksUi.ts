@@ -29,12 +29,12 @@ export function joinHooksPath(
   return `${d}${sep}${n}`;
 }
 
-/** Project hooks dir: `<project>/.grok/hooks`. */
+/** Project hooks dir: `<project>/.pi/hooks`. */
 export function projectHooksDir(projectPath: string | null | undefined): string | null {
   const root = (projectPath ?? "").trim().replace(/[/\\]+$/, "");
   if (!root) return null;
   const sep = root.includes("\\") && !root.includes("/") ? "\\" : "/";
-  return `${root}${sep}.grok${sep}hooks`;
+  return `${root}${sep}.pi${sep}hooks`;
 }
 
 /** Human file size (B / KB / MB). */

@@ -30,13 +30,6 @@ const KEYRING_SERVICE: &str = "dev.pi.pi-app";
 const KEY_OFFICIAL: &str = "official_api_key";
 const KEY_RELAY: &str = "relay_api_key";
 
-/// Where sensitive fields were last successfully written (for diagnostics only).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SecretsBackendKind {
-    Keychain,
-    File,
-}
-
 static KEYCHAIN_USABLE: OnceLock<bool> = OnceLock::new();
 
 /// Process-lifetime cache after first full unlock — avoids re-prompting Keychain
@@ -153,17 +146,6 @@ fn non_empty(s: &Option<String>) -> bool {
 /// True when the on-disk payload still holds plaintext API keys that should migrate.
 pub fn disk_has_plaintext_keys(disk: &SecretsFile) -> bool {
     non_empty(&disk.official_api_key) || non_empty(&disk.relay_api_key)
-}
-
-/// Whether UI / setup should treat an official key as configured.
-/// Uses plaintext on disk **or** keychain presence flag — never unlocks Keychain.
-pub fn has_official_key_configured(disk: &SecretsFile) -> bool {
-    non_empty(&disk.official_api_key) || disk.keychain_has_official
-}
-
-/// Whether a relay key is configured (disk plaintext or keychain flag).
-pub fn has_relay_key_configured(disk: &SecretsFile) -> bool {
-    non_empty(&disk.relay_api_key) || disk.keychain_has_relay
 }
 
 /// Disk payload with sensitive key fields stripped (metadata + presence flags kept).
@@ -360,93 +342,6 @@ pub fn load_secrets() -> SecretsFile {
     merged
 }
 
-/// Save secrets. Keychain only when the user setting is on and the platform works.
-pub fn save_secrets(s: &SecretsFile) -> Result<(), String> {
-    let _ = ensure_app_dirs();
-    let path = secrets_file();
-    invalidate_session_cache();
-
-    if use_keychain_backend() {
-        let mut disk = strip_keys_for_disk(s);
-
-        match &s.official_api_key {
-            Some(k) if !k.is_empty() => {
-                keychain_set(KEY_OFFICIAL, k)?;
-                disk.keychain_has_official = true;
-            }
-            _ => {
-                if s.keychain_has_official || non_empty(&s.official_api_key) {
-                    keychain_delete(KEY_OFFICIAL)?;
-                }
-                disk.keychain_has_official = false;
-            }
-        }
-        match &s.relay_api_key {
-            Some(k) if !k.is_empty() => {
-                keychain_set(KEY_RELAY, k)?;
-                disk.keychain_has_relay = true;
-            }
-            _ => {
-                if s.keychain_has_relay || non_empty(&s.relay_api_key) {
-                    keychain_delete(KEY_RELAY)?;
-                }
-                disk.keychain_has_relay = false;
-            }
-        }
-
-        write_disk_secrets(&path, &disk)?;
-        let cached = SecretsFile {
-            official_api_key: s.official_api_key.clone(),
-            relay_api_key: s.relay_api_key.clone(),
-            relay_base_url: disk.relay_base_url.clone(),
-            default_model: disk.default_model.clone(),
-            keychain_has_official: disk.keychain_has_official,
-            keychain_has_relay: disk.keychain_has_relay,
-        };
-        *SESSION_CACHE.lock() = Some(cached);
-        Ok(())
-    } else {
-        // File mode: write full payload; drop any leftover keychain entries best-effort.
-        let mut file = s.clone();
-        if file.keychain_has_official || file.keychain_has_relay {
-            // Pull values if caller only had flags (shouldn't happen after load).
-            if !non_empty(&file.official_api_key) && file.keychain_has_official {
-                file.official_api_key = keychain_get(KEY_OFFICIAL);
-            }
-            if !non_empty(&file.relay_api_key) && file.keychain_has_relay {
-                file.relay_api_key = keychain_get(KEY_RELAY);
-            }
-            if keychain_platform_ok() {
-                let _ = keychain_delete(KEY_OFFICIAL);
-                let _ = keychain_delete(KEY_RELAY);
-            }
-        }
-        file.keychain_has_official = false;
-        file.keychain_has_relay = false;
-        write_disk_secrets(&path, &file)?;
-        *SESSION_CACHE.lock() = Some(file);
-        Ok(())
-    }
-}
-
-/// Backend according to **user setting** (not a live probe). Safe for cold-start UI.
-pub fn configured_backend() -> SecretsBackendKind {
-    if prefer_keychain_storage() {
-        SecretsBackendKind::Keychain
-    } else {
-        SecretsBackendKind::File
-    }
-}
-
-/// Live backend that would be used for the next save/load of key material.
-pub fn active_backend() -> SecretsBackendKind {
-    if use_keychain_backend() {
-        SecretsBackendKind::Keychain
-    } else {
-        SecretsBackendKind::File
-    }
-}
-
 /// Apply settings toggle. Call after `store_api_keys_in_keychain` is saved.
 ///
 /// - on → move disk keys into Keychain (may prompt once)
@@ -587,18 +482,6 @@ mod tests {
     }
 
     #[test]
-    fn presence_uses_keychain_flags_without_values() {
-        let disk = SecretsFile {
-            keychain_has_official: true,
-            keychain_has_relay: false,
-            ..Default::default()
-        };
-        assert!(has_official_key_configured(&disk));
-        assert!(!has_relay_key_configured(&disk));
-        assert!(!disk_has_plaintext_keys(&disk));
-    }
-
-    #[test]
     fn strip_keys_for_disk_keeps_metadata_and_flags() {
         let s = SecretsFile {
             official_api_key: Some("sk-secret".into()),
@@ -709,20 +592,6 @@ mod tests {
     }
 
     #[test]
-    fn presence_helpers_do_not_need_key_material() {
-        let s = SecretsFile {
-            keychain_has_official: true,
-            keychain_has_relay: true,
-            official_api_key: None,
-            relay_api_key: None,
-            ..Default::default()
-        };
-        assert!(has_official_key_configured(&s));
-        assert!(has_relay_key_configured(&s));
-        assert!(!disk_has_plaintext_keys(&s));
-    }
-
-    #[test]
     fn default_settings_prefer_file_not_keychain() {
         let s = crate::store::AppSettings::default();
         assert!(!s.store_api_keys_in_keychain);
@@ -730,8 +599,7 @@ mod tests {
 
     #[test]
     fn file_write_preserves_keys_when_using_full_payload() {
-        let tmp =
-            std::env::temp_dir().join(format!("pi-app-secrets-file-{}", std::process::id()));
+        let tmp = std::env::temp_dir().join(format!("pi-app-secrets-file-{}", std::process::id()));
         let _ = fs::remove_dir_all(&tmp);
         fs::create_dir_all(&tmp).unwrap();
         let path = tmp.join("secrets.json");

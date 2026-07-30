@@ -8,7 +8,6 @@ use std::io::Read;
 use std::path::{Component, Path, PathBuf};
 
 const MAX_TEXT_BYTES: u64 = 2 * 1024 * 1024; // 2 MiB text preview
-const MAX_BINARY_BYTES: u64 = 8 * 1024 * 1024; // 8 MiB image / pdf
 /// Office packages streamed to the UI for rich render (docx-preview / xlsx / pdf).
 const MAX_OFFICE_STREAM_BYTES: u64 = 40 * 1024 * 1024;
 
@@ -229,7 +228,7 @@ fn xml_to_plain(xml: &str) -> String {
             // Paragraph / break markers → newline
             let rest: String = chars.clone().take(12).collect();
             let lower = rest.to_ascii_lowercase();
-            if lower.starts_with("w:p ")
+            if (lower.starts_with("w:p ")
                 || lower.starts_with("w:p>")
                 || lower.starts_with("/w:p>")
                 || lower.starts_with("w:br")
@@ -238,11 +237,10 @@ fn xml_to_plain(xml: &str) -> String {
                 || lower.starts_with("/text:p")
                 || lower.starts_with("a:p ")
                 || lower.starts_with("a:p>")
-                || lower.starts_with("/a:p")
+                || lower.starts_with("/a:p"))
+                && !out.ends_with('\n')
             {
-                if !out.ends_with('\n') {
-                    out.push('\n');
-                }
+                out.push('\n');
             }
             continue;
         }
@@ -542,7 +540,7 @@ fn write_text_at_path(
         .parent()
         .ok_or_else(|| "invalid parent directory".to_string())?;
     let tmp_name = format!(
-        ".{}.grok-save-{}",
+        ".{}.pi-save-{}",
         path.file_name().and_then(|s| s.to_str()).unwrap_or("file"),
         std::process::id()
     );
@@ -886,7 +884,7 @@ fn find_one_suffix(root: &Path, suffix: &str) -> Option<PathBuf> {
     // Bare names: wider scan + uniqueness check. Multi-segment: smaller budget.
     let max_visits: usize = if is_basename { 50_000 } else { 15_000 };
 
-    let is_priority = |name: &str| priority.iter().any(|p| *p == name);
+    let is_priority = |name: &str| priority.contains(&name);
 
     let matches_file = |path: &Path, file_name: &str| -> bool {
         if is_basename {

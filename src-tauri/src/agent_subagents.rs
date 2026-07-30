@@ -1,35 +1,11 @@
 //! Subagent spawning — spawn flags, env, config.
 //!
-//! CLI: `--no-subagents`, `GROK_SUBAGENTS`, `[subagents] enabled`.
+//! CLI: `--no-subagents`, `PI_SUBAGENTS`, `[subagents] enabled`.
 //! Enabled by default; when App setting is off, force-disable at spawn.
 
 use std::fs;
 
 use crate::paths::{agent_config_toml, ensure_app_dirs};
-
-/// Top-level CLI flags (before `agent`) for the subagents_enabled setting.
-/// Empty when enabled (CLI default on); `["--no-subagents"]` when disabled.
-pub fn subagents_spawn_flags(enabled: bool) -> Vec<&'static str> {
-    if enabled {
-        vec![]
-    } else {
-        vec!["--no-subagents"]
-    }
-}
-
-/// `GROK_SUBAGENTS` env value when force-disabling. `None` when enabled.
-pub fn subagents_spawn_env_value(enabled: bool) -> Option<&'static str> {
-    if enabled {
-        None
-    } else {
-        Some("0")
-    }
-}
-
-/// When off, always force-disable so config cannot re-enable subagents.
-pub fn should_force_disable_subagents(subagents_enabled: bool) -> bool {
-    !subagents_enabled
-}
 
 /// Upsert `[subagents] enabled = bool` in a TOML-ish text blob.
 pub fn set_subagents_enabled_in_toml(text: &str, enabled: bool) -> String {
@@ -83,7 +59,7 @@ pub fn sync_subagents_to_agent_profile(
     subagents_enabled: bool,
 ) -> Result<(), String> {
     if session_data_mode == "shared" {
-        // Never rewrite the user's personal ~/.grok/config.toml from the App.
+        // Never rewrite the user's personal ~/.pi/config.toml from the App.
         return Ok(());
     }
     let _ = ensure_app_dirs();
@@ -101,31 +77,9 @@ pub fn sync_subagents_to_agent_profile(
     );
     Ok(())
 }
-
-/// Apply spawn flag + env on a tokio Command (top-level, before `agent`).
-/// When enabled, leaves CLI defaults alone; when disabled, force-disables.
-pub fn apply_subagents_to_command(cmd: &mut tokio::process::Command, enabled: bool) {
-    for flag in subagents_spawn_flags(enabled) {
-        cmd.arg(flag);
-    }
-    if let Some(v) = subagents_spawn_env_value(enabled) {
-        cmd.env("GROK_SUBAGENTS", v);
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn flags_and_env() {
-        assert!(subagents_spawn_flags(true).is_empty());
-        assert_eq!(subagents_spawn_flags(false), vec!["--no-subagents"]);
-        assert_eq!(subagents_spawn_env_value(true), None);
-        assert_eq!(subagents_spawn_env_value(false), Some("0"));
-        assert!(should_force_disable_subagents(false));
-        assert!(!should_force_disable_subagents(true));
-    }
 
     #[test]
     fn upserts_subagents_table() {

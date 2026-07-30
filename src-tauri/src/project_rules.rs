@@ -1,6 +1,6 @@
 //! Project rule / instruction files under a trusted project root.
 //!
-//! Detects AGENTS.md, CLAUDE.md, `.grok/rules*`, and `.grok/**/AGENTS.md`.
+//! Detects AGENTS.md, CLAUDE.md, `.pi/rules*`, and `.pi/**/AGENTS.md`.
 //! Management is list + ensure AGENTS.md template — editing happens in the
 //! resource pane (or OS open / reveal).
 
@@ -15,11 +15,11 @@ use serde::Serialize;
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectRuleEntry {
-    /// Path relative to project root (`AGENTS.md`, `.grok/rules/x.md`, …).
+    /// Path relative to project root (`AGENTS.md`, `.pi/rules/x.md`, …).
     pub relative_path: String,
     /// Absolute filesystem path.
     pub absolute_path: String,
-    /// `agents_md` | `claude_md` | `grok_rules` | `nested_agents`.
+    /// `agents_md` | `claude_md` | `pi_rules` | `nested_agents`.
     pub kind: String,
     /// Basename for display.
     pub name: String,
@@ -86,8 +86,8 @@ const ROOT_AGENTS_NAMES: &[&str] = &[
 
 const ROOT_CLAUDE_NAMES: &[&str] = &["CLAUDE.md", "Claude.md", "claude.md"];
 
-/// Max depth when walking `.grok/` for nested AGENTS.md / rules trees.
-const GROK_WALK_MAX_DEPTH: usize = 6;
+/// Max depth when walking `.pi/` for nested AGENTS.md / rules trees.
+const PI_WALK_MAX_DEPTH: usize = 6;
 /// Cap listed rule files to avoid huge trees.
 const MAX_RULE_ENTRIES: usize = 200;
 
@@ -141,18 +141,15 @@ pub fn classify_rule_path(relative: &str) -> Option<(&'static str, String)> {
     }
 
     let lower = p.to_ascii_lowercase();
-    if lower == ".grok/rules"
-        || lower.starts_with(".grok/rules.")
-        || lower.starts_with(".grok/rules/")
-    {
-        return Some(("grok_rules", name));
+    if lower == ".pi/rules" || lower.starts_with(".pi/rules.") || lower.starts_with(".pi/rules/") {
+        return Some(("pi_rules", name));
     }
 
-    if lower.starts_with(".grok/") && is_agents_name(&name) {
-        // Nested agents under .grok, excluding the rules tree (already grok_rules).
-        if !(lower == ".grok/rules"
-            || lower.starts_with(".grok/rules.")
-            || lower.starts_with(".grok/rules/"))
+    if lower.starts_with(".pi/") && is_agents_name(&name) {
+        // Nested agents under .pi, excluding the rules tree (already pi_rules).
+        if !(lower == ".pi/rules"
+            || lower.starts_with(".pi/rules.")
+            || lower.starts_with(".pi/rules/"))
         {
             return Some(("nested_agents", name));
         }
@@ -165,7 +162,7 @@ fn kind_order(kind: &str) -> u8 {
     match kind {
         "agents_md" => 0,
         "claude_md" => 1,
-        "grok_rules" => 2,
+        "pi_rules" => 2,
         "nested_agents" => 3,
         _ => 9,
     }
@@ -222,7 +219,7 @@ fn walk_rules(
     dir_rel: &str,
     depth: usize,
 ) {
-    if depth > GROK_WALK_MAX_DEPTH || out.len() >= MAX_RULE_ENTRIES {
+    if depth > PI_WALK_MAX_DEPTH || out.len() >= MAX_RULE_ENTRIES {
         return;
     }
     let abs_dir = if dir_rel.is_empty() {
@@ -241,11 +238,11 @@ fn walk_rules(
             break;
         }
         let name = ent.file_name().to_string_lossy().into_owned();
-        // Skip hidden junk except `.grok` at root of walk when dir_rel empty is not used for root walk.
+        // Skip hidden junk except `.pi` at root of walk when dir_rel empty is not used for root walk.
         if name == "." || name == ".." {
             continue;
         }
-        if name.starts_with('.') && name != ".grok" && dir_rel.is_empty() {
+        if name.starts_with('.') && name != ".pi" && dir_rel.is_empty() {
             continue;
         }
         let child_rel = if dir_rel.is_empty() {
@@ -266,10 +263,10 @@ fn walk_rules(
         if ft.is_file() {
             push_file_entry(out, seen, root, &child_rel);
         } else if ft.is_dir() {
-            // Only recurse into .grok and under .grok/rules (and nested .grok paths).
+            // Only recurse into .pi and under .pi/rules (and nested .pi paths).
             let lower = child_rel.to_ascii_lowercase();
-            let under_grok = lower == ".grok" || lower.starts_with(".grok/");
-            if under_grok {
+            let under_pi = lower == ".pi" || lower.starts_with(".pi/");
+            if under_pi {
                 walk_rules(out, seen, root, &child_rel, depth + 1);
             }
         }
@@ -297,10 +294,10 @@ pub fn list_project_rules(project_path: &str) -> Result<ProjectRulesListResult, 
         }
     }
 
-    // Walk `.grok/` for rules* and nested AGENTS.md.
-    let pi = root.join(".grok");
+    // Walk `.pi/` for rules* and nested AGENTS.md.
+    let pi = root.join(".pi");
     if pi.is_dir() {
-        walk_rules(&mut rules, &mut seen, &root, ".grok", 0);
+        walk_rules(&mut rules, &mut seen, &root, ".pi", 0);
     }
 
     rules.sort_by(|a, b| {
@@ -381,7 +378,7 @@ mod tests {
     use std::fs;
 
     #[test]
-    fn classify_root_and_grok_paths() {
+    fn classify_root_and_pi_paths() {
         assert_eq!(
             classify_rule_path("AGENTS.md").map(|x| x.0),
             Some("agents_md")
@@ -395,31 +392,31 @@ mod tests {
             Some("claude_md")
         );
         assert_eq!(
-            classify_rule_path(".grok/rules.md").map(|x| x.0),
-            Some("grok_rules")
+            classify_rule_path(".pi/rules.md").map(|x| x.0),
+            Some("pi_rules")
         );
         assert_eq!(
-            classify_rule_path(".grok/rules/a.md").map(|x| x.0),
-            Some("grok_rules")
+            classify_rule_path(".pi/rules/a.md").map(|x| x.0),
+            Some("pi_rules")
         );
         assert_eq!(
-            classify_rule_path(".grok/x/AGENTS.md").map(|x| x.0),
+            classify_rule_path(".pi/x/AGENTS.md").map(|x| x.0),
             Some("nested_agents")
         );
         assert!(classify_rule_path("README.md").is_none());
         assert!(classify_rule_path("docs/AGENTS.md").is_none());
-        assert!(classify_rule_path(".grok/config.toml").is_none());
+        assert!(classify_rule_path(".pi/config.toml").is_none());
     }
 
     #[test]
     fn list_and_ensure_template() {
         let dir = std::env::temp_dir().join(format!("pi-app-rules-test-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
-        fs::create_dir_all(dir.join(".grok/rules")).unwrap();
-        fs::create_dir_all(dir.join(".grok/team")).unwrap();
+        fs::create_dir_all(dir.join(".pi/rules")).unwrap();
+        fs::create_dir_all(dir.join(".pi/team")).unwrap();
         fs::write(dir.join("CLAUDE.md"), "# c\n").unwrap();
-        fs::write(dir.join(".grok/rules/base.md"), "rule\n").unwrap();
-        fs::write(dir.join(".grok/team/AGENTS.md"), "nested\n").unwrap();
+        fs::write(dir.join(".pi/rules/base.md"), "rule\n").unwrap();
+        fs::write(dir.join(".pi/team/AGENTS.md"), "nested\n").unwrap();
 
         let listed = list_project_rules(dir.to_str().unwrap()).unwrap();
         assert!(!listed.has_agents_md);
@@ -429,8 +426,8 @@ mod tests {
             .map(|r| r.relative_path.as_str())
             .collect();
         assert!(paths.contains(&"CLAUDE.md"));
-        assert!(paths.contains(&".grok/rules/base.md"));
-        assert!(paths.contains(&".grok/team/AGENTS.md"));
+        assert!(paths.contains(&".pi/rules/base.md"));
+        assert!(paths.contains(&".pi/team/AGENTS.md"));
 
         let ensured = ensure_agents_template(dir.to_str().unwrap()).unwrap();
         assert!(ensured.created);

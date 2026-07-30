@@ -14,7 +14,6 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sha2::{Digest, Sha256};
-use uuid::Uuid;
 
 use crate::operation_journal::{
     begin_host_operation, transition_host_operation, OperationBeginInput, OperationStatus,
@@ -998,6 +997,7 @@ pub fn repository_trust_revoke(
 mod tests {
     use super::*;
     use std::io::Write;
+    use uuid::Uuid;
 
     fn temp_root(name: &str) -> PathBuf {
         let root = std::env::temp_dir().join(format!(

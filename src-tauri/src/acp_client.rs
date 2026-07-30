@@ -96,9 +96,7 @@ pub enum AcpEvent {
     Stderr {
         line: String,
     },
-    ProcessExited {
-        code: Option<i32>,
-    },
+    ProcessExited,
 }
 
 /// Host circuit-breaker: after this many provider retries, cancel the turn
@@ -166,139 +164,6 @@ pub struct AcpClient {
 pub struct SpawnOptions {
     pub model_id: Option<String>,
     pub effort: Option<String>,
-    /// App permission policy id (ask / accept_edits / …).
-    pub permission_policy: Option<String>,
-}
-
-/// Map App policy → CLI `--permission-mode` value.
-pub fn cli_permission_mode(policy: &str) -> &'static str {
-    use crate::permission::PermissionPolicy;
-    match PermissionPolicy::parse(policy) {
-        PermissionPolicy::AcceptEdits => "acceptEdits",
-        PermissionPolicy::DontAsk => "dontAsk",
-        PermissionPolicy::AlwaysApprove => "bypassPermissions",
-        // Host session allow-list is applied in-process; CLI still asks.
-        PermissionPolicy::AllowForSession
-        | PermissionPolicy::AllowOnce
-        | PermissionPolicy::Deny
-        | PermissionPolicy::Ask => "default",
-    }
-}
-
-/// Pure spawn plan for the OS-level sandbox profile.
-///
-/// `--sandbox` is a **top-level** `pi` flag (not under `agent` / `stdio`),
-/// and the CLI also reads `GROK_SANDBOX`. When the profile is off/empty we
-/// apply neither so the agent stays unrestricted (CLI default).
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SandboxSpawnSpec {
-    pub profile: String,
-}
-
-impl SandboxSpawnSpec {
-    /// Build from a settings value. `None` means do not pass sandbox flags/env.
-    pub fn from_setting(profile: &str) -> Option<Self> {
-        let p = profile.trim();
-        if p.is_empty() || p.eq_ignore_ascii_case("off") {
-            return None;
-        }
-        Some(Self {
-            profile: p.to_ascii_lowercase(),
-        })
-    }
-
-    /// Top-level CLI args: `["--sandbox", "<profile>"]` (before `agent`).
-    pub fn cli_args(&self) -> [String; 2] {
-        ["--sandbox".into(), self.profile.clone()]
-    }
-
-    /// Env var name + value for `GROK_SANDBOX`.
-    pub fn env_pair(&self) -> (String, String) {
-        ("GROK_SANDBOX".into(), self.profile.clone())
-    }
-}
-
-/// Pure helper used by spawn + unit tests: args + env when sandbox is on.
-pub fn sandbox_spawn_flags(profile: &str) -> Option<(Vec<String>, (String, String))> {
-    let spec = SandboxSpawnSpec::from_setting(profile)?;
-    Some((spec.cli_args().to_vec(), spec.env_pair()))
-}
-
-pub const MAX_AGENT_TURNS_CAP: u32 = 200;
-pub const MIN_AGENT_TURNS: u32 = 1;
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct MaxTurnsSpawnSpec {
-    pub turns: u32,
-}
-
-impl MaxTurnsSpawnSpec {
-    pub fn from_setting(raw: Option<u32>) -> Option<Self> {
-        let n = raw?;
-        if n == 0 {
-            return None;
-        }
-        Some(Self {
-            turns: n.clamp(MIN_AGENT_TURNS, MAX_AGENT_TURNS_CAP),
-        })
-    }
-
-    pub fn cli_args(&self) -> [String; 2] {
-        ["--max-turns".into(), self.turns.to_string()]
-    }
-}
-
-pub fn normalize_max_agent_turns(raw: Option<u32>) -> Option<u32> {
-    MaxTurnsSpawnSpec::from_setting(raw).map(|s| s.turns)
-}
-
-pub fn max_turns_cli_args(raw: Option<u32>) -> Option<Vec<String>> {
-    let spec = MaxTurnsSpawnSpec::from_setting(raw)?;
-    Some(spec.cli_args().to_vec())
-}
-
-pub fn disable_web_search_spawn_flags(disable: bool) -> Vec<&'static str> {
-    if disable {
-        vec!["--disable-web-search"]
-    } else {
-        vec![]
-    }
-}
-
-pub fn no_plan_spawn_flags(plan_enabled: bool) -> Vec<&'static str> {
-    if plan_enabled {
-        vec![]
-    } else {
-        vec!["--no-plan"]
-    }
-}
-
-pub fn leader_spawn_flag(use_leader: bool) -> &'static str {
-    if use_leader {
-        "--leader"
-    } else {
-        "--no-leader"
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AgentSpawnSpec {
-    pub name: String,
-}
-
-impl AgentSpawnSpec {
-    pub fn from_setting(raw: &str) -> Option<Self> {
-        let name = crate::agents_catalog::normalize_preferred_agent(raw)?;
-        Some(Self { name })
-    }
-
-    pub fn cli_args(&self) -> [String; 2] {
-        ["--agent".into(), self.name.clone()]
-    }
-}
-
-pub fn preferred_agent_spawn_flags(raw: &str) -> Option<Vec<String>> {
-    crate::agents_catalog::agent_spawn_cli_args(raw)
 }
 
 impl AcpClient {
@@ -307,13 +172,6 @@ impl AcpClient {
             .or_else(|_| std::env::var("PI_APP_ACP"))
             .map(|v| v.eq_ignore_ascii_case("mock"))
             .unwrap_or(false)
-    }
-
-    pub fn spawn(
-        cli_path: PathBuf,
-        cwd: PathBuf,
-    ) -> Result<(Arc<Self>, mpsc::UnboundedReceiver<AcpEvent>), AgentError> {
-        Self::spawn_with_options(cli_path, cwd, SpawnOptions::default())
     }
 
     pub fn spawn_with_options(
@@ -603,19 +461,17 @@ impl AcpClient {
             let inbound = async {
                 while let Some(message) = ws_read.next().await {
                     match message {
-                        Ok(WebSocketMessage::Text(text)) => {
-                            if bridge_write.write_all(text.as_bytes()).await.is_err()
-                                || bridge_write.write_all(b"\n").await.is_err()
-                            {
-                                break;
-                            }
+                        Ok(WebSocketMessage::Text(text))
+                            if (bridge_write.write_all(text.as_bytes()).await.is_err()
+                                || bridge_write.write_all(b"\n").await.is_err()) =>
+                        {
+                            break;
                         }
-                        Ok(WebSocketMessage::Binary(bytes)) => {
-                            if bridge_write.write_all(&bytes).await.is_err()
-                                || bridge_write.write_all(b"\n").await.is_err()
-                            {
-                                break;
-                            }
+                        Ok(WebSocketMessage::Binary(bytes))
+                            if (bridge_write.write_all(&bytes).await.is_err()
+                                || bridge_write.write_all(b"\n").await.is_err()) =>
+                        {
+                            break;
                         }
                         Ok(WebSocketMessage::Close(_)) | Err(_) => break,
                         _ => {}
@@ -731,7 +587,7 @@ impl AcpClient {
             c.reader_alive.store(false, Ordering::SeqCst);
             let detail = c.format_exit_detail("Agent stream closed (EOF)");
             c.fail_all_pending(&detail);
-            let _ = c.event_tx.send(AcpEvent::ProcessExited { code: None });
+            let _ = c.event_tx.send(AcpEvent::ProcessExited);
         });
     }
 
@@ -842,7 +698,7 @@ impl AcpClient {
 
             // Pi CLI plan gate / ask-user (wire method has leading `_`).
             // Params are FLAT: { sessionId, toolCallId, planContent } — not nested.
-            // See minos grok_driver + agent-client-protocol ext_method.
+            // See minos pi_driver + agent-client-protocol ext_method.
             if let Some(bare) = method.strip_prefix('_') {
                 if bare == "x.ai/exit_plan_mode" || bare == "x.ai/ask_user_question" {
                     let rpc_id = req_id.unwrap_or(0);
@@ -1747,13 +1603,6 @@ impl AcpClient {
         Ok((sid, resumed))
     }
 
-    /// Back-compat: always create a new session.
-    pub async fn initialize_and_new_session(&self) -> Result<String, AgentError> {
-        self.initialize_and_open_session(None)
-            .await
-            .map(|(sid, _)| sid)
-    }
-
     /// Switch model on the live agent session (`session/set_model`).
     pub async fn set_model(&self, model_id: &str) -> Result<(), String> {
         let model_id = model_id.trim();
@@ -1965,17 +1814,6 @@ impl AcpClient {
             .await
     }
 
-    /// List rewind points (one per user prompt). agent extension `x.ai/rewind/points`.
-    pub async fn rewind_points(&self) -> Result<Value, String> {
-        let sid = self
-            .agent_session_id
-            .lock()
-            .clone()
-            .ok_or_else(|| "no session".to_string())?;
-        self.request("x.ai/rewind/points", json!({ "sessionId": sid }))
-            .await
-    }
-
     /// Truncate agent conversation to a user-prompt index (and optionally restore files).
     /// agent extension `x.ai/rewind/execute` — `targetPromptIndex` is 0-based user turn index.
     ///
@@ -2112,10 +1950,6 @@ impl AcpClient {
             }
         );
         self.write_line(&msg).await
-    }
-
-    pub fn agent_session_id(&self) -> Option<String> {
-        self.agent_session_id.lock().clone()
     }
 
     pub async fn kill(&self) {
@@ -2875,7 +2709,7 @@ pub fn should_abort_provider_retry(attempt: u32, max_retries: u32, status: &str)
     {
         return true;
     }
-    let cap = max_retries.min(HOST_PROVIDER_MAX_RETRIES).max(1);
+    let cap = max_retries.clamp(1, HOST_PROVIDER_MAX_RETRIES);
     attempt >= cap
 }
 
@@ -3016,49 +2850,6 @@ mod retry_tests {
     }
 }
 
-#[cfg(test)]
-mod sandbox_spawn_tests {
-    use super::*;
-
-    #[test]
-    fn off_and_empty_yield_no_flags() {
-        assert!(SandboxSpawnSpec::from_setting("off").is_none());
-        assert!(SandboxSpawnSpec::from_setting("OFF").is_none());
-        assert!(SandboxSpawnSpec::from_setting("").is_none());
-        assert!(SandboxSpawnSpec::from_setting("   ").is_none());
-        assert!(sandbox_spawn_flags("off").is_none());
-    }
-
-    #[test]
-    fn known_profiles_build_top_level_args_and_env() {
-        for profile in ["workspace", "read-only", "strict", "devbox"] {
-            let spec = SandboxSpawnSpec::from_setting(profile).expect(profile);
-            assert_eq!(spec.profile, profile);
-            assert_eq!(
-                spec.cli_args(),
-                ["--sandbox".to_string(), profile.to_string()]
-            );
-            assert_eq!(
-                spec.env_pair(),
-                ("GROK_SANDBOX".to_string(), profile.to_string())
-            );
-            let (args, env) = sandbox_spawn_flags(profile).unwrap();
-            assert_eq!(args, vec!["--sandbox".to_string(), profile.to_string()]);
-            assert_eq!(env, ("GROK_SANDBOX".to_string(), profile.to_string()));
-        }
-    }
-
-    #[test]
-    fn trims_and_lowercases_profile() {
-        let spec = SandboxSpawnSpec::from_setting("  WorkSpace  ").unwrap();
-        assert_eq!(spec.profile, "workspace");
-        assert_eq!(
-            spec.cli_args(),
-            ["--sandbox".to_string(), "workspace".to_string()]
-        );
-    }
-}
-
 fn json_id_u64(v: Option<&Value>) -> Option<u64> {
     let v = v?;
     if let Some(u) = v.as_u64() {
@@ -3089,18 +2880,21 @@ mod live_handshake_tests {
         let cli = which::which("pi").expect("pi cli");
         let cwd = std::env::current_dir().unwrap();
         let t0 = std::time::Instant::now();
-        let (client, mut events) = AcpClient::spawn(cli, cwd).expect("spawn");
+        let (client, mut events) =
+            AcpClient::spawn_with_options(cli, cwd, SpawnOptions::default()).expect("spawn");
         // drain events in bg
         tokio::spawn(async move {
             while let Some(ev) = events.recv().await {
                 eprintln!("ev: {:?}", std::mem::discriminant(&ev));
             }
         });
-        let sid =
-            tokio::time::timeout(Duration::from_secs(45), client.initialize_and_new_session())
-                .await
-                .expect("overall timeout")
-                .expect("handshake");
+        let (sid, _resumed) = tokio::time::timeout(
+            Duration::from_secs(45),
+            client.initialize_and_open_session(None),
+        )
+        .await
+        .expect("overall timeout")
+        .expect("handshake");
         eprintln!("OK session={} in {:?}", sid, t0.elapsed());
         client.kill().await;
         assert!(!sid.is_empty());

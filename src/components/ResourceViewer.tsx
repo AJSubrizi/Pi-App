@@ -117,7 +117,7 @@ function clampTreeWidth(w: number, containerWidth: number): number {
 export type ResourceOpenTarget =
   | { type: "file"; path: string; title?: string }
   | { type: "url"; url: string; title?: string }
-  /** Open the Rules side panel (project AGENTS.md / .grok rules). */
+  /** Open the Rules side panel (project AGENTS.md / .pi rules). */
   | { type: "rules" };
 
 export interface ResourceViewerProps {
@@ -472,7 +472,7 @@ export function ResourceViewer({
   const [revertPreview, setRevertPreview] =
     useState<api.CheckpointRevertPreview | null>(null);
   const [pathCopyFlash, setPathCopyFlash] = useState(false);
-  /** Project rule files (AGENTS.md / CLAUDE.md / .grok rules). */
+  /** Project rule files (AGENTS.md / CLAUDE.md / .pi rules). */
   const [projectRules, setProjectRules] = useState<any[]>([]);
   const [rulesLoading, setRulesLoading] = useState(false);
   const [rulesHasAgents, setRulesHasAgents] = useState(false);
@@ -1907,7 +1907,7 @@ export function ResourceViewer({
       const k = (kind || "").trim();
       if (k === "agents_md") return tr("rules.kind.agents_md");
       if (k === "claude_md") return tr("rules.kind.claude_md");
-      if (k === "grok_rules") return tr("rules.kind.grok_rules");
+      if (k === "pi_rules") return tr("rules.kind.pi_rules");
       if (k === "nested_agents") return tr("rules.kind.nested_agents");
       return k || tr("rules.title");
     },

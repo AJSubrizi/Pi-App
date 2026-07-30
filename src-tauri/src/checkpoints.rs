@@ -730,7 +730,7 @@ pub fn checkpoints_list(
                 .as_ref()
                 .is_none_or(|value| &record.session_id == value)
     });
-    records.sort_by(|left, right| right.updated_at.cmp(&left.updated_at));
+    records.sort_by_key(|r| std::cmp::Reverse(r.updated_at));
     records.truncate(limit.unwrap_or(100).clamp(1, 500));
     Ok(records)
 }
@@ -891,7 +891,7 @@ pub fn checkpoints_gc(
         let mut store = load_store(&path)?;
         store
             .records
-            .sort_by(|left, right| right.updated_at.cmp(&left.updated_at));
+            .sort_by_key(|r| std::cmp::Reverse(r.updated_at));
         let mut keep = Vec::with_capacity(store.records.len());
         let mut remove = Vec::new();
         for checkpoint in store.records {

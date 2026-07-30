@@ -9,7 +9,7 @@ import {
 } from "./projectInspect";
 
 const SAMPLE_INSPECT = {
-  grokVersion: "0.2.111",
+  piVersion: "0.2.111",
   channel: "stable",
   cwd: "/tmp/demo",
   projectRoot: "/tmp/demo/",
@@ -26,7 +26,7 @@ const SAMPLE_INSPECT = {
     {
       name: "demo-plugin",
       scope: "user",
-      path: "/home/u/.grok/installed-plugins/demo",
+      path: "/home/u/.pi/installed-plugins/demo",
       enabled: true,
       provides: { skills: 2, agents: 0, hooks: false, mcpServers: 1 },
     },
@@ -35,7 +35,7 @@ const SAMPLE_INSPECT = {
     {
       name: "help",
       description: "Help skill with sk-abcdefghijklmnopqrstuvwxyz123456",
-      source: { type: "user", path: "/home/u/.grok/skills/help/SKILL.md" },
+      source: { type: "user", path: "/home/u/.pi/skills/help/SKILL.md" },
       userInvocable: true,
     },
     {
@@ -56,7 +56,7 @@ const SAMPLE_INSPECT = {
   agents: [{ name: "explore", source: { type: "builtin" } }],
   hooks: [{ event: "stop" }],
   configSources: {
-    layers: [{ role: "user", path: "/home/u/.grok/config.toml" }],
+    layers: [{ role: "user", path: "/home/u/.pi/config.toml" }],
   },
   permissions: {
     sources: [{}],
@@ -88,16 +88,16 @@ describe("summarizeInspectJson", () => {
   it("extracts counts, rules, plugins, mcp without env", () => {
     const s = summarizeInspectJson(SAMPLE_INSPECT, {
       projectPath: "/tmp/demo",
-      hasProjectGrokDir: true,
-      projectGrokPath: "/tmp/demo/.grok",
+      hasProjectPiDir: true,
+      projectPiPath: "/tmp/demo/.pi",
       modelsHints: ["pi-3"],
     });
 
     expect(s.projectRoot).toBe("/tmp/demo/");
     expect(s.projectTrusted).toBe(true);
-    expect(s.grokVersion).toBe("0.2.111");
-    expect(s.hasProjectGrokDir).toBe(true);
-    expect(s.projectGrokPath).toBe("/tmp/demo/.grok");
+    expect(s.piVersion).toBe("0.2.111");
+    expect(s.hasProjectPiDir).toBe(true);
+    expect(s.projectPiPath).toBe("/tmp/demo/.pi");
     expect(s.rules).toHaveLength(1);
     expect(s.rules[0].path).toContain("AGENTS.md");
     expect(s.plugins).toHaveLength(1);

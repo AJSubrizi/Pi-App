@@ -61,10 +61,10 @@ export type ProjectInspectSummary = {
   projectRoot: string | null;
   projectTrusted: boolean | null;
   cwd: string | null;
-  grokVersion: string | null;
+  piVersion: string | null;
   channel: string | null;
-  hasProjectGrokDir: boolean;
-  projectGrokPath: string | null;
+  hasProjectPiDir: boolean;
+  projectPiPath: string | null;
   rules: ProjectInspectRule[];
   plugins: ProjectInspectPlugin[];
   skills: ProjectInspectSkills;
@@ -80,8 +80,8 @@ export type ProjectInspectSummary = {
 
 export type SummarizeInspectOptions = {
   projectPath?: string | null;
-  hasProjectGrokDir?: boolean;
-  projectGrokPath?: string | null;
+  hasProjectPiDir?: boolean;
+  projectPiPath?: string | null;
   modelsHints?: string[];
   /** Max skill names in `skills.sample` (default 12). */
   skillSampleLimit?: number;
@@ -184,10 +184,10 @@ export function emptyProjectInspectSummary(
     projectRoot: null,
     projectTrusted: null,
     cwd: null,
-    grokVersion: null,
+    piVersion: null,
     channel: null,
-    hasProjectGrokDir: Boolean(opts?.hasProjectGrokDir),
-    projectGrokPath: opts?.projectGrokPath?.trim() || null,
+    hasProjectPiDir: Boolean(opts?.hasProjectPiDir),
+    projectPiPath: opts?.projectPiPath?.trim() || null,
     rules: [],
     plugins: [],
     skills: { total: 0, userInvocable: 0, bySource: {}, sample: [] },
@@ -381,10 +381,10 @@ export function summarizeInspectJson(
     projectRoot,
     projectTrusted: bool(root.projectTrusted),
     cwd: str(root.cwd),
-    grokVersion: str(root.grokVersion) ?? str(root.grok_version),
+    piVersion: str(root.piVersion) ?? str(root.pi_version),
     channel,
-    hasProjectGrokDir: Boolean(opts?.hasProjectGrokDir),
-    projectGrokPath: opts?.projectGrokPath?.trim() || null,
+    hasProjectPiDir: Boolean(opts?.hasProjectPiDir),
+    projectPiPath: opts?.projectPiPath?.trim() || null,
     rules,
     plugins,
     skills: {

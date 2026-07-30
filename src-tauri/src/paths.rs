@@ -88,9 +88,9 @@ pub fn agent_config_toml() -> PathBuf {
 }
 
 /// Resolve PI_AGENT_HOME for a spawned agent process.
-pub fn resolve_agent_grok_home(session_data_mode: &str) -> PathBuf {
+pub fn resolve_agent_pi_home(session_data_mode: &str) -> PathBuf {
     if session_data_mode == "shared" {
-        return crate::process_util::user_home().join(".grok");
+        return crate::process_util::user_home().join(".pi");
     }
     let _ = ensure_app_dirs();
     agent_home_dir()
@@ -184,7 +184,7 @@ pub fn find_agent_session_dir(
     if pi_session.is_file() {
         return pi_session.parent().map(Path::to_path_buf);
     }
-    let home = resolve_agent_grok_home(session_data_mode);
+    let home = resolve_agent_pi_home(session_data_mode);
     let sessions = home.join("sessions");
     if !sessions.is_dir() {
         return None;
@@ -275,10 +275,8 @@ mod tests {
 
     #[test]
     fn default_agent_instructions_never_overwrite_user_content() {
-        let home = std::env::temp_dir().join(format!(
-            "pi-app-default-agents-{}",
-            std::process::id()
-        ));
+        let home =
+            std::env::temp_dir().join(format!("pi-app-default-agents-{}", std::process::id()));
         let _ = fs::remove_dir_all(&home);
         fs::create_dir_all(&home).unwrap();
 

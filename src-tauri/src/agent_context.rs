@@ -94,7 +94,7 @@ pub fn save_to_home(home: &Path, kind: &str, content: &str) -> Result<AgentConte
 
 pub fn active_home() -> PathBuf {
     let settings = crate::store::load_settings();
-    crate::paths::resolve_agent_grok_home(&settings.session_data_mode)
+    crate::paths::resolve_agent_pi_home(&settings.session_data_mode)
 }
 
 pub fn load() -> Result<AgentContextResult, String> {

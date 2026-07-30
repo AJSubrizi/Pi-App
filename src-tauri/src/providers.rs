@@ -7,7 +7,7 @@ use std::time::Instant;
 
 use serde::{Deserialize, Serialize};
 
-use crate::paths::{ensure_app_dirs, resolve_agent_grok_home};
+use crate::paths::{ensure_app_dirs, resolve_agent_pi_home};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -84,7 +84,7 @@ struct Section {
 
 fn active_agent_home() -> PathBuf {
     let settings = crate::store::load_settings();
-    resolve_agent_grok_home(&settings.session_data_mode)
+    resolve_agent_pi_home(&settings.session_data_mode)
 }
 
 fn active_config_toml() -> PathBuf {

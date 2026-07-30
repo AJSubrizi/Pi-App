@@ -3,27 +3,27 @@
 # Usage: ./scripts/probe-models.sh [extra-model-ids...]
 set -uo pipefail
 
-GROK_BIN="${GROK_BIN:-$(command -v pi || true)}"
-if [[ -z "${GROK_BIN}" ]]; then
+PI_BIN="${PI_BIN:-$(command -v pi || true)}"
+if [[ -z "${PI_BIN}" ]]; then
   echo "ERROR: pi CLI not found on PATH" >&2
   exit 1
 fi
 
 TIMEOUT_SECS="${TIMEOUT_SECS:-45}"
-OUT_DIR="${OUT_DIR:-/tmp/grok-model-probe}"
+OUT_DIR="${OUT_DIR:-/tmp/pi-model-probe}"
 mkdir -p "$OUT_DIR"
 
 echo "== Pi CLI =="
-echo "bin: $GROK_BIN"
-"$GROK_BIN" --version 2>/dev/null || true
+echo "bin: $PI_BIN"
+"$PI_BIN" --version 2>/dev/null || true
 echo
 
 echo "== pi models (official list) =="
-"$GROK_BIN" models 2>&1 | tee "$OUT_DIR/models-list.txt"
+"$PI_BIN" models 2>&1 | tee "$OUT_DIR/models-list.txt"
 echo
 
 echo "== models_cache.json keys =="
-CACHE="${PI_AGENT_HOME:-$HOME/.grok}/models_cache.json"
+CACHE="${PI_AGENT_HOME:-$HOME/.pi}/models_cache.json"
 if [[ -f "$CACHE" ]]; then
   python3 - <<PY | tee "$OUT_DIR/cache-keys.txt"
 import json
@@ -79,10 +79,10 @@ for m in "${UNIQUE[@]}"; do
   log="$OUT_DIR/${m//\//_}.log"
   # shellcheck disable=SC2086
   if command -v timeout >/dev/null 2>&1; then
-    timeout "$TIMEOUT_SECS" "$GROK_BIN" -m "$m" -p "Reply with exactly one line: MODEL_OK=$m" --output-format plain >"$log" 2>&1
+    timeout "$TIMEOUT_SECS" "$PI_BIN" -m "$m" -p "Reply with exactly one line: MODEL_OK=$m" --output-format plain >"$log" 2>&1
     code=$?
   else
-    "$GROK_BIN" -m "$m" -p "Reply with exactly one line: MODEL_OK=$m" --output-format plain >"$log" 2>&1
+    "$PI_BIN" -m "$m" -p "Reply with exactly one line: MODEL_OK=$m" --output-format plain >"$log" 2>&1
     code=$?
   fi
 

@@ -10,7 +10,7 @@
 //!   hi
 //!   ```
 //!
-//! Grok.com cloud web history is not exposed by Pi CLI CLI; file import is
+//! Pi.com cloud web history is not exposed by Pi CLI CLI; file import is
 //! the supported migration path.
 
 use chrono::Utc;

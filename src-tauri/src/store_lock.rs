@@ -44,6 +44,8 @@ pub fn lock_exclusive(target: &Path) -> Result<ExclusiveLock, String> {
     }
     let file = OpenOptions::new()
         .create(true)
+        // Never truncate: the lock file is shared with any concurrent holder.
+        .truncate(false)
         .read(true)
         .write(true)
         .open(&path)
@@ -105,11 +107,6 @@ pub(crate) fn write_bytes_atomic_under_lock(path: &Path, bytes: &[u8]) -> Result
     Ok(())
 }
 
-/// True if error string is a lock contention failure.
-pub fn is_lock_busy(err: &str) -> bool {
-    err.contains("LOCK_BUSY")
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -164,6 +161,7 @@ mod tests {
         // Second lock should fail quickly if we shrink wait — use direct try.
         let file = OpenOptions::new()
             .create(true)
+            .truncate(false)
             .read(true)
             .write(true)
             .open(lock_path_for(&path))
@@ -173,11 +171,5 @@ mod tests {
         t.join().unwrap();
         let _ = fs::remove_file(&path);
         let _ = fs::remove_file(lock_path_for(&path));
-    }
-
-    #[test]
-    fn is_lock_busy_detects_prefix() {
-        assert!(is_lock_busy("LOCK_BUSY: could not lock"));
-        assert!(!is_lock_busy("write temp: disk full"));
     }
 }

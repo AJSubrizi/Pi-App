@@ -2190,7 +2190,7 @@ export function SettingsPage({
               <input
                 className="settings-input"
                 value={manualCliPath}
-                placeholder={cliInfo.path || "e.g. ~/.grok/bin/grok"}
+                placeholder={cliInfo.path || "e.g. ~/.pi/bin/pi"}
                 onChange={(e) => onManualCliPath(e.target.value)}
                 onBlur={(e) => onCliBlur(e.target.value.trim())}
               />

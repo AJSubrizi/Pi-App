@@ -67,10 +67,7 @@ pub async fn terminal_start(
         .map_err(|error| error.to_string())?;
 
     let mut command = shell_command();
-    if let Some(path) = project_path
-        .map(PathBuf::from)
-        .filter(|path| path.is_dir())
-    {
+    if let Some(path) = project_path.map(PathBuf::from).filter(|path| path.is_dir()) {
         command.cwd(path);
     }
 
@@ -143,11 +140,7 @@ pub async fn terminal_write(terminal_id: String, data: String) -> Result<(), Str
 }
 
 #[tauri::command]
-pub async fn terminal_resize(
-    terminal_id: String,
-    cols: u16,
-    rows: u16,
-) -> Result<(), String> {
+pub async fn terminal_resize(terminal_id: String, cols: u16, rows: u16) -> Result<(), String> {
     let session = TERMINALS
         .lock()
         .get(&terminal_id)

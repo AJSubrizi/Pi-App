@@ -45,12 +45,6 @@ pub fn can_spawn_process(active_processes: u32, max_concurrent: u32) -> bool {
     active_processes < normalize_max_concurrent(max_concurrent)
 }
 
-/// How many processes must be recycled before a spawn is allowed.
-pub fn processes_over_capacity(active_processes: u32, max_concurrent: u32) -> u32 {
-    let max = normalize_max_concurrent(max_concurrent);
-    active_processes.saturating_sub(max)
-}
-
 /// Human-readable limit message (English; UI maps code via i18n).
 pub fn process_limit_message(max_concurrent: u32) -> String {
     let max = normalize_max_concurrent(max_concurrent);
@@ -117,13 +111,6 @@ mod tests {
         // raw 0 normalizes to 1
         assert!(can_spawn_process(0, 0));
         assert!(!can_spawn_process(1, 0));
-    }
-
-    #[test]
-    fn over_capacity_count() {
-        assert_eq!(processes_over_capacity(2, 3), 0);
-        assert_eq!(processes_over_capacity(3, 3), 0);
-        assert_eq!(processes_over_capacity(5, 3), 2);
     }
 
     #[test]

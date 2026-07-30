@@ -2,12 +2,12 @@
 //!
 //! Independent mode (`PI_AGENT_HOME` = app agent-home): write `[ui]` permission keys so
 //! Pi CLI enforces dontAsk / acceptEdits / YOLO at the agent layer (not only Host).
-//! Shared mode leaves `~/.grok/config.toml` alone — Host policy + spawn flags only.
+//! Shared mode leaves `~/.pi/config.toml` alone — Host policy + spawn flags only.
 
 use std::fs;
 use std::path::PathBuf;
 
-use crate::paths::{agent_config_toml, agent_home_dir, ensure_app_dirs, resolve_agent_grok_home};
+use crate::paths::{agent_config_toml, agent_home_dir, ensure_app_dirs, resolve_agent_pi_home};
 use crate::permission::PermissionPolicy;
 
 /// Map App policy → `[ui] permission_mode` values used by Pi CLI config.toml.
@@ -90,7 +90,7 @@ pub fn sync_permission_to_agent_profile(
     permission_policy: &str,
 ) -> Result<(), String> {
     if session_data_mode == "shared" {
-        // Never rewrite the user's personal ~/.grok/config.toml from the App.
+        // Never rewrite the user's personal ~/.pi/config.toml from the App.
         return Ok(());
     }
     let _ = ensure_app_dirs();
@@ -141,8 +141,8 @@ pub fn product_mode_candidates(mode: &str) -> Vec<&'static str> {
 
 /// PI_AGENT_HOME path for logging / tests.
 #[allow(dead_code)]
-pub fn agent_grok_home(session_data_mode: &str) -> PathBuf {
-    resolve_agent_grok_home(session_data_mode)
+pub fn agent_pi_home(session_data_mode: &str) -> PathBuf {
+    resolve_agent_pi_home(session_data_mode)
 }
 
 #[cfg(test)]

@@ -35,7 +35,7 @@ mod integration {
         // Auth flag always populated
         let _ = r.cli_auth_present;
         if std::path::Path::new(&format!(
-            "{}/.grok/bin/grok",
+            "{}/.pi/bin/pi",
             std::env::var("HOME").unwrap_or_default()
         ))
         .is_file()

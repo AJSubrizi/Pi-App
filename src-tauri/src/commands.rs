@@ -185,7 +185,7 @@ pub async fn cli_install_commands() -> Result<serde_json::Value, String> {
 pub async fn pick_cli_binary() -> Result<Option<String>, String> {
     let file = tauri::async_runtime::spawn_blocking(|| {
         // `mut` required on Windows: we rebind after add_filter.
-        let mut dlg = rfd::FileDialog::new().set_title("Select Pi binary / 选择 Pi 可执行文件");
+        let dlg = rfd::FileDialog::new().set_title("Select Pi binary / 选择 Pi 可执行文件");
         #[cfg(target_os = "windows")]
         {
             dlg = dlg.add_filter("Executable", &["exe", "cmd", "bat"]);
@@ -219,7 +219,7 @@ pub async fn open_external_url(url: String) -> Result<(), String> {
             .arg(url)
             .status()
             .map_err(|e| e.to_string())?;
-        return Ok(());
+        Ok(())
     }
     #[cfg(target_os = "windows")]
     {
@@ -1203,7 +1203,7 @@ fn save_and_reveal_file(
 }
 
 /// Wipe App data under the data root (sessions, projects, settings).
-/// Does not touch the CLI home (`~/.grok`). Double-confirm in the UI before calling.
+/// Does not touch the CLI home (`~/.pi`). Double-confirm in the UI before calling.
 #[tauri::command]
 pub async fn reset_app_data(
     app: tauri::AppHandle,
@@ -1249,7 +1249,7 @@ pub struct McpDto {
 
 /// Run probed CLI: `pi inspect --json` with optional project cwd.
 /// Returns (parsed JSON, error message). Never panics; empty on failure.
-fn run_grok_inspect(project_path: Option<&str>) -> (Option<serde_json::Value>, Option<String>) {
+fn run_pi_inspect(project_path: Option<&str>) -> (Option<serde_json::Value>, Option<String>) {
     let settings = store::load_settings();
     let probe = cli_probe::probe_cli(settings.manual_cli_path.as_deref());
     let Some(cli_path) = probe.path.filter(|_| probe.found) else {
@@ -1291,10 +1291,7 @@ fn run_grok_inspect(project_path: Option<&str>) -> (Option<serde_json::Value>, O
             let stdout = String::from_utf8_lossy(&output.stdout);
             match serde_json::from_str::<serde_json::Value>(stdout.trim()) {
                 Ok(v) => (Some(v), None),
-                Err(e) => (
-                    None,
-                    Some(format!("Failed to parse pi inspect JSON: {e}")),
-                ),
+                Err(e) => (None, Some(format!("Failed to parse pi inspect JSON: {e}"))),
             }
         }
         Ok(Err(e)) => (None, Some(format!("Failed to run pi inspect: {e}"))),
@@ -1423,7 +1420,7 @@ fn parse_mcp_servers(v: &serde_json::Value) -> Vec<McpDto> {
 pub async fn skills_list(project_path: Option<String>) -> Result<serde_json::Value, String> {
     let path = project_path.clone();
     let (parsed, error) =
-        tauri::async_runtime::spawn_blocking(move || run_grok_inspect(path.as_deref()))
+        tauri::async_runtime::spawn_blocking(move || run_pi_inspect(path.as_deref()))
             .await
             .map_err(|e| e.to_string())?;
 
@@ -1443,7 +1440,7 @@ pub async fn skills_list(project_path: Option<String>) -> Result<serde_json::Val
 pub async fn inspect_mcp(project_path: Option<String>) -> Result<serde_json::Value, String> {
     let path = project_path.clone();
     let (parsed, error) =
-        tauri::async_runtime::spawn_blocking(move || run_grok_inspect(path.as_deref()))
+        tauri::async_runtime::spawn_blocking(move || run_pi_inspect(path.as_deref()))
             .await
             .map_err(|e| e.to_string())?;
 
@@ -1473,12 +1470,12 @@ pub async fn inspect_mcp(project_path: Option<String>) -> Result<serde_json::Val
 
 const PROJECT_INSPECT_SKILL_SAMPLE: usize = 12;
 
-/// Detect `<project>/.grok` when the path is a real directory.
-fn project_grok_dir(project_path: Option<&str>) -> (bool, Option<String>) {
+/// Detect `<project>/.pi` when the path is a real directory.
+fn project_pi_dir(project_path: Option<&str>) -> (bool, Option<String>) {
     let Some(raw) = project_path.map(str::trim).filter(|s| !s.is_empty()) else {
         return (false, None);
     };
-    let p = std::path::Path::new(raw).join(".grok");
+    let p = std::path::Path::new(raw).join(".pi");
     if p.is_dir() {
         (true, Some(p.to_string_lossy().to_string()))
     } else {
@@ -1513,7 +1510,7 @@ fn build_project_inspect_summary(
     error: Option<String>,
     models_hints: Vec<String>,
 ) -> serde_json::Value {
-    let (has_grok, grok_path) = project_grok_dir(project_path);
+    let (has_pi, pi_path) = project_pi_dir(project_path);
     let path_trim = project_path
         .map(str::trim)
         .filter(|s| !s.is_empty())
@@ -1536,10 +1533,10 @@ fn build_project_inspect_summary(
             "projectRoot": null,
             "projectTrusted": null,
             "cwd": null,
-            "grokVersion": null,
+            "piVersion": null,
             "channel": null,
-            "hasProjectGrokDir": has_grok,
-            "projectGrokPath": if has_grok { grok_path } else { None::<String> },
+            "hasProjectPiDir": has_pi,
+            "projectPiPath": if has_pi { pi_path } else { None::<String> },
             "rules": [],
             "plugins": [],
             "skills": {
@@ -1736,11 +1733,11 @@ fn build_project_inspect_summary(
         "projectRoot": project_root,
         "projectTrusted": v.get("projectTrusted").and_then(|x| x.as_bool()),
         "cwd": json_str(v.get("cwd")),
-        "grokVersion": json_str(v.get("grokVersion"))
-            .or_else(|| json_str(v.get("grok_version"))),
+        "piVersion": json_str(v.get("piVersion"))
+            .or_else(|| json_str(v.get("pi_version"))),
         "channel": json_str(v.get("channel")),
-        "hasProjectGrokDir": has_grok,
-        "projectGrokPath": if has_grok { grok_path } else { None::<String> },
+        "hasProjectPiDir": has_pi,
+        "projectPiPath": if has_pi { pi_path } else { None::<String> },
         "rules": rules,
         "plugins": plugins,
         "skills": {
@@ -1776,7 +1773,7 @@ fn build_project_inspect_summary(
 pub async fn project_inspect(project_path: Option<String>) -> Result<serde_json::Value, String> {
     let path = project_path.clone();
     let (parsed, error) =
-        tauri::async_runtime::spawn_blocking(move || run_grok_inspect(path.as_deref()))
+        tauri::async_runtime::spawn_blocking(move || run_pi_inspect(path.as_deref()))
             .await
             .map_err(|e| e.to_string())?;
 
@@ -1888,7 +1885,7 @@ pub async fn extensions_enable_all_skills(
 //
 // Keep field semantics aligned with Pi CLI:
 // - install inventory: `pi plugin list --json` (status/name/version/source/…)
-// - enable/disable: `~/.grok/config.toml` `[plugins].disabled` / CLI enable|disable
+// - enable/disable: `~/.pi/config.toml` `[plugins].disabled` / CLI enable|disable
 // - scope + component counts: `pi inspect --json` → `plugins[]`
 // Do not invent a parallel store or rewrite CLI `status` values.
 
@@ -1936,7 +1933,7 @@ pub struct PluginDto {
 }
 
 /// Run probed CLI with the given args. Returns (stdout, stderr, ok).
-fn run_grok_cli_args(args: &[&str], timeout_secs: u64) -> Result<(String, String, bool), String> {
+fn run_pi_cli_args(args: &[&str], timeout_secs: u64) -> Result<(String, String, bool), String> {
     let settings = store::load_settings();
     let probe = cli_probe::probe_cli(settings.manual_cli_path.as_deref());
     let Some(cli_path) = probe.path.filter(|_| probe.found) else {
@@ -1969,9 +1966,9 @@ fn run_grok_cli_args(args: &[&str], timeout_secs: u64) -> Result<(String, String
 
 /// Path to the user-level Pi config that tracks plugin enable/disable.
 /// Same file Pi CLI reads for `[plugins].enabled` / `[plugins].disabled`.
-fn user_grok_config_toml() -> std::path::PathBuf {
+fn user_pi_config_toml() -> std::path::PathBuf {
     crate::process_util::user_home()
-        .join(".grok")
+        .join(".pi")
         .join("config.toml")
 }
 
@@ -2063,7 +2060,7 @@ fn extract_toml_string_array(s: &str) -> Vec<String> {
 }
 
 fn load_disabled_plugin_entries() -> std::collections::HashSet<String> {
-    let path = user_grok_config_toml();
+    let path = user_pi_config_toml();
     match std::fs::read_to_string(&path) {
         Ok(text) => parse_plugins_disabled_names(&text),
         Err(_) => std::collections::HashSet::new(),
@@ -2274,10 +2271,10 @@ fn parse_plugin_list_json(
 fn collect_plugins_list() -> Result<Vec<PluginDto>, String> {
     // Parallel: install inventory + inspect enrich (scope/provides).
     let list_handle = std::thread::spawn(|| {
-        run_grok_cli_args(&["plugin", "list", "--json"], PLUGIN_CMD_TIMEOUT_SECS)
+        run_pi_cli_args(&["plugin", "list", "--json"], PLUGIN_CMD_TIMEOUT_SECS)
     });
     let inspect_handle =
-        std::thread::spawn(|| run_grok_cli_args(&["inspect", "--json"], INSPECT_TIMEOUT_SECS));
+        std::thread::spawn(|| run_pi_cli_args(&["inspect", "--json"], INSPECT_TIMEOUT_SECS));
 
     let list_result = list_handle
         .join()
@@ -2340,7 +2337,7 @@ pub async fn plugin_enable(
     }
     let name_for_cmd = name.clone();
     let result = tauri::async_runtime::spawn_blocking(move || {
-        run_grok_cli_args(
+        run_pi_cli_args(
             &["plugin", "enable", &name_for_cmd],
             PLUGIN_CMD_TIMEOUT_SECS,
         )
@@ -2380,7 +2377,7 @@ pub async fn plugin_disable(
     }
     let name_for_cmd = name.clone();
     let result = tauri::async_runtime::spawn_blocking(move || {
-        run_grok_cli_args(
+        run_pi_cli_args(
             &["plugin", "disable", &name_for_cmd],
             PLUGIN_CMD_TIMEOUT_SECS,
         )
@@ -2420,7 +2417,7 @@ pub async fn plugin_uninstall(
     }
     let name_for_cmd = name.clone();
     let result = tauri::async_runtime::spawn_blocking(move || {
-        run_grok_cli_args(
+        run_pi_cli_args(
             &["plugin", "uninstall", &name_for_cmd, "--confirm"],
             PLUGIN_CMD_TIMEOUT_SECS,
         )
@@ -2456,7 +2453,7 @@ pub async fn plugin_details(name: String) -> Result<serde_json::Value, String> {
     }
     let name_for_cmd = name.clone();
     let result = tauri::async_runtime::spawn_blocking(move || {
-        run_grok_cli_args(
+        run_pi_cli_args(
             &["plugin", "details", &name_for_cmd],
             PLUGIN_CMD_TIMEOUT_SECS,
         )
@@ -2508,7 +2505,7 @@ pub async fn plugin_install(
     let source = normalize_plugin_install_source(&source)?;
     let source_for_cmd = source.clone();
     let result = tauri::async_runtime::spawn_blocking(move || {
-        run_grok_cli_args(
+        run_pi_cli_args(
             &["plugin", "install", &source_for_cmd, "--trust"],
             PLUGIN_MUTATE_TIMEOUT_SECS,
         )
@@ -2546,8 +2543,8 @@ pub async fn plugin_update(
     let target = normalize_plugin_update_name(name.as_deref());
     let target_for_cmd = target.clone();
     let result = tauri::async_runtime::spawn_blocking(move || match target_for_cmd.as_deref() {
-        Some(n) => run_grok_cli_args(&["plugin", "update", n], PLUGIN_MUTATE_TIMEOUT_SECS),
-        None => run_grok_cli_args(&["plugin", "update"], PLUGIN_MUTATE_TIMEOUT_SECS),
+        Some(n) => run_pi_cli_args(&["plugin", "update", n], PLUGIN_MUTATE_TIMEOUT_SECS),
+        None => run_pi_cli_args(&["plugin", "update"], PLUGIN_MUTATE_TIMEOUT_SECS),
     })
     .await
     .map_err(|e| e.to_string())??;
@@ -2631,7 +2628,7 @@ disabled = ["yes"]
     }
 
     #[test]
-    fn matches_full_plugin_id_like_grok_build() {
+    fn matches_full_plugin_id_like_pi_build() {
         let mut disabled = std::collections::HashSet::new();
         disabled.insert("user/a0b23c68/chrome-devtools-mcp".into());
         assert!(plugin_matches_disabled(
@@ -2766,7 +2763,7 @@ pub async fn save_temp_attachment(
     use base64::Engine;
     let raw = bytes_base64.trim();
     // Accept data-URL prefix if present
-    let b64 = raw.split(',').last().unwrap_or(raw).trim();
+    let b64 = raw.split(',').next_back().unwrap_or(raw).trim();
     let bytes = base64::engine::general_purpose::STANDARD
         .decode(b64)
         .map_err(|e| format!("invalid base64: {e}"))?;
@@ -2815,7 +2812,7 @@ pub async fn save_temp_attachment(
 /// Returns `None` when the clipboard has no image.
 #[tauri::command]
 pub async fn clipboard_paste_image() -> Result<Option<PathEntry>, String> {
-    tauri::async_runtime::spawn_blocking(|| clipboard_paste_image_sync())
+    tauri::async_runtime::spawn_blocking(clipboard_paste_image_sync)
         .await
         .map_err(|e| format!("clipboard task: {e}"))?
 }
@@ -2960,16 +2957,8 @@ fn sanitize_attachment_name(suggested: Option<&str>, ext: &str) -> String {
     if cleaned.len() > 64 {
         cleaned.truncate(64);
     }
-    let has_ext = std::path::Path::new(base)
-        .extension()
-        .and_then(|e| e.to_str())
-        .map(|e| e.eq_ignore_ascii_case(ext))
-        .unwrap_or(false);
-    if has_ext {
-        format!("{cleaned}.{ext}")
-    } else {
-        format!("{cleaned}.{ext}")
-    }
+    // `stem` already dropped any original extension, so `ext` is always appended.
+    format!("{cleaned}.{ext}")
 }
 
 /// Classify dropped / picked paths for drag-drop UX (file vs folder).
@@ -3712,8 +3701,7 @@ pub async fn git_numstat(project_path: String) -> Result<GitNumstatResult, Strin
         });
     }
 
-    let mut map: std::collections::HashMap<String, (u32, u32)> =
-        std::collections::HashMap::new();
+    let mut map: std::collections::HashMap<String, (u32, u32)> = std::collections::HashMap::new();
 
     // Tracked changes (staged + unstaged vs HEAD, incl. staged-new files).
     if let Ok(out) = std::process::Command::new("git")
@@ -3822,10 +3810,7 @@ fn run_git(project: &str, args: &[&str]) -> Result<GitOpResult, String> {
 
 /// `git add -- <paths>` (paths are repo-relative). Empty paths = stage all.
 #[tauri::command]
-pub async fn git_stage(
-    project_path: String,
-    paths: Vec<String>,
-) -> Result<GitOpResult, String> {
+pub async fn git_stage(project_path: String, paths: Vec<String>) -> Result<GitOpResult, String> {
     let project = normalize_fs_path(&project_path);
     if project.is_empty() {
         return Err("empty path".into());
@@ -3844,10 +3829,7 @@ pub async fn git_stage(
 
 /// `git reset -q HEAD -- <paths>` (unstage). Empty = unstage all.
 #[tauri::command]
-pub async fn git_unstage(
-    project_path: String,
-    paths: Vec<String>,
-) -> Result<GitOpResult, String> {
+pub async fn git_unstage(project_path: String, paths: Vec<String>) -> Result<GitOpResult, String> {
     let project = normalize_fs_path(&project_path);
     if project.is_empty() {
         return Err("empty path".into());
@@ -3866,10 +3848,7 @@ pub async fn git_unstage(
 
 /// `git commit -m <message>`. Fails softly when there is nothing to commit.
 #[tauri::command]
-pub async fn git_commit(
-    project_path: String,
-    message: String,
-) -> Result<GitOpResult, String> {
+pub async fn git_commit(project_path: String, message: String) -> Result<GitOpResult, String> {
     let project = normalize_fs_path(&project_path);
     if project.is_empty() {
         return Err("empty path".into());
@@ -3905,9 +3884,8 @@ pub async fn git_discard(
     if project.is_empty() {
         return Err("empty path".into());
     }
-    let norm = |v: &Vec<String>| -> Vec<String> {
-        v.iter().map(|p| p.replace('\\', "/")).collect()
-    };
+    let norm =
+        |v: &Vec<String>| -> Vec<String> { v.iter().map(|p| p.replace('\\', "/")).collect() };
     let tracked = norm(&tracked);
     let untracked = norm(&untracked);
     let mut last = GitOpResult {
@@ -4491,7 +4469,7 @@ mod project_inspect_tests {
     #[test]
     fn summary_strips_mcp_env_and_skill_descriptions() {
         let raw = serde_json::json!({
-            "grokVersion": "0.2.0",
+            "piVersion": "0.2.0",
             "projectRoot": "/tmp/p/",
             "projectTrusted": true,
             "skills": [{
@@ -4628,8 +4606,8 @@ pub struct PersonaDefDto {
 // from PR #77
 
 /// List agent + persona definition files from user / project / bundled scopes.
-/// Does not require the CLI binary (pure filesystem discovery under `~/.grok`
-/// and optional `{project}/.grok`). Always returns Ok.
+/// Does not require the CLI binary (pure filesystem discovery under `~/.pi`
+/// and optional `{project}/.pi`). Always returns Ok.
 #[tauri::command]
 pub async fn agents_list(project_path: Option<String>) -> Result<serde_json::Value, String> {
     let project = project_path
@@ -4640,7 +4618,7 @@ pub async fn agents_list(project_path: Option<String>) -> Result<serde_json::Val
 
     let result = tauri::async_runtime::spawn_blocking(move || {
         let home = crate::process_util::user_home();
-        let pi = home.join(".grok");
+        let pi = home.join(".pi");
         let user_agents = pi.join("agents");
         let bundled_agents = pi.join("bundled").join("agents");
         let user_personas = pi.join("personas");
@@ -4648,10 +4626,10 @@ pub async fn agents_list(project_path: Option<String>) -> Result<serde_json::Val
 
         let project_agents = project
             .as_ref()
-            .map(|p| std::path::PathBuf::from(p).join(".grok").join("agents"));
+            .map(|p| std::path::PathBuf::from(p).join(".pi").join("agents"));
         let project_personas = project
             .as_ref()
-            .map(|p| std::path::PathBuf::from(p).join(".grok").join("personas"));
+            .map(|p| std::path::PathBuf::from(p).join(".pi").join("personas"));
 
         let mut agents = Vec::new();
         if let Some(ref dir) = project_agents {
@@ -4788,7 +4766,7 @@ pub async fn cli_doctor_fix(id: String) -> Result<serde_json::Value, String> {
 
     let id_for_cmd = id.clone();
     let result = tauri::async_runtime::spawn_blocking(move || {
-        run_grok_cli_args(
+        run_pi_cli_args(
             &["doctor", "fix", &id_for_cmd, "--yes"],
             CLI_DOCTOR_FIX_TIMEOUT_SECS,
         )
@@ -5249,7 +5227,7 @@ pub async fn hooks_ensure_dir(
 
 // ── Hooks manager (list / reveal / open folder) ─────────────────────────────
 
-/// List hook files under `~/.grok/hooks` and optionally `<project>/.grok/hooks`.
+/// List hook files under `~/.pi/hooks` and optionally `<project>/.pi/hooks`.
 #[tauri::command]
 pub async fn hooks_list(
     project_path: Option<String>,
@@ -5571,7 +5549,7 @@ pub async fn project_rules_ensure_template(
 
 // from PR #82
 
-/// List existing project rule files (AGENTS.md, CLAUDE.md, `.grok/rules*`, nested AGENTS).
+/// List existing project rule files (AGENTS.md, CLAUDE.md, `.pi/rules*`, nested AGENTS).
 #[tauri::command]
 pub async fn project_rules_list(
     path: String,
@@ -5654,7 +5632,7 @@ fn run_mcp_doctor(name: Option<&str>) -> Result<crate::extensions::McpDoctorRepo
     let Some(cli_path) = probe.path.filter(|_| probe.found) else {
         return Err("Pi CLI CLI not found".into());
     };
-    let grok_home = crate::paths::resolve_agent_grok_home(&settings.session_data_mode);
+    let pi_home = crate::paths::resolve_agent_pi_home(&settings.session_data_mode);
 
     let mut args: Vec<String> = vec!["mcp".into(), "doctor".into(), "--json".into()];
     if let Some(n) = name {
@@ -5665,7 +5643,7 @@ fn run_mcp_doctor(name: Option<&str>) -> Result<crate::extensions::McpDoctorRepo
     std::thread::spawn(move || {
         let mut cmd = std::process::Command::new(&cli_path);
         cmd.args(&args);
-        cmd.env("PI_AGENT_HOME", &grok_home);
+        cmd.env("PI_AGENT_HOME", &pi_home);
         crate::process_util::apply_no_window_std(&mut cmd);
         if let Some(path_env) = crate::process_util::enriched_path_env() {
             cmd.env("PATH", path_env);
@@ -5926,7 +5904,7 @@ fn setup_error_kind(msg: &str) -> &'static str {
         || m.contains("team sign-in")
         || m.contains("team login")
         || m.contains("sign in with a team")
-        || m.contains("export grok_deployment_key")
+        || m.contains("export pi_deployment_key")
     {
         return "missing_auth";
     }
@@ -5945,7 +5923,7 @@ fn setup_error_kind(msg: &str) -> &'static str {
 
 // from PR #79
 
-/// `pi setup` — fetch and install managed configuration into ~/.grok.
+/// `pi setup` — fetch and install managed configuration into ~/.pi.
 /// Soft-respawns the agent on success so new policy is picked up.
 /// Always returns Ok; failures surface as `{ ok: false, error, errorKind }`.
 #[tauri::command]
@@ -5954,7 +5932,7 @@ pub async fn setup_install(
     mgr: State<'_, Arc<SessionManager>>,
 ) -> Result<serde_json::Value, String> {
     let result = tauri::async_runtime::spawn_blocking(|| {
-        run_grok_cli_args(&["setup"], SETUP_CMD_TIMEOUT_SECS)
+        run_pi_cli_args(&["setup"], SETUP_CMD_TIMEOUT_SECS)
     })
     .await
     .map_err(|e| e.to_string())?;
@@ -6013,12 +5991,12 @@ pub async fn setup_install(
 
 // from PR #79
 
-/// `pi setup --json` — fetch managed config preview without writing to ~/.grok.
+/// `pi setup --json` — fetch managed config preview without writing to ~/.pi.
 /// Always returns Ok; failures surface as `{ ok: false, error, errorKind }`.
 #[tauri::command]
 pub async fn setup_preview() -> Result<serde_json::Value, String> {
     let result = tauri::async_runtime::spawn_blocking(|| {
-        run_grok_cli_args(&["setup", "--json"], SETUP_CMD_TIMEOUT_SECS)
+        run_pi_cli_args(&["setup", "--json"], SETUP_CMD_TIMEOUT_SECS)
     })
     .await
     .map_err(|e| e.to_string())?;
@@ -6443,7 +6421,7 @@ pub fn normalize_marketplace_update_name(name: Option<&str>) -> Option<String> {
 }
 
 fn collect_marketplace_list() -> Result<Vec<MarketplaceSourceDto>, String> {
-    let (stdout, stderr, ok) = run_grok_cli_args(
+    let (stdout, stderr, ok) = run_pi_cli_args(
         &["plugin", "marketplace", "list", "--json"],
         PLUGIN_CMD_TIMEOUT_SECS,
     )?;
@@ -6461,7 +6439,7 @@ fn collect_marketplace_list() -> Result<Vec<MarketplaceSourceDto>, String> {
 }
 
 fn collect_available_plugins() -> Result<Vec<AvailablePluginDto>, String> {
-    let (stdout, stderr, ok) = run_grok_cli_args(
+    let (stdout, stderr, ok) = run_pi_cli_args(
         &["plugin", "list", "--json", "--available"],
         PLUGIN_CMD_TIMEOUT_SECS,
     )?;
@@ -6514,7 +6492,7 @@ pub async fn marketplace_add(source: String) -> Result<serde_json::Value, String
     let source = normalize_marketplace_add_source(&source)?;
     let source_for_cmd = source.clone();
     let result = tauri::async_runtime::spawn_blocking(move || {
-        run_grok_cli_args(
+        run_pi_cli_args(
             &["plugin", "marketplace", "add", &source_for_cmd],
             PLUGIN_MARKETPLACE_MUTATE_TIMEOUT_SECS,
         )
@@ -6554,7 +6532,7 @@ pub async fn marketplace_remove(name_or_url: String) -> Result<serde_json::Value
     let target = resolve_marketplace_remove_arg(&raw, &sources)?;
     let target_for_cmd = target.clone();
     let result = tauri::async_runtime::spawn_blocking(move || {
-        run_grok_cli_args(
+        run_pi_cli_args(
             &["plugin", "marketplace", "remove", &target_for_cmd],
             PLUGIN_MARKETPLACE_MUTATE_TIMEOUT_SECS,
         )
@@ -6590,11 +6568,11 @@ pub async fn marketplace_update(name: Option<String>) -> Result<serde_json::Valu
     let target = normalize_marketplace_update_name(name.as_deref());
     let target_for_cmd = target.clone();
     let result = tauri::async_runtime::spawn_blocking(move || match target_for_cmd.as_deref() {
-        Some(n) => run_grok_cli_args(
+        Some(n) => run_pi_cli_args(
             &["plugin", "marketplace", "update", n],
             PLUGIN_MARKETPLACE_MUTATE_TIMEOUT_SECS,
         ),
-        None => run_grok_cli_args(
+        None => run_pi_cli_args(
             &["plugin", "marketplace", "update"],
             PLUGIN_MARKETPLACE_MUTATE_TIMEOUT_SECS,
         ),
@@ -6694,7 +6672,7 @@ pub fn parse_leader_list_json(stdout: &str) -> Result<Vec<LeaderProcessDto>, Str
 #[tauri::command]
 pub async fn leader_list() -> Result<serde_json::Value, String> {
     let result = tauri::async_runtime::spawn_blocking(|| {
-        run_grok_cli_args(&["leader", "list", "--json"], LEADER_CMD_TIMEOUT_SECS)
+        run_pi_cli_args(&["leader", "list", "--json"], LEADER_CMD_TIMEOUT_SECS)
     })
     .await
     .map_err(|e| e.to_string())?;
@@ -6736,7 +6714,7 @@ pub async fn leader_kill_all(
     mgr: State<'_, Arc<SessionManager>>,
 ) -> Result<serde_json::Value, String> {
     let result = tauri::async_runtime::spawn_blocking(|| {
-        run_grok_cli_args(&["leader", "kill"], LEADER_CMD_TIMEOUT_SECS)
+        run_pi_cli_args(&["leader", "kill"], LEADER_CMD_TIMEOUT_SECS)
     })
     .await
     .map_err(|e| e.to_string())?;

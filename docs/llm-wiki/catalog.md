@@ -62,7 +62,7 @@ Spawn：`--reasoning-effort <id>`。无模型级默认时 App 默认 **`medium`*
 
 **Independent 模式**（默认）：写入 `~/.pi-app/agent-home/config.toml` 与 `agent-home/.claude/settings.json`，agent 进程侧真正按策略执行。
 
-**Shared 模式**：不改写用户 `~/.grok/config.toml`；Host 策略 + YOLO 时的 `--always-approve`。
+**Shared 模式**：不改写用户 `~/.pi/config.toml`；Host 策略 + YOLO 时的 `--always-approve`。
 
 中途改权限：同步配置 + soft-respawn（含 YOLO 降级）。Host 在收到 `session/request_permission` 时仍按 live policy 自动放行/拒绝。
 

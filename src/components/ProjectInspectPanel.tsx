@@ -1,6 +1,6 @@
 /**
  * Settings → Runtime: inspect active project via `pi inspect --json`.
- * Shows key facts, refresh, copy redacted JSON, open project `.grok` if present.
+ * Shows key facts, refresh, copy redacted JSON, open project `.pi` if present.
  */
 
 import {
@@ -112,9 +112,9 @@ export function ProjectInspectPanel({
     }
   };
 
-  const openGrokDir = async () => {
-    const p = summary?.projectGrokPath?.trim();
-    if (!p || !summary?.hasProjectGrokDir || !api.isTauri()) return;
+  const openPiDir = async () => {
+    const p = summary?.projectPiPath?.trim();
+    if (!p || !summary?.hasProjectPiDir || !api.isTauri()) return;
     try {
       await api.pathReveal(p);
       setHint(null);
@@ -168,12 +168,12 @@ export function ProjectInspectPanel({
               </button>
             </div>
             <div className="ext-toolbar__actions">
-              {summary?.hasProjectGrokDir && summary.projectGrokPath && (
+              {summary?.hasProjectPiDir && summary.projectPiPath && (
                 <button
                   type="button"
                   className="btn btn--ghost"
-                  onClick={() => void openGrokDir()}
-                  title={summary.projectGrokPath}
+                  onClick={() => void openPiDir()}
+                  title={summary.projectPiPath}
                 >
                   <IconFolder size={14} />
                   <span>{tr("inspect.openPi")}</span>
@@ -232,7 +232,7 @@ export function ProjectInspectPanel({
             <div className="pi-body">
               <div className="pi-facts">
                 <Fact label={tr("inspect.fact.version")}>
-                  {summary.grokVersion || "—"}
+                  {summary.piVersion || "—"}
                   {summary.channel ? ` · ${summary.channel}` : ""}
                 </Fact>
                 <Fact label={tr("inspect.fact.root")}>
@@ -432,7 +432,7 @@ export function ProjectInspectPanel({
                 </div>
               )}
 
-              {!summary.hasProjectGrokDir && (
+              {!summary.hasProjectPiDir && (
                 <p className="pi-footnote">{tr("inspect.noPiDir")}</p>
               )}
             </div>

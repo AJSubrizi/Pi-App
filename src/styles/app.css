@@ -6857,56 +6857,6 @@ html[data-theme="light"] .ui-check.is-mixed .ui-check__box {
   contain: layout style;
 }
 
-/* Pi / Pi Heavy wordmarks (theme via data-theme tokens).
- * Inline SVG — no image fetch; paint should be immediate once mounted. */
-.supergrok-mark {
-  display: block;
-  height: auto;
-  max-width: min(280px, 72vw);
-  color: var(--text-primary);
-  /* Avoid FOUC-style fade; logo should snap in */
-  opacity: 1;
-}
-
-.supergrok-mark--standard {
-  width: min(168px, 48vw);
-}
-
-.supergrok-mark--heavy {
-  width: min(280px, 78vw);
-}
-
-.supergrok-mark__ink {
-  fill: currentColor;
-}
-
-/* HEAVY pill — matches official light/dark treatment (Image reference) */
-.supergrok-mark__badge {
-  fill: #313235;
-}
-
-.supergrok-mark__badge-stroke {
-  fill: none;
-  stroke: transparent;
-  stroke-width: 1;
-}
-
-.supergrok-mark__badge-text {
-  fill: #b5b5b5;
-}
-
-[data-theme="light"] .supergrok-mark__badge {
-  fill: #f3f3f1;
-}
-
-[data-theme="light"] .supergrok-mark__badge-stroke {
-  stroke: rgba(0, 0, 0, 0.06);
-}
-
-[data-theme="light"] .supergrok-mark__badge-text {
-  fill: #646362;
-}
-
 .composer-wrap--float .composer {
   pointer-events: auto;
   box-shadow:

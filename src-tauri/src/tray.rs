@@ -27,7 +27,7 @@ pub fn build_menu(app: &AppHandle) -> Result<Menu<Wry>, tauri::Error> {
         id.as_ref()
             .and_then(|pid| projects.iter().find(|p| &p.id == pid))
             .map(|p| p.name.clone())
-            .unwrap_or_else(|| String::new())
+            .unwrap_or_default()
     };
 
     let mut builder = MenuBuilder::new(app);
@@ -306,7 +306,7 @@ pub fn setup_tray(app: &AppHandle) -> Result<(), String> {
         .menu(&menu)
         .tooltip(tooltip)
         .show_menu_on_left_click(show_menu_on_left)
-        .on_menu_event(|app, event| handle_menu_event(app, event))
+        .on_menu_event(handle_menu_event)
         .on_tray_icon_event(|tray, event| {
             match event {
                 TrayIconEvent::DoubleClick {

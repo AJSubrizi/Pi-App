@@ -64,7 +64,7 @@ If account setup was skipped: `authSetupDeferred: true`.
 
 | Source | macOS | Windows |
 |--------|-------|---------|
-| Official install | `~/.grok/bin/grok` (+ downloads) | `%USERPROFILE%\.grok\bin\pi.exe` (+ downloads) |
+| Official install | `~/.pi/bin/pi` (+ downloads) | `%USERPROFILE%\.pi\bin\pi.exe` (+ downloads) |
 | Package managers | Homebrew `/opt/homebrew`, `/usr/local` | WinGet Links, Scoop shims, Chocolatey |
 | PATH | process PATH + enriched PATH scan | same; names `pi.exe` / `.cmd` / `.bat` |
 | Manual | `~` expansion | `~` / `%USERPROFILE%` / auto-append `.exe` |
@@ -77,7 +77,7 @@ If account setup was skipped: `authSetupDeferred: true`.
 | Command | Role |
 |---------|------|
 | `probe_cli` | Detect binary (cross-platform) |
-| `cli_install_latest` | Download + link into `~/.grok` |
+| `cli_install_latest` | Download + link into `~/.pi` |
 | `cli_install_commands` | Platform shell command + docs URL |
 | `pick_cli_binary` | File picker |
 | `open_external_url` | Open install docs |
