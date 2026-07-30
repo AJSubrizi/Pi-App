@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.8] - 2026-07-30
+
+### Fixed
+
+- **macOS first launch** - replace the Gatekeeper-blocked command installer with a standard drag-to-Applications DMG and Apple's supported right-click Open flow.
+- **DMG verification** - validate the visible app bundle, Applications shortcut and code signature before publishing macOS downloads.
+
 ## [0.2.7] - 2026-07-30
 
 ### Fixed

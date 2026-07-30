@@ -28,24 +28,32 @@ rebuild_dmg() {
   local dmg_out="$2"
   local volname="${3:-Pi}"
   local tmp
+  local verify_mount=""
   tmp="$(mktemp -d)"
-  # shellcheck disable=SC2064
-  trap "rm -rf '$tmp'" RETURN
-  mkdir -p "$tmp/stage/.payload"
-  cp -R "$app" "$tmp/stage/.payload/Pi.app"
-  cp "$ROOT/scripts/macos-Open-Pi.command" "$tmp/stage/Install Pi.command"
-  chmod +x "$tmp/stage/Install Pi.command"
+  cleanup_rebuild() {
+    if [[ -n "$verify_mount" ]]; then
+      hdiutil detach "$verify_mount" -quiet || true
+    fi
+    rm -rf "$tmp"
+  }
+  trap cleanup_rebuild RETURN
+  mkdir -p "$tmp/stage"
+  cp -R "$app" "$tmp/stage/Pi.app"
+  ln -s /Applications "$tmp/stage/Applications"
   cat > "$tmp/stage/START HERE.txt" <<'EOF'
 Pi for macOS
 ============
 
 These builds are not Apple-notarized (community MIT app).
 
-Double-click "Install Pi.command".
+1. Drag Pi.app onto the Applications shortcut.
+2. Open Applications in Finder.
+3. RIGHT-CLICK Pi.app, choose Open, then choose Open again.
 
-The installer copies Pi to Applications, removes the browser quarantine,
-verifies its local signature, and opens it. The application payload is hidden
-to prevent macOS from offering a direct launch that Gatekeeper will reject.
+Do not double-click Pi.app the first time: macOS will reject an unnotarized
+download. The right-click Open action is Apple's supported one-time override.
+
+After the first successful launch, Pi opens normally.
 EOF
   rm -f "$dmg_out"
   hdiutil create \
@@ -54,6 +62,24 @@ EOF
     -ov \
     -format UDZO \
     "$dmg_out"
+  verify_mount="$(
+    hdiutil attach -nobrowse -readonly "$dmg_out" |
+      sed -nE 's|^.*(/Volumes/.*)$|\1|p' |
+      tail -1
+  )"
+  [[ -d "$verify_mount/Pi.app" ]] || {
+    echo "error: rebuilt DMG does not expose Pi.app" >&2
+    hdiutil detach "$verify_mount" -quiet || true
+    return 1
+  }
+  [[ -L "$verify_mount/Applications" ]] || {
+    echo "error: rebuilt DMG is missing Applications shortcut" >&2
+    hdiutil detach "$verify_mount" -quiet || true
+    return 1
+  }
+  codesign --verify --deep --strict "$verify_mount/Pi.app"
+  hdiutil detach "$verify_mount" -quiet
+  verify_mount=""
   echo "==> wrote $dmg_out"
 }
 
@@ -102,9 +128,9 @@ else
         sed -nE 's|^.*(/Volumes/.*)$|\1|p' |
         tail -1
     )"
-    mounted_app="$mount_point/.payload/Pi.app"
+    mounted_app="$mount_point/Pi.app"
     if [[ ! -d "$mounted_app" ]]; then
-      mounted_app="$mount_point/Pi.app"
+      mounted_app="$mount_point/.payload/Pi.app"
     fi
     if [[ -z "$mount_point" || ! -d "$mounted_app" ]]; then
       echo "error: Pi.app not found inside $dmg" >&2

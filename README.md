@@ -106,18 +106,15 @@ Download the `.dmg` from [Releases](https://github.com/AJSubrizi/Pi-App/releases
 (`aarch64` = Apple Silicon, `x64` = Intel).
 
 Builds are **not Apple-notarized** (community MIT app, no paid Developer ID).
-macOS may show *“Pi cannot be opened”* / *Sposta nel Cestino* — that is Gatekeeper.
+The first launch therefore needs Apple's supported one-time override:
 
-Open the DMG and double-click **`Install Pi.command`**. The application payload
-is intentionally hidden so it cannot be launched directly by mistake. The
-installer copies Pi to Applications, clears Safari's quarantine attribute,
-verifies the local signature and opens the app.
+1. Open the DMG and drag **Pi.app** onto **Applications**.
+2. Open the Applications folder in Finder.
+3. **Right-click Pi.app → Open**.
+4. Click **Open** in the confirmation dialog.
 
-If macOS still blocks Pi:
-
-1. **System Settings → Privacy & Security**
-2. Scroll to the message about **Pi** → **Open Anyway**
-3. Confirm **Open**
+Do not double-click Pi on the first launch: Gatekeeper will reject an
+unnotarized download. After the right-click launch, Pi opens normally.
 
 Manual recovery in Terminal:
 
