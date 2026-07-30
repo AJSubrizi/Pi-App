@@ -1,8 +1,8 @@
 {
   "name": "pi-app",
   "private": true,
-  "version": "0.2.5",
-  "description": "Desktop GUI for Pi — projects, sessions and packages over Pi RPC",
+  "version": "0.2.6",
+  "description": "Desktop GUI for Pi \u2014 projects, sessions and packages over Pi RPC",
   "author": "Pi contributors",
   "license": "MIT",
   "homepage": "https://github.com/AJSubrizi/Pi-App",
