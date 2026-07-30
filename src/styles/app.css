@@ -17137,3 +17137,19 @@ html[data-theme="light"] .rim-sidebar {
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* Commit modal: opt-in to opening a PR after the push lands. */
+.rp-commit-modal__check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.rp-commit-modal__check input {
+  cursor: pointer;
+}

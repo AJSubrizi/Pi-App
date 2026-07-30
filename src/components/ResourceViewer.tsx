@@ -16,6 +16,7 @@ import {
   type ReactNode,
 } from "react";
 import * as api from "@/lib/api";
+import { splitPrTitleAndBody } from "@/lib/ghReview";
 import { createT, type Locale } from "@/i18n";
 import { resolvePreviewSrc } from "@/lib/filePreviewSrc";
 import { HtmlBrowser } from "@/components/HtmlBrowser";
@@ -453,8 +454,11 @@ export function ResourceViewer({
   const numstatLoadSeq = useRef(0);
   const [commitOpen, setCommitOpen] = useState(false);
   const [commitMsg, setCommitMsg] = useState("");
+  /** Open a PR after a successful push (requires the gh CLI). */
+  const [openPrAfterPush, setOpenPrAfterPush] = useState(false);
+  const [prUrl, setPrUrl] = useState<string | null>(null);
   const [commitBusy, setCommitBusy] = useState(false);
-  const [commitPhase, setCommitPhase] = useState<"idle" | "commit" | "push">(
+  const [commitPhase, setCommitPhase] = useState<"idle" | "commit" | "push" | "pr">(
     "idle",
   );
   const [commitError, setCommitError] = useState<string | null>(null);
@@ -1256,6 +1260,25 @@ export function ResourceViewer({
         await refreshWorkspaceStatus();
         return;
       }
+      if (openPrAfterPush) {
+        setCommitPhase("pr");
+        const { title, body } = splitPrTitleAndBody(message);
+        const pr = await api.ghPrCreate({
+          projectPath,
+          title,
+          body,
+          draft: false,
+        });
+        if (!pr.ok) {
+          // The commit and push already landed — surface the PR failure
+          // without pretending the whole operation was rolled back.
+          setCommitError(pr.reason || tr("changes.prFailed"));
+          await refreshWorkspaceStatus();
+          return;
+        }
+        const url = pr.output.split(/\s+/).find((t) => t.startsWith("http"));
+        setPrUrl(url ?? null);
+      }
       setCommitOpen(false);
       setCommitMsg("");
       setCommitPhase("idle");
@@ -1271,6 +1294,7 @@ export function ResourceViewer({
     commitBusy,
     commitMsg,
     stagedCount,
+    openPrAfterPush,
     gitOpFailMessage,
     refreshWorkspaceStatus,
     tr,
@@ -4289,10 +4313,14 @@ export function ResourceViewer({
               onClick={() => void runCommitAndPush()}
             >
               {commitBusy
-                ? commitPhase === "push"
-                  ? tr("changes.pushing")
-                  : tr("changes.committing")
-                : tr("changes.commitPush")}
+                ? commitPhase === "pr"
+                  ? tr("changes.openingPr")
+                  : commitPhase === "push"
+                    ? tr("changes.pushing")
+                    : tr("changes.committing")
+                : openPrAfterPush
+                  ? tr("changes.commitPushPr")
+                  : tr("changes.commitPush")}
             </button>
           </>
         }
@@ -4324,6 +4352,22 @@ export function ResourceViewer({
               ? tr("changes.count", { n: String(stagedCount) })
               : tr("changes.nothingToCommit")}
           </p>
+          <label className="rp-commit-modal__check">
+            <input
+              type="checkbox"
+              checked={openPrAfterPush}
+              disabled={commitBusy}
+              onChange={(e) => setOpenPrAfterPush(e.target.checked)}
+            />
+            <span>{tr("changes.openPr")}</span>
+          </label>
+          {prUrl ? (
+            <p className="rp-commit-modal__meta">
+              <a href={prUrl} target="_blank" rel="noreferrer">
+                {prUrl}
+              </a>
+            </p>
+          ) : null}
           {commitError ? (
             <p className="rp-commit-modal__error">{commitError}</p>
           ) : null}
