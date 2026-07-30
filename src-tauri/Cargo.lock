@@ -2983,7 +2983,7 @@ dependencies = [
 
 [[package]]
 name = "pi-app"
-version = "0.2.10"
+version = "0.2.11"
 dependencies = [
  "arboard",
  "base64 0.22.1",
