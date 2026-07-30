@@ -1,6 +1,10 @@
+use futures_util::SinkExt;
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 use tokio::process::Command;
+use tokio_tungstenite::tungstenite::client::IntoClientRequest;
+use tokio_tungstenite::tungstenite::http::HeaderValue;
+use tokio_tungstenite::tungstenite::Message;
 
 use crate::store::RemoteRuntimeSettings;
 
@@ -12,6 +16,9 @@ pub struct RemoteRuntimeProbe {
     pub error: Option<String>,
 }
 
+const REMOTE_TOKEN_SERVICE: &str = "dev.pi.app.remote-rpc";
+const REMOTE_TOKEN_ACCOUNT: &str = "bearer-token";
+
 fn safe_account_part(value: &str) -> bool {
     !value.is_empty()
         && !value.starts_with('-')
@@ -21,6 +28,9 @@ fn safe_account_part(value: &str) -> bool {
 }
 
 pub fn validate(settings: &RemoteRuntimeSettings) -> Result<(), String> {
+    if settings.transport == "direct" {
+        return validate_direct(settings);
+    }
     if !safe_account_part(settings.host.trim()) {
         return Err("REMOTE_HOST_INVALID".into());
     }
@@ -39,6 +49,66 @@ pub fn validate(settings: &RemoteRuntimeSettings) -> Result<(), String> {
         return Err("REMOTE_VALUE_INVALID".into());
     }
     Ok(())
+}
+
+pub fn validate_direct(settings: &RemoteRuntimeSettings) -> Result<(), String> {
+    if settings.cwd.trim().is_empty() || settings.cwd.contains(['\n', '\r', '\0']) {
+        return Err("REMOTE_VALUE_INVALID".into());
+    }
+    let url = url::Url::parse(settings.direct_url.trim()).map_err(|_| "REMOTE_URL_INVALID")?;
+    if url.scheme() != "wss" {
+        return Err("REMOTE_TLS_REQUIRED".into());
+    }
+    if url.host_str().is_none() || url.username() != "" || url.password().is_some() {
+        return Err("REMOTE_URL_INVALID".into());
+    }
+    Ok(())
+}
+
+pub fn remote_token() -> Result<String, String> {
+    let entry = keyring::Entry::new(REMOTE_TOKEN_SERVICE, REMOTE_TOKEN_ACCOUNT)
+        .map_err(|error| format!("REMOTE_KEYCHAIN_FAILED: {error}"))?;
+    entry
+        .get_password()
+        .map_err(|error| format!("REMOTE_TOKEN_MISSING: {error}"))
+}
+
+fn save_remote_token(value: &str) -> Result<(), String> {
+    let entry = keyring::Entry::new(REMOTE_TOKEN_SERVICE, REMOTE_TOKEN_ACCOUNT)
+        .map_err(|error| format!("REMOTE_KEYCHAIN_FAILED: {error}"))?;
+    if value.trim().is_empty() {
+        return entry
+            .delete_credential()
+            .map_err(|error| format!("REMOTE_KEYCHAIN_FAILED: {error}"));
+    }
+    entry
+        .set_password(value.trim())
+        .map_err(|error| format!("REMOTE_KEYCHAIN_FAILED: {error}"))
+}
+
+pub async fn connect_websocket(
+    settings: &RemoteRuntimeSettings,
+    token: &str,
+) -> Result<
+    tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>,
+    String,
+> {
+    validate_direct(settings)?;
+    if token.trim().is_empty() {
+        return Err("REMOTE_TOKEN_MISSING".into());
+    }
+    let mut request = settings
+        .direct_url
+        .trim()
+        .into_client_request()
+        .map_err(|error| format!("REMOTE_URL_INVALID: {error}"))?;
+    let bearer = HeaderValue::from_str(&format!("Bearer {}", token.trim()))
+        .map_err(|_| "REMOTE_TOKEN_INVALID")?;
+    request.headers_mut().insert("Authorization", bearer);
+    let (socket, _) = tokio_tungstenite::connect_async(request)
+        .await
+        .map_err(|error| format!("REMOTE_CONNECT_FAILED: {error}"))?;
+    Ok(socket)
 }
 
 pub fn shell_quote(value: &str) -> String {
@@ -162,6 +232,31 @@ pub async fn remote_runtime_test(
     })
 }
 
+#[tauri::command]
+pub async fn remote_direct_test(
+    settings: RemoteRuntimeSettings,
+    token: String,
+) -> Result<RemoteRuntimeProbe, String> {
+    let effective_token = if token.trim().is_empty() {
+        remote_token()?
+    } else {
+        token
+    };
+    let mut socket = connect_websocket(&settings, &effective_token).await?;
+    let _ = socket.send(Message::Ping(Vec::new().into())).await;
+    let _ = socket.close(None).await;
+    Ok(RemoteRuntimeProbe {
+        ok: true,
+        version: Some("Pi Direct RPC".into()),
+        error: None,
+    })
+}
+
+#[tauri::command]
+pub async fn remote_runtime_token_set(token: String) -> Result<(), String> {
+    save_remote_token(&token)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -183,5 +278,22 @@ mod tests {
         settings.host = "server.example".into();
         settings.cwd = "/work\nbad".into();
         assert!(validate(&settings).is_err());
+    }
+
+    #[test]
+    fn direct_rpc_requires_wss_without_embedded_credentials() {
+        let mut settings = RemoteRuntimeSettings::default();
+        settings.transport = "direct".into();
+        settings.direct_url = "ws://server.example/rpc".into();
+        assert_eq!(
+            validate_direct(&settings),
+            Err("REMOTE_TLS_REQUIRED".into())
+        );
+        settings.direct_url = "wss://user:pass@server.example/rpc".into();
+        assert_eq!(validate_direct(&settings), Err("REMOTE_URL_INVALID".into()));
+        settings.direct_url = "wss://server.example/rpc".into();
+        assert!(validate_direct(&settings).is_ok());
+        settings.cwd = "\n".into();
+        assert_eq!(validate_direct(&settings), Err("REMOTE_VALUE_INVALID".into()));
     }
 }

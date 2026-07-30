@@ -1039,6 +1039,9 @@ export interface AppSettings {
 export interface RemoteRuntimeSettings {
   enabled: boolean;
   verified: boolean;
+  transport: "ssh" | "direct" | string;
+  directUrl: string;
+  directTokenConfigured: boolean;
   host: string;
   user: string;
   port: number;
@@ -1055,6 +1058,17 @@ export interface RemoteRuntimeProbe {
 
 export async function remoteRuntimeTest(settings: RemoteRuntimeSettings) {
   return invoke<RemoteRuntimeProbe>("remote_runtime_test", { settings });
+}
+
+export async function remoteDirectTest(
+  settings: RemoteRuntimeSettings,
+  token: string,
+) {
+  return invoke<RemoteRuntimeProbe>("remote_direct_test", { settings, token });
+}
+
+export async function remoteRuntimeTokenSet(token: string) {
+  return invoke<void>("remote_runtime_token_set", { token });
 }
 
 export interface ReasoningEffort {

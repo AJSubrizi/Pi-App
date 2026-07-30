@@ -83,6 +83,7 @@ It is a **sister project** to [pi.dev](https://pi.dev) — community-built, MIT,
 | **Resources** | Files, previews, git changes (stage / discard / commit & push), embedded browser and project terminal |
 | **Packages** | Install Pi packages from npm, git or a local path (user or project scope) |
 | **Extensions** | Native UI for Pi `select` / `confirm` / `input` / `editor` and status widgets |
+| **Remote runtime** | Run Pi through system OpenSSH or an authenticated managed WSS gateway |
 | **Setup** | First-run detection and install path for the Pi CLI |
 
 ---
@@ -161,6 +162,10 @@ PI_APP_LIVE_RPC=1 cargo test live_pi_rpc_session_under_30s -- --nocapture
 | **Pi** | `~/.pi/agent` — config, auth, agent sessions |
 
 The GUI does not copy provider secrets into its package center. Pi remains the source of truth for models and keys.
+
+For remote work, SSH is the recommended default. Advanced deployments can use
+the documented [Direct RPC gateway protocol](docs/direct-rpc.md); access tokens
+stay in the operating-system keychain.
 
 ---
 

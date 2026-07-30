@@ -68,6 +68,7 @@ export function SetupWizard({
   const [userName, setUserName] = useState("");
   const [remoteOpen, setRemoteOpen] = useState(false);
   const [remote, setRemote] = useState(initialRemote);
+  const [remoteToken, setRemoteToken] = useState("");
   const [remoteTesting, setRemoteTesting] = useState(false);
 
   useEffect(() => {
@@ -182,19 +183,29 @@ export function SetupWizard({
     setRemoteTesting(true);
     setError(null);
     try {
-      const result = await api.remoteRuntimeTest(remote);
+      const result =
+        remote.transport === "direct"
+          ? await api.remoteDirectTest(remote, remoteToken)
+          : await api.remoteRuntimeTest(remote);
       if (!result.ok) {
         setError(result.error || tr("remoteRuntime.testFail", { error: "Unknown error" }));
         return;
       }
       const verified = { ...remote, enabled: true, verified: true };
+      if (remote.transport === "direct" && remoteToken.trim()) {
+        await api.remoteRuntimeTokenSet(remoteToken);
+        verified.directTokenConfigured = true;
+        setRemoteToken("");
+      }
       setRemote(verified);
       onRemoteConfigured(verified);
       setCli({
         found: true,
         path: null,
-        version: result.version || "Remote Pi over SSH",
-        source: "ssh",
+        version:
+          result.version ||
+          (remote.transport === "direct" ? "Pi Direct RPC" : "Remote Pi over SSH"),
+        source: remote.transport,
         cliAuthPresent: true,
       });
       setStep("models");
@@ -203,7 +214,7 @@ export function SetupWizard({
     } finally {
       setRemoteTesting(false);
     }
-  }, [onRemoteConfigured, remote, tr]);
+  }, [onRemoteConfigured, remote, remoteToken, tr]);
 
   const copyCmd = useCallback(async () => {
     const cmd =
@@ -373,6 +384,81 @@ export function SetupWizard({
                   {remoteOpen ? (
                     <div className="setup-remote__fields">
                       <label>
+                        <span>{tr("remoteRuntime.transport")}</span>
+                        <select
+                          value={remote.transport}
+                          onChange={(event) =>
+                            setRemote((current) => ({
+                              ...current,
+                              transport: event.target.value,
+                              verified: false,
+                            }))
+                          }
+                        >
+                          <option value="ssh">
+                            {tr("remoteRuntime.transportSsh")}
+                          </option>
+                          <option value="direct">
+                            {tr("remoteRuntime.transportDirect")}
+                          </option>
+                        </select>
+                      </label>
+                      {remote.transport === "direct" ? (
+                        <>
+                          <label>
+                            <span>{tr("remoteRuntime.directUrl")}</span>
+                            <input
+                              type="url"
+                              value={remote.directUrl}
+                              placeholder={tr("remoteRuntime.directUrlPlaceholder")}
+                              onChange={(event) =>
+                                setRemote((current) => ({
+                                  ...current,
+                                  directUrl: event.target.value,
+                                  verified: false,
+                                }))
+                              }
+                            />
+                          </label>
+                          <label>
+                            <span>{tr("remoteRuntime.directToken")}</span>
+                            <input
+                              type="password"
+                              value={remoteToken}
+                              placeholder={
+                                remote.directTokenConfigured
+                                  ? tr("remoteRuntime.directTokenStored")
+                                  : tr("remoteRuntime.directTokenPlaceholder")
+                              }
+                              autoComplete="off"
+                              onChange={(event) => {
+                                setRemoteToken(event.target.value);
+                                setRemote((current) => ({
+                                  ...current,
+                                  verified: false,
+                                }));
+                              }}
+                            />
+                          </label>
+                          <label>
+                            <span>{tr("remoteRuntime.cwd")}</span>
+                            <input
+                              value={remote.cwd}
+                              placeholder={tr("remoteRuntime.cwdPlaceholder")}
+                              onChange={(event) =>
+                                setRemote((current) => ({
+                                  ...current,
+                                  cwd: event.target.value,
+                                  verified: false,
+                                }))
+                              }
+                            />
+                          </label>
+                          <p>{tr("remoteRuntime.directSecurity")}</p>
+                        </>
+                      ) : (
+                        <>
+                      <label>
                         <span>{tr("remoteRuntime.host")}</span>
                         <input
                           value={remote.host}
@@ -429,14 +515,21 @@ export function SetupWizard({
                         />
                       </label>
                       <p>{tr("remoteRuntime.security")}</p>
+                        </>
+                      )}
                       <button
                         type="button"
                         className="btn btn--primary"
                         disabled={
                           remoteTesting ||
-                          !remote.host.trim() ||
-                          !remote.user.trim() ||
-                          !remote.cwd.trim()
+                          (remote.transport === "direct"
+                            ? !remote.directUrl.trim() ||
+                              (!remoteToken.trim() &&
+                                !remote.directTokenConfigured) ||
+                              !remote.cwd.trim()
+                            : !remote.host.trim() ||
+                              !remote.user.trim() ||
+                              !remote.cwd.trim())
                         }
                         onClick={() => void testRemote()}
                       >

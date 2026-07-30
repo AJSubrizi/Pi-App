@@ -269,7 +269,8 @@
   font-size: 12px;
 }
 
-.setup-remote__fields input {
+.setup-remote__fields input,
+.setup-remote__fields select {
   width: 100%;
   box-sizing: border-box;
 }

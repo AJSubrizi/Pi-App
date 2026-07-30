@@ -806,6 +806,9 @@ export default function App() {
   const [remoteRuntime, setRemoteRuntime] = useState<api.RemoteRuntimeSettings>({
     enabled: false,
     verified: false,
+    transport: "ssh",
+    directUrl: "",
+    directTokenConfigured: false,
     host: "",
     user: "",
     port: 22,
@@ -1118,6 +1121,9 @@ export default function App() {
         settings.remoteRuntime || {
           enabled: false,
           verified: false,
+          transport: "ssh",
+          directUrl: "",
+          directTokenConfigured: false,
           host: "",
           user: "",
           port: 22,
@@ -1197,7 +1203,11 @@ export default function App() {
       const cliSeed: SetupCliInfo = {
         found: runtimeReady,
         path: cli.path,
-        version: remoteReady ? "Remote Pi over SSH" : cli.version,
+        version: remoteReady
+          ? settings.remoteRuntime?.transport === "direct"
+            ? "Pi Direct RPC"
+            : "Remote Pi over SSH"
+          : cli.version,
         source: remoteReady ? "ssh" : cli.source || "",
         cliAuthPresent: !!cli.cliAuthPresent,
       };
@@ -8213,7 +8223,10 @@ export default function App() {
               <strong>{tr("remoteRuntime.active")}</strong>
               <span>
                 {tr("remoteRuntime.activeTarget", {
-                  target: `${remoteRuntime.user}@${remoteRuntime.host}`,
+                  target:
+                    remoteRuntime.transport === "direct"
+                      ? remoteRuntime.directUrl
+                      : `${remoteRuntime.user}@${remoteRuntime.host}`,
                   cwd: remoteRuntime.cwd,
                 })}
               </span>

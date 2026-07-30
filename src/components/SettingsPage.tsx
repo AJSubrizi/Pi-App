@@ -400,8 +400,12 @@ function RemoteRuntimePanel({
   const [testing, setTesting] = useState(false);
   const [result, setResult] = useState<api.RemoteRuntimeProbe | null>(null);
   const [saved, setSaved] = useState(false);
+  const [directToken, setDirectToken] = useState("");
 
-  useEffect(() => setDraft(value), [value]);
+  useEffect(() => {
+    setDraft(value);
+    setDirectToken("");
+  }, [value]);
 
   const update = <K extends keyof api.RemoteRuntimeSettings>(
     key: K,
@@ -412,11 +416,27 @@ function RemoteRuntimePanel({
     setResult(null);
   };
 
+  const updateToken = (next: string) => {
+    setDirectToken(next);
+    setDraft((current) => ({
+      ...current,
+      verified: false,
+      directTokenConfigured: next.trim()
+        ? true
+        : current.directTokenConfigured,
+    }));
+    setSaved(false);
+    setResult(null);
+  };
+
   const test = async () => {
     setTesting(true);
     setResult(null);
     try {
-      const probe = await api.remoteRuntimeTest(draft);
+      const probe =
+        draft.transport === "direct"
+          ? await api.remoteDirectTest(draft, directToken)
+          : await api.remoteRuntimeTest(draft);
       setResult(probe);
       if (probe.ok) {
         setDraft((current) => ({ ...current, verified: true }));
@@ -425,6 +445,25 @@ function RemoteRuntimePanel({
       setResult({ ok: false, error: String(error) });
     } finally {
       setTesting(false);
+    }
+  };
+
+  const save = async () => {
+    try {
+      if (draft.transport === "direct" && directToken.trim()) {
+        await api.remoteRuntimeTokenSet(directToken);
+      }
+      onSave({
+        ...draft,
+        directTokenConfigured:
+          draft.transport === "direct"
+            ? draft.directTokenConfigured || !!directToken.trim()
+            : draft.directTokenConfigured,
+      });
+      setDirectToken("");
+      setSaved(true);
+    } catch (error) {
+      setResult({ ok: false, error: String(error) });
     }
   };
 
@@ -441,7 +480,62 @@ function RemoteRuntimePanel({
           ariaLabel={t("remoteRuntime.enable")}
         />
       </div>
+      <label className="remote-runtime__transport">
+        <span>{t("remoteRuntime.transport")}</span>
+        <select
+          className="settings-input"
+          value={draft.transport}
+          onChange={(event) =>
+            update("transport", event.target.value as "ssh" | "direct")
+          }
+        >
+          <option value="ssh">{t("remoteRuntime.transportSsh")}</option>
+          <option value="direct">{t("remoteRuntime.transportDirect")}</option>
+        </select>
+      </label>
       <div className="remote-runtime__fields">
+        {draft.transport === "direct" ? (
+          <>
+            <label>
+              <span>{t("remoteRuntime.directUrl")}</span>
+              <input
+                className="settings-input"
+                type="url"
+                value={draft.directUrl}
+                onChange={(event) => update("directUrl", event.target.value)}
+                placeholder={t("remoteRuntime.directUrlPlaceholder")}
+                spellCheck={false}
+              />
+            </label>
+            <label>
+              <span>{t("remoteRuntime.directToken")}</span>
+              <input
+                className="settings-input"
+                type="password"
+                value={directToken}
+                onChange={(event) => updateToken(event.target.value)}
+                placeholder={
+                  draft.directTokenConfigured
+                    ? t("remoteRuntime.directTokenStored")
+                    : t("remoteRuntime.directTokenPlaceholder")
+                }
+                autoComplete="off"
+                spellCheck={false}
+              />
+            </label>
+            <label>
+              <span>{t("remoteRuntime.cwd")}</span>
+              <input
+                className="settings-input"
+                value={draft.cwd}
+                onChange={(event) => update("cwd", event.target.value)}
+                placeholder={t("remoteRuntime.cwdPlaceholder")}
+                spellCheck={false}
+              />
+            </label>
+          </>
+        ) : (
+          <>
         <label>
           <span>{t("remoteRuntime.host")}</span>
           <input
@@ -505,8 +599,16 @@ function RemoteRuntimePanel({
             spellCheck={false}
           />
         </label>
+          </>
+        )}
       </div>
-      <p className="settings-row__hint">{t("remoteRuntime.security")}</p>
+      <p className="settings-row__hint">
+        {t(
+          draft.transport === "direct"
+            ? "remoteRuntime.directSecurity"
+            : "remoteRuntime.security",
+        )}
+      </p>
       <p className="settings-row__hint">{t("remoteRuntime.scope")}</p>
       {result ? (
         <p
@@ -522,7 +624,14 @@ function RemoteRuntimePanel({
         <button
           type="button"
           className="btn btn--ghost"
-          disabled={testing || !draft.host.trim() || !draft.user.trim()}
+          disabled={
+            testing ||
+            (draft.transport === "direct"
+              ? !draft.directUrl.trim() ||
+                (!directToken.trim() && !draft.directTokenConfigured) ||
+                !draft.cwd.trim()
+              : !draft.host.trim() || !draft.user.trim())
+          }
           onClick={() => void test()}
         >
           {testing ? t("remoteRuntime.testing") : t("remoteRuntime.test")}
@@ -531,10 +640,7 @@ function RemoteRuntimePanel({
           type="button"
           className="btn btn--solid"
           disabled={draft.enabled && !draft.verified}
-          onClick={() => {
-            onSave(draft);
-            setSaved(true);
-          }}
+          onClick={() => void save()}
         >
           {saved ? t("remoteRuntime.saved") : t("common.save")}
         </button>

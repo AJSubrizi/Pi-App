@@ -226,6 +226,8 @@ pub struct RemoteRuntimeSettings {
     pub enabled: bool,
     #[serde(default)]
     pub verified: bool,
+    #[serde(default = "default_remote_transport")]
+    pub transport: String,
     #[serde(default)]
     pub host: String,
     #[serde(default)]
@@ -238,6 +240,14 @@ pub struct RemoteRuntimeSettings {
     pub pi_path: String,
     #[serde(default = "default_remote_cwd")]
     pub cwd: String,
+    #[serde(default)]
+    pub direct_url: String,
+    #[serde(default)]
+    pub direct_token_configured: bool,
+}
+
+fn default_remote_transport() -> String {
+    "ssh".into()
 }
 
 fn default_ssh_port() -> u16 {
@@ -257,12 +267,15 @@ impl Default for RemoteRuntimeSettings {
         Self {
             enabled: false,
             verified: false,
+            transport: default_remote_transport(),
             host: String::new(),
             user: String::new(),
             port: default_ssh_port(),
             identity_file: String::new(),
             pi_path: default_remote_pi_path(),
             cwd: default_remote_cwd(),
+            direct_url: String::new(),
+            direct_token_configured: false,
         }
     }
 }

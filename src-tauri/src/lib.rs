@@ -293,6 +293,8 @@ pub fn run() {
             speech::speech_install,
             speech::speech_transcribe,
             remote_runtime::remote_runtime_test,
+            remote_runtime::remote_direct_test,
+            remote_runtime::remote_runtime_token_set,
             commands::git_file_diff,
             commands::git_status,
             commands::git_numstat,

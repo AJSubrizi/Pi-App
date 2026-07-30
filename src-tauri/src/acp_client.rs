@@ -11,12 +11,14 @@ use std::process::Stdio;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 
+use futures_util::{SinkExt, StreamExt};
 use parking_lot::Mutex as ParkingMutex;
 use serde_json::{json, Value};
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
 use tokio::process::{Child, Command};
 use tokio::sync::{mpsc, oneshot, Mutex as AsyncMutex};
+use tokio_tungstenite::tungstenite::Message as WebSocketMessage;
 use tracing::{debug, error, info, warn};
 
 use crate::error::{AgentError, AgentErrorCode};
@@ -320,7 +322,7 @@ impl AcpClient {
         opts: SpawnOptions,
     ) -> Result<(Arc<Self>, mpsc::UnboundedReceiver<AcpEvent>), AgentError> {
         let settings = crate::store::load_settings();
-        if settings.remote_runtime.enabled {
+        if settings.remote_runtime.enabled && settings.remote_runtime.transport != "direct" {
             return Self::spawn_ssh(settings.remote_runtime, opts);
         }
         Self::spawn_with_home(cli_path, cwd, &settings.session_data_mode, opts)
@@ -561,6 +563,91 @@ impl AcpClient {
                 }
             });
         }
+        Ok((client, event_rx))
+    }
+
+    /// Connect to a managed Pi RPC gateway over authenticated WSS. The gateway
+    /// transports one JSONL record per WebSocket text message.
+    pub async fn connect_direct(
+        settings: crate::store::RemoteRuntimeSettings,
+    ) -> Result<(Arc<Self>, mpsc::UnboundedReceiver<AcpEvent>), AgentError> {
+        let token = crate::remote_runtime::remote_token()
+            .map_err(|error| AgentError::new(AgentErrorCode::CliNotFound, error))?;
+        let socket = crate::remote_runtime::connect_websocket(&settings, &token)
+            .await
+            .map_err(|error| AgentError::new(AgentErrorCode::CliNotFound, error))?;
+        let (mut ws_write, mut ws_read) = socket.split();
+        let (client_io, bridge_io) = tokio::io::duplex(8 * 1024 * 1024);
+        let (client_read, client_write) = tokio::io::split(client_io);
+        let (bridge_read, mut bridge_write) = tokio::io::split(bridge_io);
+        tokio::spawn(async move {
+            let outbound = async {
+                let mut reader = BufReader::new(bridge_read);
+                let mut line = String::new();
+                loop {
+                    line.clear();
+                    if reader.read_line(&mut line).await.unwrap_or(0) == 0 {
+                        break;
+                    }
+                    let value = line.trim_end_matches(['\r', '\n']);
+                    if !value.is_empty()
+                        && ws_write
+                            .send(WebSocketMessage::Text(value.to_string().into()))
+                            .await
+                            .is_err()
+                    {
+                        break;
+                    }
+                }
+            };
+            let inbound = async {
+                while let Some(message) = ws_read.next().await {
+                    match message {
+                        Ok(WebSocketMessage::Text(text)) => {
+                            if bridge_write.write_all(text.as_bytes()).await.is_err()
+                                || bridge_write.write_all(b"\n").await.is_err()
+                            {
+                                break;
+                            }
+                        }
+                        Ok(WebSocketMessage::Binary(bytes)) => {
+                            if bridge_write.write_all(&bytes).await.is_err()
+                                || bridge_write.write_all(b"\n").await.is_err()
+                            {
+                                break;
+                            }
+                        }
+                        Ok(WebSocketMessage::Close(_)) | Err(_) => break,
+                        _ => {}
+                    }
+                }
+            };
+            tokio::select! {
+                _ = outbound => {}
+                _ = inbound => {}
+            }
+        });
+
+        let (event_tx, event_rx) = mpsc::unbounded_channel();
+        let client = Arc::new(Self {
+            child: AsyncMutex::new(None),
+            stdin: AsyncMutex::new(Some(
+                Box::new(client_write) as Box<dyn AsyncWrite + Unpin + Send>
+            )),
+            next_id: AtomicU64::new(1),
+            pending: ParkingMutex::new(HashMap::new()),
+            event_tx,
+            agent_session_id: ParkingMutex::new(None),
+            cli_path: PathBuf::from(settings.direct_url.trim()),
+            cwd: PathBuf::from(settings.cwd.trim()),
+            stopped: AtomicBool::new(false),
+            reader_alive: AtomicBool::new(true),
+            stderr_tail: ParkingMutex::new(Vec::new()),
+            dialect: TransportDialect::PiRpc,
+            pi_settled_waiters: ParkingMutex::new(Vec::new()),
+            pi_ui_requests: ParkingMutex::new(HashMap::new()),
+        });
+        client.start_read_loop(Box::new(client_read));
         Ok((client, event_rx))
     }
 
@@ -1592,7 +1679,8 @@ impl AcpClient {
         &self,
         resume_session_id: Option<&str>,
     ) -> Result<(String, bool), AgentError> {
-        let remote = self.cli_path.to_string_lossy().starts_with("ssh://");
+        let transport = self.cli_path.to_string_lossy();
+        let remote = transport.starts_with("ssh://") || transport.starts_with("wss://");
         if !remote && !self.cwd.is_dir() {
             return Err(AgentError::new(
                 AgentErrorCode::AgentCrashed,

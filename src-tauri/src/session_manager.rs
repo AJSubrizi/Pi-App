@@ -1603,6 +1603,8 @@ impl SessionManager {
                 return Ok(snap);
             }
 
+            let direct_remote =
+                settings.remote_runtime.enabled && settings.remote_runtime.transport == "direct";
             let cli_path = if settings.remote_runtime.enabled {
                 std::path::PathBuf::from("ssh")
             } else {
@@ -1614,21 +1616,25 @@ impl SessionManager {
                 permission_policy: Some(prefs.permission_policy.clone()),
             };
 
-            let (client, mut events) =
-                match AcpClient::spawn_with_options(cli_path, cwd, spawn_opts) {
-                    Ok(v) => v,
-                    Err(e) => {
-                        {
-                            let mut guard = self.inner.lock();
-                            if let Some(s) = guard.as_mut() {
-                                let _ = s.fsm.connect_failed(e);
-                            }
+            let spawned = if direct_remote {
+                AcpClient::connect_direct(settings.remote_runtime.clone()).await
+            } else {
+                AcpClient::spawn_with_options(cli_path, cwd, spawn_opts)
+            };
+            let (client, mut events) = match spawned {
+                Ok(v) => v,
+                Err(e) => {
+                    {
+                        let mut guard = self.inner.lock();
+                        if let Some(s) = guard.as_mut() {
+                            let _ = s.fsm.connect_failed(e);
                         }
-                        let snap = self.snapshot();
-                        Self::emit_state(&app, &snap);
-                        return Ok(snap);
                     }
-                };
+                    let snap = self.snapshot();
+                    Self::emit_state(&app, &snap);
+                    return Ok(snap);
+                }
+            };
 
             // Event pump tagged with process_id (multi-process routing).
             {
