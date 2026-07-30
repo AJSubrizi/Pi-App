@@ -8,7 +8,7 @@ const en = {
   // App chrome
   "app.name": "Pi",
   "app.tagline": "MIT · Unofficial · Sister project pi.dev",
-  "app.versionFooter": "Pi v0.2.7 · MIT · Unofficial · Sister project pi.dev",
+  "app.versionFooter": "Pi v0.2.8 · MIT · Unofficial · Sister project pi.dev",
   "common.refresh": "Refresh",
   "common.loading": "Loading…",
   "common.remove": "Remove",
