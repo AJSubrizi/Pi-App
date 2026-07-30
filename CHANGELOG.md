@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.10] - 2026-07-30
+
+### Fixed
+
+- **Windows build** - restore a platform-conditional binding that an automated lint pass removed, which broke compilation on Windows in 0.2.9.
+- **macOS install steps** - right-click → Open no longer bypasses Gatekeeper on macOS 15 Sequoia or macOS 26 Tahoe. The README and the DMG instructions now use quarantine-flag removal, which still works, and mention building from source as the command-free alternative.
+
 ## [0.2.9] - 2026-07-30
 
 ### Fixed
