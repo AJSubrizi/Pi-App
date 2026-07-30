@@ -227,6 +227,54 @@ const PI_RPC_IMAGE_MAX_COUNT: usize = 8;
 const PI_RPC_IMAGE_MAX_BYTES: u64 = 20 * 1024 * 1024;
 const PI_RPC_IMAGE_MAX_TOTAL_BYTES: u64 = 40 * 1024 * 1024;
 
+/// Older Pi tools can ask for permission through the generic extension UI
+/// instead of `session/request_permission`. Auto-resolve only that narrowly
+/// identifiable shape; normal agent questions and extension dialogs must
+/// remain interactive even when tool permissions are unrestricted.
+fn legacy_permission_ui_answer(
+    policy: PermissionPolicy,
+    raw: &serde_json::Value,
+) -> Option<String> {
+    if raw.get("type").and_then(serde_json::Value::as_str) != Some("extension_ui_request") {
+        return None;
+    }
+    let method = raw.get("method").and_then(serde_json::Value::as_str)?;
+    if !matches!(method, "select" | "confirm") {
+        return None;
+    }
+    let title = raw
+        .get("title")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("");
+    let message = raw
+        .get("message")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("");
+    if !title.eq_ignore_ascii_case("Permission Required")
+        || !message.to_ascii_lowercase().contains("requested tool")
+    {
+        return None;
+    }
+    let allow = match policy {
+        PermissionPolicy::AlwaysApprove => true,
+        PermissionPolicy::DontAsk | PermissionPolicy::Deny => false,
+        _ => return None,
+    };
+    if method == "confirm" {
+        return Some(if allow { "confirm" } else { "cancel" }.into());
+    }
+    let wanted = if allow { "yes" } else { "no" };
+    raw.get("options")
+        .and_then(serde_json::Value::as_array)
+        .and_then(|options| {
+            options
+                .iter()
+                .filter_map(serde_json::Value::as_str)
+                .find(|label| label.trim().eq_ignore_ascii_case(wanted))
+        })
+        .map(str::to_string)
+}
+
 fn pi_rpc_image_mime(path: &Path) -> Option<&'static str> {
     match path
         .extension()
@@ -2250,8 +2298,33 @@ impl SessionManager {
                 rpc_id,
                 tool_call_id,
                 questions,
-                raw: _,
+                raw,
             } => {
+                let auto_response = {
+                    let guard = self.inner.lock();
+                    guard.as_ref().and_then(|session| {
+                        legacy_permission_ui_answer(session.policy, &raw)
+                            .and_then(|answer| session.acp.clone().map(|acp| (acp, answer)))
+                    })
+                };
+                if let Some((acp, answer)) = auto_response {
+                    let outcome = AskUserOutcome::Accepted {
+                        answers: serde_json::json!({ "permission": answer }),
+                    };
+                    match acp.respond_ask_user_question(rpc_id, outcome).await {
+                        Ok(()) => {
+                            tracing::info!(
+                                "auto-resolved legacy permission UI id={rpc_id} under host policy"
+                            );
+                            return;
+                        }
+                        Err(error) => {
+                            tracing::warn!(
+                                "legacy permission UI auto-response failed id={rpc_id}: {error}"
+                            );
+                        }
+                    }
+                }
                 let app_sid = {
                     let mut guard = self.inner.lock();
                     if let Some(s) = guard.as_mut() {
@@ -3829,5 +3902,42 @@ mod recycle_tests {
         assert!(again.acps.is_empty());
         assert_eq!(again.background_count, 0);
         assert_eq!(again.parked_count, 0);
+    }
+}
+
+#[cfg(test)]
+mod legacy_permission_ui_tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn full_access_accepts_only_legacy_permission_selects() {
+        let permission = json!({
+            "type": "extension_ui_request",
+            "method": "select",
+            "title": "Permission Required",
+            "message": "Current agent requested tool 'xai_grok_run_terminal_command'",
+            "options": ["Yes", "Yes, allow for this session", "No"]
+        });
+        assert_eq!(
+            legacy_permission_ui_answer(PermissionPolicy::AlwaysApprove, &permission),
+            Some("Yes".into())
+        );
+        assert_eq!(
+            legacy_permission_ui_answer(PermissionPolicy::DontAsk, &permission),
+            Some("No".into())
+        );
+
+        let ordinary_question = json!({
+            "type": "extension_ui_request",
+            "method": "select",
+            "title": "Choose deployment",
+            "message": "Which environment should be used?",
+            "options": ["Staging", "Production"]
+        });
+        assert_eq!(
+            legacy_permission_ui_answer(PermissionPolicy::AlwaysApprove, &ordinary_question),
+            None
+        );
     }
 }

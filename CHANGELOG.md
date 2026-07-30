@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.7] - 2026-07-30
+
+### Fixed
+
+- **Full access legacy permissions** - automatically approve permission prompts emitted through Pi's older extension UI path, while keeping genuine agent questions and extension dialogs interactive.
+- **Deny policy legacy permissions** - automatically reject the same legacy prompts without leaving the agent blocked behind a modal.
+
 ## [0.2.6] - 2026-07-30
 
 > **Highlight:** remote Pi runtimes, private local dictation and clearer usage history.

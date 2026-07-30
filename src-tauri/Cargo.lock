@@ -958,7 +958,7 @@ dependencies = [
 
 [[package]]
 name = "displaydoc"
-version = "0.2.6"
+version = "0.2.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1ac70aa55017e108007fbaf5aa0f54b021c98f92ff8af59d42eda9da96e3dd4f"
 dependencies = [
@@ -2983,7 +2983,7 @@ dependencies = [
 
 [[package]]
 name = "pi-app"
-version = "0.2.5"
+version = "0.2.6"
 dependencies = [
  "arboard",
  "base64 0.22.1",
