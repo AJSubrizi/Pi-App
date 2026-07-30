@@ -1033,9 +1033,6 @@ export interface AppSettings {
   lastSessionId?: string | null;
   /** Project of lastSessionId when it belonged to one (hint only). */
   lastProjectId?: string | null;
-  voiceId?: string;
-  voiceDictationAutoSend?: boolean;
-  voiceKeepAgentsOnEnd?: boolean;
 }
 
 export interface ReasoningEffort {
@@ -2669,83 +2666,49 @@ export async function permissionRulesSet(rules: PermissionRules) {
   return invoke<PermissionRules>("permission_rules_set", { rules });
 }
 
-export interface VoiceSessionState {
-  active: boolean;
-  mode?: string;
-  phase?: string | null;
-  sessionId?: string | null;
-  projectPath?: string | null;
-  projectId?: string | null;
-  projectName?: string | null;
-  error?: string | null;
-  delegatedSessionIds?: string[];
-  mock?: boolean;
-  listening?: boolean;
-  speaking?: boolean;
-}
-
-export async function voiceState(): Promise<VoiceSessionState> {
-  return invoke<VoiceSessionState>("voice_state");
-}
-
-export async function voiceStart(opts?: {
-  voiceId?: string | null;
-  projectPath?: string | null;
-  projectId?: string | null;
-  projectName?: string | null;
-  keepAgentsOnEnd?: boolean;
-}): Promise<VoiceSessionState> {
-  return invoke<VoiceSessionState>("voice_start", {
-    voiceId: opts?.voiceId ?? null,
-    projectPath: opts?.projectPath ?? null,
-    projectId: opts?.projectId ?? null,
-    projectName: opts?.projectName ?? null,
-    keepAgentsOnEnd: opts?.keepAgentsOnEnd ?? true,
-  });
-}
-
-export async function voiceStop(): Promise<VoiceSessionState> {
-  return invoke<VoiceSessionState>("voice_stop");
-}
-
-export async function voicePushPcm(pcmBase64: string): Promise<void> {
-  return invoke<void>("voice_push_pcm", { pcmBase64 });
-}
-
-export async function voiceInvokeTool(
-  name: string,
-  args?: any,
-): Promise<unknown> {
-  return invoke<unknown>("voice_invoke_tool", { name, args: args ?? {} });
-}
-
-
-export type VoiceStatusDto = {
-  available: boolean;
+export type SpeechStatus = {
+  supported: boolean;
+  parakeetAvailable: boolean;
+  whisperAvailable: boolean;
+  uvAvailable: boolean;
+  ffmpegAvailable: boolean;
+  recommendedEngine: "parakeet" | "whisper" | string;
   reason?: string | null;
-  authSource?: string | null;
 };
 
-export type VoiceTranscribeResult = {
-  ok: boolean;
-  text?: string | null;
-  error?: string | null;
-  errorClass?: string | null;
+export type SpeechTranscription = {
+  text: string;
+  engine: "parakeet" | "whisper" | string;
 };
 
-export async function voiceStatus() {
-  return invoke<VoiceStatusDto>("voice_status");
+export async function speechStatus() {
+  if (!isTauri()) {
+    return {
+      supported: true,
+      parakeetAvailable: false,
+      whisperAvailable: false,
+      uvAvailable: true,
+      ffmpegAvailable: true,
+      recommendedEngine: "parakeet",
+      reason: null,
+    } satisfies SpeechStatus;
+  }
+  return invoke<SpeechStatus>("speech_status");
 }
 
-export async function voiceTranscribe(opts: {
+export async function speechInstall(engine: "parakeet" | "whisper") {
+  return invoke<SpeechStatus>("speech_install", { engine });
+}
+
+export async function speechTranscribe(opts: {
   audioBase64: string;
-  filename?: string | null;
-  mime?: string | null;
+  engine?: "auto" | "parakeet" | "whisper";
+  language?: string;
 }) {
-  return invoke<VoiceTranscribeResult>("voice_transcribe", {
+  return invoke<SpeechTranscription>("speech_transcribe", {
     audioBase64: opts.audioBase64,
-    filename: opts.filename ?? null,
-    mime: opts.mime ?? null,
+    engine: opts.engine ?? "auto",
+    language: opts.language ?? "auto",
   });
 }
 

@@ -214,15 +214,6 @@ pub struct AppSettings {
     /// process (`--no-leader`). Advanced; multiple clients can share one backend.
     #[serde(default)]
     pub use_leader: bool,
-    /// xAI realtime voice id (e.g. `eve`).
-    #[serde(default = "default_voice_id")]
-    pub voice_id: String,
-    /// When true, dictation auto-sends on end-of-speech silence.
-    #[serde(default)]
-    pub voice_dictation_auto_send: bool,
-    /// Keep delegated agent sessions running after ending a live voice chat.
-    #[serde(default = "default_true")]
-    pub voice_keep_agents_on_end: bool,
 }
 
 fn default_composer_prefs_scope() -> String {
@@ -255,10 +246,6 @@ fn default_reopen_last_session() -> bool {
 
 fn default_plan_enabled() -> bool {
     true
-}
-
-fn default_voice_id() -> String {
-    "eve".into()
 }
 
 impl Default for AppSettings {
@@ -296,9 +283,6 @@ impl Default for AppSettings {
             subagents_enabled: true,
             preferred_agent: String::new(),
             use_leader: false,
-            voice_id: default_voice_id(),
-            voice_dictation_auto_send: false,
-            voice_keep_agents_on_end: true,
         }
     }
 }

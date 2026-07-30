@@ -3770,6 +3770,52 @@ html.platform-mac[data-theme="light"] .settings-page__content {
   text-align: center;
 }
 
+.speech-settings {
+  display: grid;
+  gap: 14px;
+}
+
+.speech-engine-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  min-height: 66px;
+  padding: 12px 14px;
+}
+
+.speech-engine-row + .speech-engine-row {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.speech-engine-row strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.speech-engine-row p,
+.speech-settings__privacy,
+.speech-settings__error {
+  margin: 3px 0 0;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.speech-status {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.speech-status.is-ready {
+  color: var(--text-primary);
+}
+
+.speech-settings__error {
+  color: var(--danger);
+  overflow-wrap: anywhere;
+}
+
 @media (max-width: 760px) {
   .usage-profile__stats {
     grid-template-columns: repeat(6, minmax(0, 1fr));

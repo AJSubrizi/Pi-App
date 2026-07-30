@@ -188,6 +188,8 @@ import {
   useSendQueue,
   type ExecuteSendFromQueue,
 } from "@/hooks/useSendQueue";
+import { useLocalDictation } from "@/hooks/useLocalDictation";
+import { appendTranscript } from "@/lib/localDictation";
 import {
   buildSlashCatalog,
   flattenFilteredCatalog,
@@ -255,6 +257,7 @@ import {
   IconRewind,
   IconCheck,
   IconList,
+  IconMic,
 } from "@/components/icons";
 import { AutomationsPage } from "@/components/AutomationsPage";
 import { OpenLocationButton } from "@/components/OpenLocationButton";
@@ -2171,6 +2174,7 @@ export default function App() {
           "appearance",
           "context",
           "usage",
+          "speech",
           "archived",
           "providers-models",
           "extensions",
@@ -4751,6 +4755,31 @@ export default function App() {
     }, ms);
   }, []);
 
+  const onDictationTranscript = useCallback(
+    (text: string) => {
+      setDraft((current) => appendTranscript(current, text));
+      requestComposerFocus();
+    },
+    [requestComposerFocus],
+  );
+  const onDictationError = useCallback(
+    (error: unknown) => {
+      const message = String(error);
+      if (message.includes("NotAllowedError")) {
+        showToast(tr("composer.voiceErr.mic_denied"), 5000);
+      } else if (message.includes("SPEECH_NO_SPEECH")) {
+        showToast(tr("composer.voiceErr.no_speech"));
+      } else {
+        showToast(tr("composer.voiceErr.local"), 5000);
+      }
+    },
+    [showToast, tr],
+  );
+  const dictation = useLocalDictation({
+    onTranscript: onDictationTranscript,
+    onError: onDictationError,
+  });
+
   const writePlanForViewing = useCallback((next: PlanState) => {
     const sid = viewingSessionIdRef.current;
     if (sid) planBySessionRef.current.set(sid, next);
@@ -6261,6 +6290,7 @@ export default function App() {
               "appearance",
               "context",
               "usage",
+              "speech",
               "archived",
               "providers-models",
               "extensions",
@@ -8991,6 +9021,47 @@ export default function App() {
                   onCompact={openCompactWithNote}
                 />
                 <span className="composer__spacer" />
+                <Tip
+                  label={
+                    dictation.recording
+                      ? tr("composer.voiceListening")
+                      : dictation.phase === "transcribing"
+                        ? tr("composer.voiceTranscribing")
+                        : tr("composer.voice")
+                  }
+                >
+                  <button
+                    type="button"
+                    className={
+                      "icon-btn composer__voice" +
+                      (dictation.recording
+                        ? " composer__voice--live"
+                        : dictation.busy
+                          ? " composer__voice--busy"
+                          : "")
+                    }
+                    disabled={
+                      dictation.phase === "requesting" ||
+                      dictation.phase === "transcribing" ||
+                      !canType(session.state)
+                    }
+                    aria-label={
+                      dictation.recording
+                        ? tr("composer.voiceListening")
+                        : dictation.phase === "transcribing"
+                          ? tr("composer.voiceTranscribing")
+                          : tr("composer.voice")
+                    }
+                    aria-pressed={dictation.recording}
+                    onClick={() =>
+                      dictation.recording
+                        ? void dictation.stop()
+                        : void dictation.start()
+                    }
+                  >
+                    <IconMic size={16} />
+                  </button>
+                </Tip>
                 {canStop(session.state) ? (
                   <>
                     {sendQueue.canShowQueueButton(

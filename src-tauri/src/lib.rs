@@ -45,6 +45,7 @@ mod session_fsm;
 mod session_import;
 mod session_manager;
 mod session_title;
+mod speech;
 mod store;
 mod store_lock;
 mod stream_stall;
@@ -287,6 +288,9 @@ pub fn run() {
             terminal::terminal_resize,
             terminal::terminal_stop,
             usage::usage_profile,
+            speech::speech_status,
+            speech::speech_install,
+            speech::speech_transcribe,
             commands::git_file_diff,
             commands::git_status,
             commands::git_numstat,

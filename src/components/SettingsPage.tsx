@@ -24,6 +24,7 @@ import {
   IconInstructions,
   IconKeyboard,
   IconMinimize,
+  IconMic,
   IconPuzzle,
   IconSearch,
   IconShare,
@@ -66,6 +67,7 @@ import { ProjectInspectPanel } from "@/components/ProjectInspectPanel";
 import { PermissionRulesPanel } from "@/components/PermissionRulesPanel";
 import { ContextSettingsPanel } from "@/components/ContextSettingsPanel";
 import { UsageProfilePage } from "@/components/UsageProfilePage";
+import { SpeechSettingsPanel } from "@/components/SpeechSettingsPanel";
 import { GlassModal } from "@/components/GlassModal";
 import {
   createT,
@@ -79,6 +81,7 @@ export type SettingsSectionId =
   | "appearance"
   | "context"
   | "usage"
+  | "speech"
   | "archived"
   | "providers-models"
   | "extensions"
@@ -212,6 +215,7 @@ const NAV: {
     | "appearance"
     | "context"
     | "usage"
+    | "speech"
     | "archive"
     | "providers"
     | "extensions"
@@ -225,6 +229,7 @@ const NAV: {
   { id: "appearance", icon: "appearance", labelKey: "settings.nav.appearance", group: "personal" },
   { id: "context", icon: "context", labelKey: "settings.nav.context", group: "personal" },
   { id: "usage", icon: "usage", labelKey: "settings.nav.usage", group: "personal" },
+  { id: "speech", icon: "speech", labelKey: "settings.nav.speech", group: "personal" },
   { id: "archived", icon: "archive", labelKey: "settings.nav.archived", group: "personal" },
   {
     id: "providers-models",
@@ -258,6 +263,7 @@ function NavIcon({
   if (name === "appearance") return <IconAppearance size={size} />;
   if (name === "context") return <IconInstructions size={size} />;
   if (name === "usage") return <IconActivity size={size} />;
+  if (name === "speech") return <IconMic size={size} />;
   if (name === "archive") return <IconArchive size={size} />;
   if (name === "providers") return <IconShare size={size} />;
   if (name === "keyboard") return <IconKeyboard size={size} />;
@@ -796,6 +802,8 @@ export function SettingsPage({
           ? t("settings.nav.context")
           : section === "usage"
             ? t("settings.nav.usage")
+          : section === "speech"
+            ? t("settings.nav.speech")
           : section === "archived"
             ? t("settings.nav.archived")
             : section === "providers-models"
@@ -935,6 +943,7 @@ export function SettingsPage({
             onUserName={onUserName}
           />
         )}
+        {section === "speech" && <SpeechSettingsPanel t={t} />}
 
         {section === "general" && (
           <div hidden>
