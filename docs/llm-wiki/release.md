@@ -7,6 +7,7 @@
 | `package.json` | `version` |
 | `src-tauri/tauri.conf.json` | `version` |
 | `src-tauri/Cargo.toml` | `[package].version` |
+| `src-tauri/Cargo.lock` | `pi-app` package version |
 | `src/i18n/messages.ts` | `app.versionFooter` (`Pi vX.Y.Z`) |
 
 ## Steps

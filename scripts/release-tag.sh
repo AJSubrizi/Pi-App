@@ -84,6 +84,16 @@ if n != 1:
 p.write_text(text2)
 print("Cargo.toml ->", ver)
 
+# Cargo.lock root package only
+p = Path("src-tauri/Cargo.lock")
+text = p.read_text()
+pattern = r'(?ms)(^\[\[package\]\]\nname = "pi-app"\nversion = ")[^"]+(")'
+text2, n = re.subn(pattern, rf"\g<1>{ver}\g<2>", text, count=1)
+if n != 1:
+    raise SystemExit("failed to patch pi-app version in Cargo.lock")
+p.write_text(text2)
+print("Cargo.lock pi-app ->", ver)
+
 # i18n version footer
 for rel in ("src/i18n/messages.ts",):
     p = Path(rel)
@@ -100,7 +110,7 @@ for rel in ("src/i18n/messages.ts",):
         print(f"warn: versionFooter pattern not found in {rel}")
 PY
 
-git add package.json src-tauri/tauri.conf.json src-tauri/Cargo.toml src/i18n/messages.ts
+git add package.json src-tauri/tauri.conf.json src-tauri/Cargo.toml src-tauri/Cargo.lock src/i18n/messages.ts
 if [[ -n "$(git status --porcelain)" ]]; then
   git commit -m "chore: release $TAG"
 fi
