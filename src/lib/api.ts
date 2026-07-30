@@ -1028,6 +1028,10 @@ export interface AppSettings {
   planEnabled?: boolean;
   subagentsEnabled?: boolean;
   useLeader?: boolean;
+  /** Pi `--tools` allowlist (tool names). Empty → CLI default. */
+  toolsAllow?: string[];
+  /** Pi `--exclude-tools` denylist (tool names). Empty → CLI default. */
+  toolsDeny?: string[];
   /** Reopen last active chat once after launch (default true). */
   reopenLastSession?: boolean;
   /** Last successfully opened session id (startup restore). */

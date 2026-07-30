@@ -5,11 +5,7 @@ use tauri::AppHandle;
 
 use crate::store::{self, SessionMeta};
 
-const PLACEHOLDERS: &[&str] = &[
-    "New chat",
-    "Untitled",
-    "New conversation",
-];
+const PLACEHOLDERS: &[&str] = &["New chat", "Untitled", "New conversation"];
 
 pub fn is_placeholder_title(title: &str) -> bool {
     let t = title.trim();

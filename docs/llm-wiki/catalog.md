@@ -2,13 +2,9 @@
 
 Source: `src/lib/agentCatalog.ts` (static fallback), `src-tauri/src/models_catalog.rs`, `src-tauri/src/agent_prefs.rs`.
 
-> [!WARNING]
-> **Parts of this page describe the CLI this shell was forked from, not Pi.**
-> `pi --help` (0.82.x) has no `--reasoning-effort`, `--always-approve`,
-> `--no-auto-update` or `agent … stdio` subcommand. It exposes `--thinking`,
-> `--approve` / `--no-approve`, `--mode rpc`, and tool allow/deny lists via
-> `--tools` / `--exclude-tools` / `--no-tools`. Verify against `pi --help`
-> before relying on any spawn line below.
+> [!NOTE]
+> Verified against Pi 0.82.x by probing a live `pi --mode rpc` process.
+> Sections below that describe the forked-from CLI are marked as legacy.
 
 ## Models
 
@@ -21,26 +17,37 @@ Source: `src/lib/agentCatalog.ts` (static fallback), `src-tauri/src/models_catal
 
 Probe: `scripts/probe-models.sh`. Host command: `models_list_available`.
 
-Spawn order (CLI 0.2.x — see the warning above):
+Spawn line (verified, `acp_client.rs`):
 
 ```text
-pi agent --model <id> --reasoning-effort <e> [--always-approve] stdio
+pi --mode rpc --approve [--model <id>] [--thinking <level>]
 ```
 
-Flags **must come before** `stdio`. After connecting, `session/set_model` aligns the model once more.
+The wire protocol in `--mode rpc` is Pi's own JSONL event stream
+(`{"type":"message_start"|"tool_execution_start"|"extension_ui_request"|…}`),
+**not** JSON-RPC/ACP. `acp_client.rs` speaks this stream and additionally
+accepts JSON-RPC reverse requests (`_x.ai/exit_plan_mode`,
+`_x.ai/ask_user_question`) for backward compatibility.
+
+**Extension-dependent surfaces**: Pi core never sends `_x.ai/exit_plan_mode`,
+`_x.ai/ask_user_question` or `x.ai/rewind/*`. Those arrive only if an
+installed extension registers them (none of the common ones do today). The
+Plan review panel, the ask-user questionnaire and agent-side rewind are
+therefore inert against a stock Pi install — treat them as opt-in
+extension UI, not core features.
 
 ## Reasoning effort
 
 Each model in the CLI's `models_cache.json` may carry `info.reasoning_efforts: [{id,value,label,description,default}]`. The host passes it through as `AvailableModel.reasoningEfforts` (with `isDefault`); the composer list prefers that array and falls back to the static `PI_FALLBACK_EFFORTS` (`low` | `medium` | `high`) when it is empty. Display labels prefer the catalog `label`, otherwise the i18n keys `effort.high|medium|low`.
 
-Spawn: `--reasoning-effort <id>`. With no model-level default the app defaults to **`medium`**; when a model marks one `default: true`, that wins. Changing it mid-session soft-disconnects the agent and reconnects on the next message — there is no `session/set_effort` RPC.
+Spawn: `--thinking <level>` (legacy shells used `--reasoning-effort`). With no model-level default the app defaults to **`medium`**; when a model marks one `default: true`, that wins. Changing it mid-session soft-disconnects the agent and reconnects on the next message — there is no `session/set_effort` RPC.
 
 ### Connection speed-ups (host)
 
 | Technique | Notes |
 |-----------|-------|
 | Default to medium effort | Shorter thinking / TTFT than high, steadier than low |
-| `pi --no-auto-update agent … stdio` | Skips the update check at startup |
+| `PI_OFFLINE=1` / `--offline` | Skips startup network operations |
 | Process reuse | Same cwd + effort + YOLO flag: switching chats only does `session/load\|new`, without respawning the CLI |
 | Warm up on open | `openSession` runs `session_connect` in the background so the first send skips cold start |
 
@@ -66,7 +73,7 @@ Implementation:
 | `accept_edits` | `acceptEdits` | `acceptEdits` | — |
 | `allow_for_session` | `default` + host session cache | `default` | — |
 | `dont_ask` | `dontAsk` | `dontAsk` | — |
-| `always_approve` | `always-approve` + `yolo=true` | `bypassPermissions` | `--always-approve` |
+| `always_approve` | `always-approve` + `yolo=true` | `bypassPermissions` | `--approve` (legacy: `--always-approve`) |
 
 **Independent mode** (the default): writes `~/.pi-app/agent-home/config.toml` and `agent-home/.claude/settings.json`, so the agent process really does enforce the policy.
 

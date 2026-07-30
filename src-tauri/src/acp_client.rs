@@ -166,6 +166,36 @@ pub struct SpawnOptions {
     pub effort: Option<String>,
 }
 
+/// Pi tool-filter primitives → spawn args.
+///
+/// `--tools <a,b>` (allowlist) and `--exclude-tools <a,b>` (denylist) apply to
+/// built-in, extension and custom tools alike. Names are trimmed; empties are
+/// dropped; an empty list omits its flag so the CLI default stays in charge.
+pub fn tool_filter_args(allow: &[String], deny: &[String]) -> Vec<String> {
+    fn join(names: &[String]) -> Option<String> {
+        let cleaned: Vec<&str> = names
+            .iter()
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .collect();
+        if cleaned.is_empty() {
+            None
+        } else {
+            Some(cleaned.join(","))
+        }
+    }
+    let mut args = Vec::new();
+    if let Some(list) = join(allow) {
+        args.push("--tools".to_string());
+        args.push(list);
+    }
+    if let Some(list) = join(deny) {
+        args.push("--exclude-tools".to_string());
+        args.push(list);
+    }
+    args
+}
+
 impl AcpClient {
     pub fn use_mock() -> bool {
         std::env::var("PI_APP_RPC")
@@ -193,10 +223,11 @@ impl AcpClient {
         session_data_mode: &str,
         opts: SpawnOptions,
     ) -> Result<(Arc<Self>, mpsc::UnboundedReceiver<AcpEvent>), AgentError> {
+        let settings = crate::store::load_settings();
         // API mode: if an ACP server address is configured, connect over TCP
         // instead of spawning a local CLI. The server drives an agent running
         // elsewhere (WSL/SSH/container) but speaks the identical ACP protocol.
-        if let Some(addr) = crate::store::load_settings()
+        if let Some(addr) = settings
             .acp_server_addr
             .as_deref()
             .map(str::trim)
@@ -234,6 +265,12 @@ impl AcpClient {
             ) {
                 cmd.args(["--thinking", e]);
             }
+        }
+        // Tool allow/deny lists come from durable settings, not per-send state:
+        // Pi applies them at process start only.
+        let filter = tool_filter_args(&settings.tools_allow, &settings.tools_deny);
+        if !filter.is_empty() {
+            cmd.args(&filter);
         }
         cmd.current_dir(&cwd)
             .stdin(Stdio::piped())
@@ -2011,6 +2048,32 @@ pub fn wire_pi_prompt_params(text: &str, images: &[(String, String)]) -> Value {
         "message": text,
         "images": images,
     })
+}
+
+#[cfg(test)]
+mod tool_filter_tests {
+    use super::*;
+
+    #[test]
+    fn empty_lists_omit_both_flags() {
+        assert!(tool_filter_args(&[], &[]).is_empty());
+        assert!(tool_filter_args(&["  ".into(), "".into()], &[]).is_empty());
+    }
+
+    #[test]
+    fn allow_and_deny_build_comma_lists() {
+        let args = tool_filter_args(&[" bash ".into(), "edit".into()], &["web_search".into()]);
+        assert_eq!(
+            args,
+            vec!["--tools", "bash,edit", "--exclude-tools", "web_search"]
+        );
+    }
+
+    #[test]
+    fn deny_alone_omits_allow_flag() {
+        let args = tool_filter_args(&[], &["web_fetch".into()]);
+        assert_eq!(args, vec!["--exclude-tools", "web_fetch"]);
+    }
 }
 
 #[cfg(test)]

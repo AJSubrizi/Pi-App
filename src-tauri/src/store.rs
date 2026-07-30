@@ -217,6 +217,14 @@ pub struct AppSettings {
     /// process (`--no-leader`). Advanced; multiple clients can share one backend.
     #[serde(default)]
     pub use_leader: bool,
+    /// Pi primitive `--tools`: allowlist of tool names enabled for spawned
+    /// agents (built-in, extension and custom). Empty → omit the flag.
+    #[serde(default)]
+    pub tools_allow: Vec<String>,
+    /// Pi primitive `--exclude-tools`: denylist of tool names disabled for
+    /// spawned agents. Empty → omit the flag.
+    #[serde(default)]
+    pub tools_deny: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -348,6 +356,8 @@ impl Default for AppSettings {
             subagents_enabled: true,
             preferred_agent: String::new(),
             use_leader: false,
+            tools_allow: Vec::new(),
+            tools_deny: Vec::new(),
         }
     }
 }
