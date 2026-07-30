@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.6] - 2026-07-30
+
+> **Highlight:** remote Pi runtimes, private local dictation and clearer usage history.
+
+### Added
+
+- **Remote Pi over SSH** - connect through the system OpenSSH client with host-key verification, ssh-agent support and an optional identity file.
+- **Direct RPC** - connect to authenticated managed Pi gateways over TLS-secured WebSockets.
+- **Local dictation** - transcribe prompts on-device with Parakeet or Whisper without reading assistant responses aloud.
+- **Annual usage view** - inspect estimated token activity across a full-year contribution-style timeline.
+- **Remote setup** - configure and verify SSH or Direct RPC during onboarding or from Settings.
+
+### Changed
+
+- **Thinking orbs** - clearer visual states for active reasoning and tool execution.
+- **Responsive Settings** - improved narrow-window navigation, remote forms and usage layouts.
+- **Documentation** - refreshed product screenshots, alpha status and thinking-orb attribution.
+
+### Security
+
+- Direct RPC requires `wss://`, rejects credentials embedded in URLs and keeps bearer tokens exclusively in the operating-system keychain.
+- Remote mode disables local files, Git, terminal and checkpoints so local tools cannot silently operate against a remote workspace.
+- SSH passwords and private-key contents are never stored by the app.
+
+### Notes
+
+- SSH remains the recommended remote connection for personal servers.
+- Direct RPC requires a compatible managed gateway implementing the documented JSONL-over-WebSocket protocol.
+
 ## [0.2.5] - 2026-07-29
 
 > **Highlight:** signed in-app updates and natural-language capability discovery.
