@@ -42,9 +42,25 @@ rebuild_updater_bundle() {
   echo "==> updater bundle: $tgz"
   # Tauri expects the .app at the tarball root.
   tar czf "$tgz" -C "$(dirname "$app")" "$(basename "$app")"
-  # Writes "$tgz.sig"; reads key/password from TAURI_SIGNING_PRIVATE_KEY[_PASSWORD].
-  pnpm --silent tauri signer sign "$tgz"
-  [[ -f "$tgz.sig" ]] || { echo "error: signer produced no $tgz.sig" >&2; return 1; }
+  # `-p` must be passed even for an unencrypted key: without it the signer opens
+  # an interactive password prompt, which on a CI runner fails immediately with
+  # "Device not configured (os error 6)".
+  #
+  # A signing failure must not abort the release: the DMG is already built and
+  # is uploaded by the caller after this returns. Losing auto-update for one
+  # release is recoverable; losing the download is not.
+  if ! pnpm --silent tauri signer sign \
+    --password "${TAURI_SIGNING_PRIVATE_KEY_PASSWORD:-}" \
+    "$tgz"; then
+    echo "warning: updater signing failed; DMG still ships, auto-update skipped" >&2
+    rm -f "$tgz" "$tgz.sig"
+    return 0
+  fi
+  if [[ ! -f "$tgz.sig" ]]; then
+    echo "warning: signer wrote no $tgz.sig; auto-update skipped" >&2
+    rm -f "$tgz"
+    return 0
+  fi
 }
 
 rebuild_dmg() {
