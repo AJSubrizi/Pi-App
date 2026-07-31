@@ -2291,6 +2291,8 @@ export interface AutomationDto {
   title: string;
   prompt: string;
   enabled: boolean;
+  /** `owner/name` to sweep instead of a local project. Empty for normal ones. */
+  repo?: string;
   projectId: string | null;
   modelId: string | null;
   effort: string | null;
@@ -2308,6 +2310,7 @@ export interface AutomationInputDto {
   title: string;
   prompt: string;
   enabled?: boolean;
+  repo?: string | null;
   projectId?: string | null;
   modelId?: string | null;
   effort?: string | null;

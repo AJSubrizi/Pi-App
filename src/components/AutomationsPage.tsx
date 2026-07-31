@@ -51,6 +51,8 @@ export interface AutomationsPageProps {
 type FormState = {
   title: string;
   prompt: string;
+  /** `owner/name`; empty means a normal project task. */
+  repo: string;
   projectId: string; // "" = none
   modelId: string;
   effort: string;
@@ -63,6 +65,7 @@ type FormState = {
 const emptyForm = (modelId: string, effort: string): FormState => ({
   title: "",
   prompt: "",
+  repo: "",
   projectId: "",
   modelId,
   effort,
@@ -193,6 +196,7 @@ export function AutomationsPage({
     setForm({
       title: auto.title,
       prompt: auto.prompt,
+      repo: auto.repo ?? "",
       projectId: auto.projectId ?? "",
       modelId: auto.modelId || defaultModelId,
       effort: auto.effort || defaultEffort,
@@ -226,9 +230,15 @@ export function AutomationsPage({
       weekdays: [],
       enabled: form.enabled,
     });
+    const repo = form.repo.trim();
+    if (repo && !/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(repo)) {
+      setError(t("pr.badRepo"));
+      return;
+    }
     const input: api.AutomationInputDto = {
       title,
       prompt,
+      repo: repo || null,
       enabled: form.enabled,
       projectId: form.projectId || null,
       modelId: form.modelId || null,
@@ -715,6 +725,22 @@ export function AutomationsPage({
                 }
                 placeholder={t("automations.field.promptPh")}
               />
+            </label>
+
+            <label className="auto-field">
+              <span>{t("prAuto.repo")}</span>
+              <input
+                type="text"
+                value={form.repo}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, repo: e.target.value }))
+                }
+                placeholder={t("prAuto.repoPlaceholder")}
+                spellCheck={false}
+                autoCapitalize="off"
+                autoCorrect="off"
+              />
+              <span className="auto-field__hint">{t("prAuto.repoDesc")}</span>
             </label>
 
             <div className="auto-panel__section">

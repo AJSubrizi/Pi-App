@@ -933,6 +933,13 @@ pub struct Automation {
     pub prompt: String,
     #[serde(default = "default_true")]
     pub enabled: bool,
+    /// Watch this `owner/name` repository instead of a local project.
+    ///
+    /// When set, the run sweeps the repository's open pull requests rather
+    /// than sending a fixed prompt. Empty for ordinary automations, so older
+    /// files load unchanged.
+    #[serde(default)]
+    pub repo: String,
     pub project_id: Option<String>,
     pub model_id: Option<String>,
     pub effort: Option<String>,
@@ -973,6 +980,8 @@ pub struct AutomationInput {
     pub title: String,
     pub prompt: String,
     pub enabled: Option<bool>,
+    /// `owner/name` to sweep instead of a local project (see [`Automation`]).
+    pub repo: Option<String>,
     pub project_id: Option<String>,
     pub model_id: Option<String>,
     pub effort: Option<String>,
@@ -1010,6 +1019,7 @@ pub fn create_automation(input: AutomationInput) -> Result<Automation, String> {
         title,
         prompt,
         enabled: input.enabled.unwrap_or(true),
+        repo: input.repo.unwrap_or_default().trim().to_string(),
         project_id: input.project_id,
         model_id: input.model_id,
         effort: input.effort,
@@ -1054,6 +1064,9 @@ pub fn update_automation(id: &str, input: AutomationInput) -> Result<Automation,
     auto.prompt = prompt.to_string();
     if let Some(e) = input.enabled {
         auto.enabled = e;
+    }
+    if let Some(r) = input.repo {
+        auto.repo = r.trim().to_string();
     }
     auto.project_id = input.project_id;
     auto.model_id = input.model_id;

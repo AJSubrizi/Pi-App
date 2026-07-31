@@ -11,6 +11,11 @@ export interface Automation {
   title: string;
   prompt: string;
   enabled: boolean;
+  /**
+   * `owner/name` to sweep instead of a project. When set, the run reviews the
+   * repository's new pull requests and `prompt` becomes extra instructions.
+   */
+  repo?: string;
   projectId: string | null;
   modelId: string | null;
   effort: string | null;

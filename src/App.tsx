@@ -301,6 +301,14 @@ import { UserMenu } from "@/components/UserMenu";
 import { WorkspaceSwitcher } from "@/components/WorkspaceSwitcher";
 import { PrTree, type PrRepoState } from "@/components/PrTree";
 import {
+  buildPrSweepPrompt,
+  isPrAutomation,
+  loadSeenPrs,
+  markPullsSeen,
+  saveSeenPrs,
+  unseenPulls,
+} from "@/lib/prSweep";
+import {
   parseTaskBatch,
   planTaskWaves,
   wrapTaskBatchAgentText,
@@ -3046,7 +3054,24 @@ export default function App() {
         }
 
         const header = `[Scheduled: ${auto.title}]\n\n`;
-        const promptBody = header + auto.prompt;
+        let body = auto.prompt;
+        // A PR automation watches a repository: build its prompt from the pull
+        // requests it has not handled yet, and skip the run when there are none
+        // rather than waking the agent to say "nothing to do".
+        let sweptNumbers: number[] = [];
+        if (isPrAutomation(auto)) {
+          const repo = (auto.repo || "").trim();
+          const pulls = await api.ghPrList({ repo });
+          const seen = loadSeenPrs(localStorage);
+          const fresh = unseenPulls(pulls, seen, auto.id);
+          if (fresh.length === 0) {
+            showToast(tr("prAuto.nothingNew", { repo }));
+            return false;
+          }
+          sweptNumbers = fresh.map((p) => p.number);
+          body = buildPrSweepPrompt(repo, fresh, auto.prompt);
+        }
+        const promptBody = header + body;
         const autoMsgs: ChatMessage[] = [
           {
             id: `u-auto-${Date.now()}`,
@@ -3068,6 +3093,14 @@ export default function App() {
 
         try {
           await api.sessionSend(promptBody);
+          // Only after the send lands: a failed run must be retried next time,
+          // not silently marked as handled.
+          if (sweptNumbers.length > 0) {
+            saveSeenPrs(
+              localStorage,
+              markPullsSeen(loadSeenPrs(localStorage), auto.id, sweptNumbers),
+            );
+          }
         } catch (sendErr) {
           const errText = String(sendErr);
           const failed: ChatMessage[] = [
