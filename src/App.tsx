@@ -298,7 +298,12 @@ import {
 import { Spinner } from "@/components/ui/spinner";
 import { UserMenu } from "@/components/UserMenu";
 import { WorkspaceSwitcher } from "@/components/WorkspaceSwitcher";
-import { PrTree, type PrRepoState } from "@/components/PrTree";
+import { PrTree } from "@/components/PrTree";
+import {
+  usePrWorkspace,
+  type PrWorkspaceDeps,
+} from "@/hooks/usePrWorkspace";
+import { useTaskBatch, type TaskBatchDeps } from "@/hooks/useTaskBatch";
 import {
   buildPrSweepPrompt,
   isPrAutomation,
@@ -309,19 +314,13 @@ import {
 } from "@/lib/prSweep";
 import {
   parseTaskBatch,
-  runTaskBatchWith,
   wrapTaskBatchAgentText,
   type ParallelTask,
-  type TaskRunnerDeps,
 } from "@/lib/parallelTasks";
 import {
   loadWorkspace,
   saveWorkspace,
   isComingSoon,
-  loadPrRepos,
-  savePrRepos,
-  addPrRepo,
-  removePrRepo,
   loadWorkspaceSkins,
   saveWorkspaceSkins,
   setWorkspaceSkin,
@@ -590,16 +589,6 @@ export default function App() {
   const [workspace, setWorkspace] = useState<WorkspaceId>(() =>
     loadWorkspace(localStorage),
   );
-  const [prRepos, setPrRepos] = useState<PrRepoState[]>(() =>
-    loadPrRepos(localStorage).map((slug) => ({
-      slug,
-      expanded: false,
-      loading: false,
-      pulls: null,
-      error: null,
-    })),
-  );
-  const [activePr, setActivePr] = useState<string | null>(null);
 
   /** Each workspace wears its own colour skin (Settings → Appearance). */
   const [workspaceSkins, setWorkspaceSkins] = useState<WorkspaceSkins>(() =>
@@ -5297,231 +5286,25 @@ export default function App() {
 
   // ── Parallel task batches ────────────────────────────────────────────────
 
-  type BatchEntry = ParallelTask & {
-    sessionId: string | null;
-    status: "pending" | "starting" | "running" | "failed";
-    error: string | null;
-  };
-  const [taskBatch, setTaskBatch] = useState<BatchEntry[]>([]);
+  const batch = useTaskBatch({
+    tr: tr as TaskBatchDeps["tr"],
+    showToast: (m, ms) => showToast(m, ms),
+    project: activeProject,
+    onStarted: refreshSessions,
+  });
 
-  /**
-   * Launch a batch, one wave at a time.
-   *
-   * Each task gets its own session and model. The host keeps a streaming
-   * session alive in its background pool when focus moves on, so the tasks in
-   * a wave really do run together; waves exist only because exceeding
-   * `maxConcurrentAgents` would have the host recycle a process mid-run.
-   */
-  /**
-   * Launch a batch. Orchestration lives in `runTaskBatchWith`, which is unit
-   * tested with fake host calls; this only supplies the real bindings and
-   * mirrors progress into the strip.
-   */
-  const runTaskBatch = useCallback(
-    async (tasks: ParallelTask[]) => {
-      if (tasks.length === 0) return;
-      const settings = await api.settingsGet().catch(() => null);
-      const cap = Math.max(1, settings?.maxConcurrentAgents ?? 3);
-
-      setTaskBatch(
-        tasks.map((t) => ({
-          ...t,
-          sessionId: null,
-          status: "pending" as const,
-          error: null,
-        })),
-      );
-
-      const deps: TaskRunnerDeps = {
-        createSession: async (title) =>
-          (await api.sessionCreate(activeProject?.id, title)) as { id: string },
-        setModel: async (sessionId, modelId) => {
-          await api.composerPrefsSet({
-            sessionId,
-            projectId: activeProject?.id ?? null,
-            modelId,
-          });
-        },
-        connect: async (sessionId) => {
-          const snap = await api.sessionConnect({
-            projectPath: activeProject?.path,
-            sessionId,
-            mode: "agent",
-          });
-          return {
-            ready: snap.state === "ready",
-            error: snap.lastError?.message,
-          };
-        },
-        send: async (prompt) => {
-          await api.sessionSend(prompt);
-        },
-      };
-
-      const outcomes = await runTaskBatchWith(deps, tasks, cap, (o) =>
-        setTaskBatch((prev) =>
-          prev.map((e) =>
-            e.title === o.title
-              ? {
-                  ...e,
-                  sessionId: o.sessionId,
-                  status: o.status,
-                  error: o.error,
-                  modelId: o.appliedModel,
-                }
-              : e,
-          ),
-        ),
-      );
-
-      await refreshSessions();
-      const started = outcomes.filter((o) => o.status === "running").length;
-      const failed = outcomes.length - started;
-      showToast(
-        failed > 0
-          ? tr("batch.startedPartial", { n: started, failed })
-          : tr("batch.started", { n: started }),
-        failed > 0 ? 6000 : 3200,
-      );
-    },
-    [activeProject, refreshSessions, showToast, tr],
-  );
-
-  runTaskBatchRef.current = (tasks: ParallelTask[]) => void runTaskBatch(tasks);
+  runTaskBatchRef.current = (tasks: ParallelTask[]) => void batch.run(tasks);
 
   // ── PR workspace ─────────────────────────────────────────────────────────
 
-  const persistPrRepos = useCallback((next: PrRepoState[]) => {
-    savePrRepos(localStorage, next.map((r) => r.slug));
-    return next;
-  }, []);
-
-  /** Expand a repository, loading its open PRs the first time only. */
-  const togglePrRepo = useCallback((slug: string) => {
-    setPrRepos((prev) =>
-      prev.map((r) => (r.slug === slug ? { ...r, expanded: !r.expanded } : r)),
-    );
-    setPrRepos((prev) => {
-      const repo = prev.find((r) => r.slug === slug);
-      // Already loaded, or collapsing: nothing to fetch.
-      if (!repo || !repo.expanded || repo.pulls !== null || repo.loading) {
-        return prev;
-      }
-      void (async () => {
-        try {
-          const pulls = await api.ghPrList({ repo: slug });
-          setPrRepos((cur) =>
-            cur.map((r) =>
-              r.slug === slug ? { ...r, loading: false, pulls, error: null } : r,
-            ),
-          );
-        } catch (e) {
-          setPrRepos((cur) =>
-            cur.map((r) =>
-              r.slug === slug
-                ? { ...r, loading: false, pulls: [], error: String(e) }
-                : r,
-            ),
-          );
-        }
-      })();
-      return prev.map((r) => (r.slug === slug ? { ...r, loading: true } : r));
-    });
-  }, []);
-
-  /** Pick a repository to follow, from the ones the account can reach. */
-  const openAddPrRepo = useCallback(async () => {
-    const gh = await api.ghAvailable(null);
-    if (!gh.installed) {
-      showToast(tr("reviewPr.ghMissing"), 6000);
-      return;
-    }
-    if (!gh.authenticated) {
-      showToast(tr("reviewPr.ghUnauthenticated"), 6000);
-      return;
-    }
-    let choices: string[] = [];
-    try {
-      choices = (await api.ghRepoList()).map((r) => r.nameWithOwner);
-    } catch (e) {
-      showToast(tr("pr.repoListFailed", { reason: String(e) }), 6000);
-      return;
-    }
-    setAppDialog({
-      kind: "prompt",
-      title: tr("pr.addRepo"),
-      message: choices.length
-        ? tr("pr.addRepoHint", { sample: choices.slice(0, 3).join(", ") })
-        : tr("pr.addRepoNoneFound"),
-      initial: "",
-      placeholder: "owner/name",
-      submitLabel: tr("pr.addRepoSubmit"),
-      onSubmit: (raw) => {
-        const slug = raw.trim();
-        if (!/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(slug)) {
-          showToast(tr("pr.badRepo"));
-          return;
-        }
-        setPrRepos((prev) => {
-          const slugs = addPrRepo(prev.map((r) => r.slug), slug);
-          if (slugs.length === prev.length) return prev;
-          return persistPrRepos([
-            ...prev,
-            { slug, expanded: true, loading: false, pulls: null, error: null },
-          ]);
-        });
-        // Expanding a fresh entry triggers its first load.
-        togglePrRepo(slug);
-        togglePrRepo(slug);
-      },
-    });
-  }, [persistPrRepos, showToast, togglePrRepo, tr]);
-
-  const removePrRepoAt = useCallback(
-    (slug: string) => {
-      setAppDialog({
-        kind: "confirm",
-        title: tr("pr.removeRepo"),
-        message: tr("pr.removeRepoConfirm", { name: slug }),
-        danger: true,
-        onConfirm: () => {
-          setPrRepos((prev) => {
-            const keep = removePrRepo(
-              prev.map((r) => r.slug),
-              slug,
-            );
-            return persistPrRepos(prev.filter((r) => keep.includes(r.slug)));
-          });
-        },
-      });
+  const pr = usePrWorkspace({
+    tr: tr as PrWorkspaceDeps["tr"],
+    showToast: (m, ms) => showToast(m, ms),
+    openDialog: (d) => setAppDialog(d as AppDialog),
+    startReviewChat: async (seedDraft) => {
+      await newChat(null, { seedDraft, switchToChat: true });
     },
-    [persistPrRepos, tr],
-  );
-
-  /** Open a review chat for one PR, reusing the /review-pr prompt. */
-  const openPrReview = useCallback(
-    async (slug: string, pr: { number: number; title: string }) => {
-      const id = `${slug}#${pr.number}`;
-      setActivePr(id);
-      showToast(tr("reviewPr.loading", { number: pr.number }));
-      try {
-        const full = await api.ghPrDiff({ repo: slug }, pr.number);
-        await newChat(null, {
-          seedDraft: buildPrReviewPrompt(full),
-          switchToChat: true,
-        });
-        showToast(
-          tr("reviewPr.ready", {
-            number: full.number,
-            files: full.changedFiles,
-          }),
-        );
-      } catch (e) {
-        showToast(tr("reviewPr.failed", { reason: String(e) }), 6000);
-      }
-    },
-    [showToast, tr],
-  );
+  });
 
   const openHandoffDialog = useCallback(
     (source?: SessionRow) => {
@@ -7843,8 +7626,8 @@ export default function App() {
           <OverlayScroll className="sidebar__scroll" viewportClassName="sidebar__scroll-inner">
             {workspace === "pr" ? (
               <PrTree
-                repos={prRepos}
-                activePr={activePr}
+                repos={pr.repos}
+                activePr={pr.activePr}
                 labels={{
                   repos: tr("pr.repos"),
                   addRepo: tr("pr.addRepo"),
@@ -7854,10 +7637,10 @@ export default function App() {
                   loading: tr("pr.loading"),
                   draft: tr("pr.draft"),
                 }}
-                onToggle={togglePrRepo}
-                onAddRepo={() => void openAddPrRepo()}
-                onRemoveRepo={removePrRepoAt}
-                onOpenPr={(slug, pr) => void openPrReview(slug, pr)}
+                onToggle={pr.toggleRepo}
+                onAddRepo={pr.addRepo}
+                onRemoveRepo={pr.removeRepo}
+                onOpenPr={pr.openReview}
               />
             ) : (
               <>
@@ -8666,9 +8449,9 @@ export default function App() {
             </div>
           </div>
 
-          {taskBatch.length > 0 ? (
+          {batch.entries.length > 0 ? (
             <div className="batch-strip" aria-label={tr("batch.title")}>
-              {taskBatch.map((t) => (
+              {batch.entries.map((t) => (
                 <span
                   key={t.title}
                   className={"batch-chip batch-chip--" + t.status}
