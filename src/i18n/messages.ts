@@ -1776,6 +1776,7 @@ const en = {
   "prAuto.repoDesc": "Set an owner/name repository and this task sweeps its new pull requests instead of running the prompt on a project.",
   "prAuto.repoPlaceholder": "owner/name (leave empty for a normal task)",
   "batch.started": "Started {n} tasks",
+  "batch.startedPartial": "Started {n} tasks · {failed} could not start",
   "batch.title": "Parallel tasks",
   "batch.pending": "Queued",
   "batch.starting": "Starting…",

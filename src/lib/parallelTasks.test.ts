@@ -6,9 +6,11 @@ import {
   parseTaskBatch,
   planTaskWaves,
   resolveTaskModel,
+  runTaskBatchWith,
   taskBatchAgentPrefix,
   wrapTaskBatchAgentText,
   type ParallelTask,
+  type TaskRunnerDeps,
 } from "./parallelTasks";
 
 const MODELS = ["auto", "grok-4.5", "gpt-5.6", "gpt-5.6-luna", "claude-opus-5"];
@@ -168,5 +170,141 @@ describe("agent prefix", () => {
     const w = wrapTaskBatchAgentText("  two things please  ");
     expect(w).toContain("User request:");
     expect(w).toContain("two things please");
+  });
+});
+
+describe("runTaskBatchWith", () => {
+  type Call = string;
+
+  function fakeDeps(over: Partial<TaskRunnerDeps> = {}) {
+    const calls: Call[] = [];
+    let n = 0;
+    const deps: TaskRunnerDeps = {
+      createSession: async (title) => {
+        calls.push(`create:${title}`);
+        return { id: `s${++n}` };
+      },
+      setModel: async (id, model) => {
+        calls.push(`model:${id}=${model}`);
+      },
+      connect: async (id) => {
+        calls.push(`connect:${id}`);
+        return { ready: true };
+      },
+      send: async (prompt) => {
+        calls.push(`send:${prompt}`);
+      },
+      ...over,
+    };
+    return { deps, calls };
+  }
+
+  const task = (title: string, modelId: string | null = null): ParallelTask => ({
+    title,
+    prompt: `do ${title}`,
+    modelId,
+  });
+
+  it("creates, models, connects and sends each task in order", async () => {
+    const { deps, calls } = fakeDeps();
+    const out = await runTaskBatchWith(deps, [task("a", "grok-4.5")], 3);
+
+    expect(calls).toEqual([
+      "create:a",
+      "model:s1=grok-4.5",
+      "connect:s1",
+      "send:do a",
+    ]);
+    expect(out).toEqual([
+      {
+        title: "a",
+        sessionId: "s1",
+        status: "running",
+        appliedModel: "grok-4.5",
+        error: null,
+      },
+    ]);
+  });
+
+  it("skips the model step when the task did not name one", async () => {
+    const { deps, calls } = fakeDeps();
+    await runTaskBatchWith(deps, [task("a")], 3);
+    expect(calls.some((c) => c.startsWith("model:"))).toBe(false);
+  });
+
+  it("gives every task its own model", async () => {
+    const { deps, calls } = fakeDeps();
+    await runTaskBatchWith(
+      deps,
+      [task("a", "grok-4.5"), task("b", "gpt-5.6-luna")],
+      3,
+    );
+    expect(calls).toContain("model:s1=grok-4.5");
+    expect(calls).toContain("model:s2=gpt-5.6-luna");
+  });
+
+  it("runs the task anyway when setting the model fails", async () => {
+    const { deps, calls } = fakeDeps({
+      setModel: async () => {
+        throw new Error("prefs unavailable");
+      },
+    });
+    const out = await runTaskBatchWith(deps, [task("a", "grok-4.5")], 3);
+    expect(out[0]!.status).toBe("running");
+    expect(out[0]!.appliedModel).toBeNull();
+    expect(calls).toContain("send:do a");
+  });
+
+  it("reports a connect that never became ready", async () => {
+    const { deps, calls } = fakeDeps({
+      connect: async () => ({ ready: false, error: "AGENT_CRASHED" }),
+    });
+    const out = await runTaskBatchWith(deps, [task("a")], 3);
+    expect(out[0]!.status).toBe("failed");
+    expect(out[0]!.error).toBe("AGENT_CRASHED");
+    expect(calls.some((c) => c.startsWith("send:"))).toBe(false);
+  });
+
+  it("keeps going after one task fails — a batch is not a transaction", async () => {
+    let attempt = 0;
+    const { deps } = fakeDeps({
+      createSession: async () => {
+        attempt += 1;
+        if (attempt === 1) throw new Error("store locked");
+        return { id: `s${attempt}` };
+      },
+    });
+    const out = await runTaskBatchWith(deps, [task("a"), task("b")], 3);
+    expect(out.map((o) => o.status)).toEqual(["failed", "running"]);
+    expect(out[0]!.error).toBe("store locked");
+  });
+
+  it("respects the process cap across waves without losing a task", async () => {
+    const { deps, calls } = fakeDeps();
+    const tasks = [task("a"), task("b"), task("c"), task("d")];
+    const out = await runTaskBatchWith(deps, tasks, 2);
+    expect(out).toHaveLength(4);
+    expect(out.every((o) => o.status === "running")).toBe(true);
+    expect(calls.filter((c) => c.startsWith("create:"))).toEqual([
+      "create:a",
+      "create:b",
+      "create:c",
+      "create:d",
+    ]);
+  });
+
+  it("reports progress as each task settles", async () => {
+    const { deps } = fakeDeps();
+    const seen: string[] = [];
+    await runTaskBatchWith(deps, [task("a"), task("b")], 3, (o) =>
+      seen.push(`${o.title}:${o.status}`),
+    );
+    expect(seen).toEqual(["a:running", "b:running"]);
+  });
+
+  it("does nothing for an empty batch", async () => {
+    const { deps, calls } = fakeDeps();
+    expect(await runTaskBatchWith(deps, [], 3)).toEqual([]);
+    expect(calls).toEqual([]);
   });
 });

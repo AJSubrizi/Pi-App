@@ -190,3 +190,78 @@ export function looksLikeParallelIntent(text: string): boolean {
     /\buse\s+\S+\s+for\b.*\buse\s+\S+\s+for\b/is.test(t)
   );
 }
+
+// ── Running a batch ────────────────────────────────────────────────────────
+
+/**
+ * The host calls a batch run needs. Injected so the orchestration can be
+ * tested without an agent: `App.tsx` passes the real Tauri bindings.
+ */
+export interface TaskRunnerDeps {
+  createSession(title: string): Promise<{ id: string }>;
+  /** Soft: a failure here costs the model choice, not the task. */
+  setModel(sessionId: string, modelId: string): Promise<void>;
+  connect(sessionId: string): Promise<{ ready: boolean; error?: string }>;
+  send(prompt: string): Promise<void>;
+}
+
+export type TaskOutcome = {
+  title: string;
+  sessionId: string | null;
+  status: "running" | "failed";
+  /** Model actually applied; null when none was asked for or it failed. */
+  appliedModel: string | null;
+  error: string | null;
+};
+
+/**
+ * Start every task, wave by wave.
+ *
+ * One task failing must not stop the rest — a batch is several independent
+ * jobs, not a transaction. Each outcome is reported so the UI can show which
+ * ones took and which did not.
+ */
+export async function runTaskBatchWith(
+  deps: TaskRunnerDeps,
+  tasks: ParallelTask[],
+  maxConcurrent: number,
+  onProgress?: (outcome: TaskOutcome) => void,
+): Promise<TaskOutcome[]> {
+  const results: TaskOutcome[] = [];
+
+  for (const wave of planTaskWaves(tasks, maxConcurrent)) {
+    for (const task of wave) {
+      const outcome: TaskOutcome = {
+        title: task.title,
+        sessionId: null,
+        status: "failed",
+        appliedModel: null,
+        error: null,
+      };
+      try {
+        const { id } = await deps.createSession(task.title);
+        outcome.sessionId = id;
+
+        if (task.modelId) {
+          try {
+            await deps.setModel(id, task.modelId);
+            outcome.appliedModel = task.modelId;
+          } catch {
+            // The task still runs, just on the default model.
+          }
+        }
+
+        const conn = await deps.connect(id);
+        if (!conn.ready) throw new Error(conn.error || "connect failed");
+
+        await deps.send(task.prompt);
+        outcome.status = "running";
+      } catch (e) {
+        outcome.error = e instanceof Error ? e.message : String(e);
+      }
+      results.push(outcome);
+      onProgress?.(outcome);
+    }
+  }
+  return results;
+}

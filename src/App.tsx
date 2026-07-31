@@ -310,9 +310,10 @@ import {
 } from "@/lib/prSweep";
 import {
   parseTaskBatch,
-  planTaskWaves,
+  runTaskBatchWith,
   wrapTaskBatchAgentText,
   type ParallelTask,
+  type TaskRunnerDeps,
 } from "@/lib/parallelTasks";
 import {
   loadWorkspace,
@@ -5312,6 +5313,11 @@ export default function App() {
    * a wave really do run together; waves exist only because exceeding
    * `maxConcurrentAgents` would have the host recycle a process mid-run.
    */
+  /**
+   * Launch a batch. Orchestration lives in `runTaskBatchWith`, which is unit
+   * tested with fake host calls; this only supplies the real bindings and
+   * mirrors progress into the strip.
+   */
   const runTaskBatch = useCallback(
     async (tasks: ParallelTask[]) => {
       if (tasks.length === 0) return;
@@ -5327,47 +5333,57 @@ export default function App() {
         })),
       );
 
-      const mark = (title: string, patch: Partial<BatchEntry>) =>
-        setTaskBatch((prev) =>
-          prev.map((e) => (e.title === title ? { ...e, ...patch } : e)),
-        );
+      const deps: TaskRunnerDeps = {
+        createSession: async (title) =>
+          (await api.sessionCreate(activeProject?.id, title)) as { id: string },
+        setModel: async (sessionId, modelId) => {
+          await api.composerPrefsSet({
+            sessionId,
+            projectId: activeProject?.id ?? null,
+            modelId,
+          });
+        },
+        connect: async (sessionId) => {
+          const snap = await api.sessionConnect({
+            projectPath: activeProject?.path,
+            sessionId,
+            mode: "agent",
+          });
+          return {
+            ready: snap.state === "ready",
+            error: snap.lastError?.message,
+          };
+        },
+        send: async (prompt) => {
+          await api.sessionSend(prompt);
+        },
+      };
 
-      for (const wave of planTaskWaves(tasks, cap)) {
-        for (const task of wave) {
-          mark(task.title, { status: "starting" });
-          try {
-            const meta = (await api.sessionCreate(
-              activeProject?.id,
-              task.title,
-            )) as { id: string };
-            if (task.modelId) {
-              await api
-                .composerPrefsSet({
-                  sessionId: meta.id,
-                  projectId: activeProject?.id ?? null,
-                  modelId: task.modelId,
-                })
-                .catch(() => {
-                  /* soft-fail: the task still runs on the default model */
-                });
-            }
-            const snap = await api.sessionConnect({
-              projectPath: activeProject?.path,
-              sessionId: meta.id,
-              mode: "agent",
-            });
-            if (snap.state !== "ready") {
-              throw new Error(snap.lastError?.message || "connect failed");
-            }
-            await api.sessionSend(task.prompt);
-            mark(task.title, { status: "running", sessionId: meta.id });
-          } catch (e) {
-            mark(task.title, { status: "failed", error: String(e) });
-          }
-        }
-      }
+      const outcomes = await runTaskBatchWith(deps, tasks, cap, (o) =>
+        setTaskBatch((prev) =>
+          prev.map((e) =>
+            e.title === o.title
+              ? {
+                  ...e,
+                  sessionId: o.sessionId,
+                  status: o.status,
+                  error: o.error,
+                  modelId: o.appliedModel,
+                }
+              : e,
+          ),
+        ),
+      );
+
       await refreshSessions();
-      showToast(tr("batch.started", { n: tasks.length }));
+      const started = outcomes.filter((o) => o.status === "running").length;
+      const failed = outcomes.length - started;
+      showToast(
+        failed > 0
+          ? tr("batch.startedPartial", { n: started, failed })
+          : tr("batch.started", { n: started }),
+        failed > 0 ? 6000 : 3200,
+      );
     },
     [activeProject, refreshSessions, showToast, tr],
   );
