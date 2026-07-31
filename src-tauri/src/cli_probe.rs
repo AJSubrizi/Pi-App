@@ -323,6 +323,30 @@ pub fn probe_cli(manual_path: Option<&str>) -> CliProbeResult {
 mod tests {
     use super::*;
 
+    /// Regression: an installed Pi must be found wherever npm put it.
+    ///
+    /// The setup gate turns `found == false` straight into the "Install Pi"
+    /// screen, so a probe miss is indistinguishable from a missing install —
+    /// which is exactly what happened when a Node version manager owned the
+    /// global bin.
+    #[test]
+    fn probe_finds_pi_installed_under_a_node_manager() {
+        let home = crate::process_util::user_home();
+        let installed = crate::process_util::node_manager_bin_dirs(&home)
+            .iter()
+            .any(|d| crate::process_util::looks_runnable(&d.join("pi")));
+        if !installed {
+            eprintln!("skip: no version-manager pi on this machine");
+            return;
+        }
+        let r = probe_cli(None);
+        assert!(
+            r.found,
+            "pi is installed under a Node manager but the probe missed it; tried: {:?}",
+            r.candidates_tried
+        );
+    }
+
     #[test]
     fn probe_returns_structure() {
         let r = probe_cli(None);
