@@ -437,6 +437,124 @@ pub async fn gh_pr_create(
 mod tests {
     use super::*;
 
+    /// Live check against a real repository, opt-in like the RPC handshake
+    /// test: `PI_APP_LIVE_GH=1 cargo test live_gh -- --nocapture`.
+    ///
+    /// Exercises what unit tests cannot — that the `--json` field names are
+    /// real, that `--repo` targeting works without a checkout, and that a diff
+    /// actually comes back. Read-only; it never touches a remote.
+    #[tokio::test]
+    async fn live_gh_reads_a_real_pull_request() {
+        if std::env::var("PI_APP_LIVE_GH").ok().as_deref() != Some("1") {
+            eprintln!("skip live gh (set PI_APP_LIVE_GH=1)");
+            return;
+        }
+        const REPO: &str = "cli/cli";
+
+        let avail = gh_available(None).await.expect("availability");
+        assert!(avail.installed, "gh must be installed: {:?}", avail.reason);
+        assert!(
+            avail.authenticated,
+            "gh must be signed in: {:?}",
+            avail.reason
+        );
+        eprintln!("gh: {}", avail.version.clone().unwrap_or_default());
+
+        let repos = gh_repo_list(Some(5)).await.expect("repo list");
+        eprintln!("repos reachable: {}", repos.len());
+        assert!(repos.iter().all(|r| r.name_with_owner.contains('/')));
+
+        let pulls = gh_pr_list(None, Some(REPO.into()), Some(5))
+            .await
+            .expect("pr list");
+        assert!(!pulls.is_empty(), "{REPO} should have open PRs");
+        let first = &pulls[0];
+        eprintln!("PR #{} {}", first.number, first.title);
+        assert!(!first.title.is_empty());
+        assert!(!first.base_ref.is_empty(), "baseRefName must map");
+        assert!(!first.author.is_empty(), "author.login must map");
+
+        let diff = gh_pr_diff(None, Some(REPO.into()), first.number)
+            .await
+            .expect("pr diff");
+        eprintln!(
+            "diff: {} bytes, {} files, truncated={}",
+            diff.diff.len(),
+            diff.changed_files,
+            diff.truncated
+        );
+        assert_eq!(diff.number, first.number);
+        assert!(!diff.diff.is_empty(), "a diff must come back");
+        assert!(diff.diff.contains("diff --git"), "must be a unified diff");
+        assert!(diff.changed_files > 0, "changedFiles must map");
+    }
+
+    /// The frontend reads these structs by field name; a rename here that the
+    /// TS interface does not mirror is a runtime `undefined`, invisible to
+    /// both compilers.
+    #[test]
+    fn serialised_field_names_match_the_typescript_interfaces() {
+        let repo = GhRepo {
+            name_with_owner: "o/r".into(),
+            name: "r".into(),
+            owner: "o".into(),
+            description: String::new(),
+            is_private: false,
+            updated_at: String::new(),
+            url: String::new(),
+        };
+        let v = serde_json::to_value(&repo).unwrap();
+        for key in ["nameWithOwner", "isPrivate", "updatedAt"] {
+            assert!(v.get(key).is_some(), "GhRepo must serialise {key}");
+        }
+
+        let pr = GhPullRequest {
+            number: 1,
+            title: String::new(),
+            author: String::new(),
+            base_ref: "main".into(),
+            head_ref: "x".into(),
+            is_draft: true,
+            url: String::new(),
+        };
+        let v = serde_json::to_value(&pr).unwrap();
+        for key in ["baseRefName", "headRefName", "isDraft"] {
+            // The TS interface uses baseRef/headRef; assert the real shape so a
+            // mismatch fails here rather than silently in the sidebar.
+            let _ = key;
+        }
+        assert!(
+            v.get("baseRef").is_some(),
+            "GhPullRequest must serialise baseRef"
+        );
+        assert!(
+            v.get("headRef").is_some(),
+            "GhPullRequest must serialise headRef"
+        );
+        assert!(
+            v.get("isDraft").is_some(),
+            "GhPullRequest must serialise isDraft"
+        );
+
+        let diff = GhPrDiff {
+            number: 1,
+            title: String::new(),
+            body: String::new(),
+            base_ref: String::new(),
+            head_ref: String::new(),
+            url: String::new(),
+            diff: String::new(),
+            truncated: true,
+            changed_files: 3,
+        };
+        let v = serde_json::to_value(&diff).unwrap();
+        assert!(
+            v.get("changedFiles").is_some(),
+            "GhPrDiff must serialise changedFiles"
+        );
+        assert!(v.get("truncated").is_some());
+    }
+
     #[test]
     fn repo_slug_accepts_owner_name_only() {
         assert!(is_repo_slug("AJSubrizi/Pi-App"));
