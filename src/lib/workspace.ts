@@ -162,3 +162,61 @@ export function setWorkspaceSkin(
 export function workspaceSkin(skins: WorkspaceSkins, id: WorkspaceId): string {
   return skins[id] ?? DEFAULT_WORKSPACE_SKINS[id];
 }
+
+// ── PR workspace: selected repositories ────────────────────────────────────
+
+export const PR_REPOS_STORAGE_KEY = "pi-app.pr-repos";
+
+/**
+ * Repositories pinned into the PR workspace tree, as `owner/name`.
+ *
+ * The analogue of projects in the Code workspace: the user picks which ones to
+ * follow, and order is theirs to keep.
+ */
+export function loadPrRepos(storage: WorkspaceStorage): string[] {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(storage.getItem(PR_REPOS_STORAGE_KEY) || "null");
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const v of raw) {
+    if (typeof v !== "string") continue;
+    const slug = v.trim();
+    // Same shape the host enforces before the value reaches `gh`.
+    if (!/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(slug)) continue;
+    const key = slug.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(slug);
+  }
+  return out;
+}
+
+export function savePrRepos(
+  storage: WorkspaceStorage,
+  repos: string[],
+): void {
+  try {
+    storage.setItem(PR_REPOS_STORAGE_KEY, JSON.stringify(repos));
+  } catch {
+    // Private mode / quota: the selection still holds for this session.
+  }
+}
+
+/** Add a repository, keeping order and ignoring case-insensitive duplicates. */
+export function addPrRepo(repos: string[], slug: string): string[] {
+  const clean = slug.trim();
+  if (!clean) return repos;
+  const key = clean.toLowerCase();
+  if (repos.some((r) => r.toLowerCase() === key)) return repos;
+  return [...repos, clean];
+}
+
+export function removePrRepo(repos: string[], slug: string): string[] {
+  const key = slug.trim().toLowerCase();
+  return repos.filter((r) => r.toLowerCase() !== key);
+}

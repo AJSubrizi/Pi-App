@@ -2873,16 +2873,49 @@ export interface GhOpResult {
   reason?: string | null;
 }
 
-export async function ghAvailable(projectPath: string) {
-  return invoke<GhAvailability>("gh_available", { projectPath });
+export interface GhRepo {
+  nameWithOwner: string;
+  name: string;
+  owner: string;
+  description: string;
+  isPrivate: boolean;
+  updatedAt: string;
+  url: string;
 }
 
-export async function ghPrList(projectPath: string, limit?: number) {
-  return invoke<GhPullRequest[]>("gh_pr_list", { projectPath, limit });
+/** Omit `projectPath` to probe without a checkout (PR workspace). */
+export async function ghAvailable(projectPath?: string | null) {
+  return invoke<GhAvailability>("gh_available", {
+    projectPath: projectPath ?? null,
+  });
 }
 
-export async function ghPrDiff(projectPath: string, number: number) {
-  return invoke<GhPrDiff>("gh_pr_diff", { projectPath, number });
+/** Repositories the signed-in user can reach. */
+export async function ghRepoList(limit?: number) {
+  return invoke<GhRepo[]>("gh_repo_list", { limit });
+}
+
+/** Target a local checkout (`projectPath`) or a repository (`owner/name`). */
+export async function ghPrList(
+  target: { projectPath?: string | null; repo?: string | null },
+  limit?: number,
+) {
+  return invoke<GhPullRequest[]>("gh_pr_list", {
+    projectPath: target.projectPath ?? null,
+    repo: target.repo ?? null,
+    limit,
+  });
+}
+
+export async function ghPrDiff(
+  target: { projectPath?: string | null; repo?: string | null },
+  number: number,
+) {
+  return invoke<GhPrDiff>("gh_pr_diff", {
+    projectPath: target.projectPath ?? null,
+    repo: target.repo ?? null,
+    number,
+  });
 }
 
 /** Publishes to the remote — confirm with the user before calling. */

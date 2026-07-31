@@ -310,6 +310,7 @@ pub fn run() {
             commands::git_worktree_gc,
             commands::git_show_file,
             gh_cli::gh_available,
+            gh_cli::gh_repo_list,
             gh_cli::gh_pr_list,
             gh_cli::gh_pr_diff,
             gh_cli::gh_pr_create,

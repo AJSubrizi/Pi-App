@@ -16,6 +16,11 @@ import {
   saveWorkspaceSkins,
   setWorkspaceSkin,
   workspaceSkin,
+  PR_REPOS_STORAGE_KEY,
+  loadPrRepos,
+  savePrRepos,
+  addPrRepo,
+  removePrRepo,
   type WorkspaceStorage,
 } from "./workspace";
 
@@ -172,5 +177,58 @@ describe("per-workspace skins", () => {
   it("reads a single workspace with a default fallback", () => {
     expect(workspaceSkin(DEFAULT_WORKSPACE_SKINS, "pr")).toBe("ocean");
     expect(workspaceSkin({} as never, "design")).toBe("rose");
+  });
+});
+
+describe("PR workspace repositories", () => {
+  it("round-trips a selection", () => {
+    const s = memoryStorage();
+    savePrRepos(s, ["AJSubrizi/Pi-App", "o/r"]);
+    expect(loadPrRepos(s)).toEqual(["AJSubrizi/Pi-App", "o/r"]);
+  });
+
+  it("returns empty for absent or malformed storage", () => {
+    expect(loadPrRepos(memoryStorage())).toEqual([]);
+    expect(
+      loadPrRepos(memoryStorage({ [PR_REPOS_STORAGE_KEY]: "{oops" })),
+    ).toEqual([]);
+    expect(
+      loadPrRepos(memoryStorage({ [PR_REPOS_STORAGE_KEY]: '"a string"' })),
+    ).toEqual([]);
+  });
+
+  it("drops entries that are not owner/name", () => {
+    const s = memoryStorage({
+      [PR_REPOS_STORAGE_KEY]: JSON.stringify([
+        "good/repo",
+        "noslash",
+        "--repo=evil",
+        "o/r/extra",
+        42,
+        "",
+      ]),
+    });
+    expect(loadPrRepos(s)).toEqual(["good/repo"]);
+  });
+
+  it("de-duplicates case-insensitively while keeping the first spelling", () => {
+    const s = memoryStorage({
+      [PR_REPOS_STORAGE_KEY]: JSON.stringify(["O/R", "o/r"]),
+    });
+    expect(loadPrRepos(s)).toEqual(["O/R"]);
+  });
+
+  it("adds without duplicating and preserves order", () => {
+    let repos: string[] = [];
+    repos = addPrRepo(repos, "a/one");
+    repos = addPrRepo(repos, "b/two");
+    repos = addPrRepo(repos, "A/ONE");
+    expect(repos).toEqual(["a/one", "b/two"]);
+    expect(addPrRepo(repos, "   ")).toBe(repos);
+  });
+
+  it("removes case-insensitively", () => {
+    expect(removePrRepo(["a/one", "b/two"], "A/ONE")).toEqual(["b/two"]);
+    expect(removePrRepo(["a/one"], "nope/x")).toEqual(["a/one"]);
   });
 });

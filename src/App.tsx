@@ -299,10 +299,15 @@ import {
 import { Spinner } from "@/components/ui/spinner";
 import { UserMenu } from "@/components/UserMenu";
 import { WorkspaceSwitcher } from "@/components/WorkspaceSwitcher";
+import { PrTree, type PrRepoState } from "@/components/PrTree";
 import {
   loadWorkspace,
   saveWorkspace,
   isComingSoon,
+  loadPrRepos,
+  savePrRepos,
+  addPrRepo,
+  removePrRepo,
   loadWorkspaceSkins,
   saveWorkspaceSkins,
   setWorkspaceSkin,
@@ -571,6 +576,17 @@ export default function App() {
   const [workspace, setWorkspace] = useState<WorkspaceId>(() =>
     loadWorkspace(localStorage),
   );
+  const [prRepos, setPrRepos] = useState<PrRepoState[]>(() =>
+    loadPrRepos(localStorage).map((slug) => ({
+      slug,
+      expanded: false,
+      loading: false,
+      pulls: null,
+      error: null,
+    })),
+  );
+  const [activePr, setActivePr] = useState<string | null>(null);
+
   /** Each workspace wears its own colour skin (Settings → Appearance). */
   const [workspaceSkins, setWorkspaceSkins] = useState<WorkspaceSkins>(() =>
     loadWorkspaceSkins(localStorage, isThemeSkinId),
@@ -5175,7 +5191,7 @@ export default function App() {
         }
         showToast(tr("reviewPr.loading", { number: ref.number }));
         try {
-          const pr = await api.ghPrDiff(projectPath, ref.number);
+          const pr = await api.ghPrDiff({ projectPath }, ref.number);
           await newChat(activeProject, {
             seedDraft: buildPrReviewPrompt(pr),
             switchToChat: true,
@@ -5192,6 +5208,141 @@ export default function App() {
       },
     });
   }, [activeProject, showToast, tr]);
+
+
+  // ── PR workspace ─────────────────────────────────────────────────────────
+
+  const persistPrRepos = useCallback((next: PrRepoState[]) => {
+    savePrRepos(localStorage, next.map((r) => r.slug));
+    return next;
+  }, []);
+
+  /** Expand a repository, loading its open PRs the first time only. */
+  const togglePrRepo = useCallback((slug: string) => {
+    setPrRepos((prev) =>
+      prev.map((r) => (r.slug === slug ? { ...r, expanded: !r.expanded } : r)),
+    );
+    setPrRepos((prev) => {
+      const repo = prev.find((r) => r.slug === slug);
+      // Already loaded, or collapsing: nothing to fetch.
+      if (!repo || !repo.expanded || repo.pulls !== null || repo.loading) {
+        return prev;
+      }
+      void (async () => {
+        try {
+          const pulls = await api.ghPrList({ repo: slug });
+          setPrRepos((cur) =>
+            cur.map((r) =>
+              r.slug === slug ? { ...r, loading: false, pulls, error: null } : r,
+            ),
+          );
+        } catch (e) {
+          setPrRepos((cur) =>
+            cur.map((r) =>
+              r.slug === slug
+                ? { ...r, loading: false, pulls: [], error: String(e) }
+                : r,
+            ),
+          );
+        }
+      })();
+      return prev.map((r) => (r.slug === slug ? { ...r, loading: true } : r));
+    });
+  }, []);
+
+  /** Pick a repository to follow, from the ones the account can reach. */
+  const openAddPrRepo = useCallback(async () => {
+    const gh = await api.ghAvailable(null);
+    if (!gh.installed) {
+      showToast(tr("reviewPr.ghMissing"), 6000);
+      return;
+    }
+    if (!gh.authenticated) {
+      showToast(tr("reviewPr.ghUnauthenticated"), 6000);
+      return;
+    }
+    let choices: string[] = [];
+    try {
+      choices = (await api.ghRepoList()).map((r) => r.nameWithOwner);
+    } catch (e) {
+      showToast(tr("pr.repoListFailed", { reason: String(e) }), 6000);
+      return;
+    }
+    setAppDialog({
+      kind: "prompt",
+      title: tr("pr.addRepo"),
+      message: choices.length
+        ? tr("pr.addRepoHint", { sample: choices.slice(0, 3).join(", ") })
+        : tr("pr.addRepoNoneFound"),
+      initial: "",
+      placeholder: "owner/name",
+      submitLabel: tr("pr.addRepoSubmit"),
+      onSubmit: (raw) => {
+        const slug = raw.trim();
+        if (!/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(slug)) {
+          showToast(tr("pr.badRepo"));
+          return;
+        }
+        setPrRepos((prev) => {
+          const slugs = addPrRepo(prev.map((r) => r.slug), slug);
+          if (slugs.length === prev.length) return prev;
+          return persistPrRepos([
+            ...prev,
+            { slug, expanded: true, loading: false, pulls: null, error: null },
+          ]);
+        });
+        // Expanding a fresh entry triggers its first load.
+        togglePrRepo(slug);
+        togglePrRepo(slug);
+      },
+    });
+  }, [persistPrRepos, showToast, togglePrRepo, tr]);
+
+  const removePrRepoAt = useCallback(
+    (slug: string) => {
+      setAppDialog({
+        kind: "confirm",
+        title: tr("pr.removeRepo"),
+        message: tr("pr.removeRepoConfirm", { name: slug }),
+        danger: true,
+        onConfirm: () => {
+          setPrRepos((prev) => {
+            const keep = removePrRepo(
+              prev.map((r) => r.slug),
+              slug,
+            );
+            return persistPrRepos(prev.filter((r) => keep.includes(r.slug)));
+          });
+        },
+      });
+    },
+    [persistPrRepos, tr],
+  );
+
+  /** Open a review chat for one PR, reusing the /review-pr prompt. */
+  const openPrReview = useCallback(
+    async (slug: string, pr: { number: number; title: string }) => {
+      const id = `${slug}#${pr.number}`;
+      setActivePr(id);
+      showToast(tr("reviewPr.loading", { number: pr.number }));
+      try {
+        const full = await api.ghPrDiff({ repo: slug }, pr.number);
+        await newChat(null, {
+          seedDraft: buildPrReviewPrompt(full),
+          switchToChat: true,
+        });
+        showToast(
+          tr("reviewPr.ready", {
+            number: full.number,
+            files: full.changedFiles,
+          }),
+        );
+      } catch (e) {
+        showToast(tr("reviewPr.failed", { reason: String(e) }), 6000);
+      }
+    },
+    [showToast, tr],
+  );
 
   const openHandoffDialog = useCallback(
     (source?: SessionRow) => {
@@ -7493,7 +7644,9 @@ export default function App() {
               <span className="nav-item__icon">
                 <IconNewChat size={16} />
               </span>
-              {tr("sidebar.newSession")}
+              {workspace === "pr"
+                ? tr("pr.newReview")
+                : tr("sidebar.newSession")}
             </button>
             <button
               type="button"
@@ -7511,6 +7664,26 @@ export default function App() {
           </div>
 
           <OverlayScroll className="sidebar__scroll" viewportClassName="sidebar__scroll-inner">
+            {workspace === "pr" ? (
+              <PrTree
+                repos={prRepos}
+                activePr={activePr}
+                labels={{
+                  repos: tr("pr.repos"),
+                  addRepo: tr("pr.addRepo"),
+                  removeRepo: tr("pr.removeRepo"),
+                  empty: tr("pr.empty"),
+                  noPulls: tr("pr.noPulls"),
+                  loading: tr("pr.loading"),
+                  draft: tr("pr.draft"),
+                }}
+                onToggle={togglePrRepo}
+                onAddRepo={() => void openAddPrRepo()}
+                onRemoveRepo={removePrRepoAt}
+                onOpenPr={(slug, pr) => void openPrReview(slug, pr)}
+              />
+            ) : (
+              <>
             {/* L1 — Projects section */}
             <div className="tree-l1">
               <button
@@ -7945,6 +8118,8 @@ export default function App() {
                 }}
               />
             ) : null}
+              </>
+            )}
           </OverlayScroll>
 
           <WorkspaceSwitcher
