@@ -7,12 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.2.11] - 2026-07-30
+## [0.2.12] - 2026-07-30
+
+### Added
+
+- **Review a pull request** - `/review-pr` takes a PR number or URL, fetches the diff through the GitHub CLI and opens a chat already seeded with a review prompt.
+- **Open a pull request after pushing** - Commit & Push gains an opt-in checkbox that creates the PR and shows its link, with the title and body taken from the commit message.
+- **Tool allow/deny lists** - `toolsAllow` / `toolsDeny` settings map onto Pi's own `--tools` / `--exclude-tools`, so tool gating uses the CLI primitive instead of a parallel mechanism.
 
 ### Changed
 
-- **Simpler macOS release** - the DMG is now published exactly as Tauri bundles it. The custom re-sign and rebuild step was repairing a signature problem current Tauri no longer produces, and its own failures were the only thing breaking macOS builds in 0.2.9 and 0.2.10.
-- **Install instructions on the release page** - the macOS first-launch command now appears in the release notes, before download, instead of inside the disk image.
+- **English only** - the tray, the Windows installer and the native dialogs no longer carry a second language the app never actually offered.
+- **Agent documentation in English** - the four internal wiki pages are translated, and the model/permission page now matches the CLI the app really spawns.
+
+### Fixed
+
+- **Automation composer** - the scheduling hint appeared in Chinese inside an otherwise English interface.
+- **macOS builds** - the custom re-sign step was repairing a signature problem current Tauri no longer produces, and its own failures were the only thing breaking macOS in 0.2.9 and 0.2.10. The DMG is now published exactly as Tauri bundles it, and the first-launch command appears in these release notes, before download, instead of inside the disk image.
 
 ## [0.2.10] - 2026-07-30
 
