@@ -527,7 +527,3 @@ export function ComposerEditor({
     </div>
   );
 }
-
-export function focusComposerEnd(el: HTMLDivElement | null) {
-  placeCaretAtEnd(el!);
-}

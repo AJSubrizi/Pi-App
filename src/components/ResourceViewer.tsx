@@ -16,6 +16,28 @@ import {
   type ReactNode,
 } from "react";
 import * as api from "@/lib/api";
+
+/**
+ * File previewers load on demand.
+ *
+ * These three pull in pdf.js, docx-preview, plyr and highlight.js — the
+ * heaviest dependencies in the app, and none of them is needed until someone
+ * opens a file of that kind. Keeping them out of the entry chunk is the
+ * difference between paying for them at launch and paying when used.
+ */
+const FileMediaPlayer = lazy(() =>
+  import("@/components/FileMediaPlayer").then((m) => ({
+    default: m.FileMediaPlayer,
+  })),
+);
+const OfficeDocumentPreview = lazy(() =>
+  import("@/components/OfficeDocumentPreview").then((m) => ({
+    default: m.OfficeDocumentPreview,
+  })),
+);
+const CodePreview = lazy(() =>
+  import("@/components/CodePreview").then((m) => ({ default: m.CodePreview })),
+);
 import { splitPrTitleAndBody } from "@/lib/ghReview";
 import { createT, type Locale } from "@/i18n";
 import { resolvePreviewSrc } from "@/lib/filePreviewSrc";
@@ -23,7 +45,6 @@ import { HtmlBrowser } from "@/components/HtmlBrowser";
 import { EmbeddedBrowser } from "@/components/EmbeddedBrowser";
 import { MarkdownBody } from "@/components/MarkdownBody";
 import { OverlayScroll } from "@/components/OverlayScroll";
-import { FileMediaPlayer } from "@/components/FileMediaPlayer";
 import { ImageUi } from "@/components/ImageUi";
 import {
   IconChevronDown,
@@ -47,8 +68,6 @@ import {
 } from "@/components/icons";
 import { PlanReviewPanel } from "@/components/PlanReviewPanel";
 import type { PlanReviewState } from "@/lib/planBody";
-import { OfficeDocumentPreview } from "@/components/OfficeDocumentPreview";
-import { CodePreview } from "@/components/CodePreview";
 import { isOfficeKind } from "@/lib/filePreviewSrc";
 import { OpenLocationButton } from "@/components/OpenLocationButton";
 import { Tip } from "@/components/ui/tooltip";
@@ -2198,7 +2217,7 @@ export function ResourceViewer({
     [tr],
   );
 
-  const previewBody = useMemo(() => {
+  const previewBodyInner = useMemo(() => {
     // Session change diff takes over the preview when selected in Changes mode.
     if (sideMode === "changes" && diffView) {
       if (diffView.loading) {
@@ -2485,6 +2504,21 @@ export function ResourceViewer({
     updateActiveDraft,
     saveActiveFile,
   ]);
+
+  /**
+   * One boundary for every previewer.
+   *
+   * They are lazy, and `previewBody` renders in six different containers —
+   * wrapping at the source means none of those sites can forget it and crash
+   * the pane when a file first opens.
+   */
+  const previewBody = (
+    <Suspense
+      fallback={<div className="rp__empty-state">{tr("common.loading")}</div>}
+    >
+      {previewBodyInner}
+    </Suspense>
+  );
 
   // Empty pane (no open tabs) falls through to the main render below, where
   // `launcherHome` shows the 2×2 launcher grid — with or without a project,

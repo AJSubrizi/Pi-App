@@ -213,7 +213,6 @@ import { PiLogo } from "@/components/PiLogo";
 import { SetupWizard, type SetupCliInfo } from "@/components/SetupWizard";
 import {
   ComposerEditor,
-  focusComposerEnd,
 } from "@/components/ComposerEditor";
 import { ComposerProjectMenu } from "@/components/ComposerProjectMenu";
 import {
@@ -6171,13 +6170,6 @@ export default function App() {
     session.state !== "connecting";
   const activeCustomProvider: api.CustomProvider | null = null;
 
-  const applySuggestion = useCallback((text: string) => {
-    setDraft(text);
-    window.requestAnimationFrame(() => {
-      focusComposerEnd(composerInputRef.current);
-    });
-  }, []);
-
   // Floating composer height → chat bottom pad so messages can scroll under it.
   useEffect(() => {
     if (mainPane !== "chat") return;
@@ -9716,29 +9708,6 @@ export default function App() {
                 )}
               </div>
             </div>
-            {welcomeSession ? (
-              <div
-                className="welcome-suggest"
-                role="group"
-                aria-label={tr("welcome.sub")}
-              >
-                {[
-                  tr("welcome.suggest1"),
-                  tr("welcome.suggest2"),
-                  tr("welcome.suggest3"),
-                  tr("welcome.suggest4"),
-                ].map((label) => (
-                  <button
-                    key={label}
-                    type="button"
-                    className="welcome-suggest__chip"
-                    onClick={() => applySuggestion(label)}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            ) : null}
           </div>
           </div>
           </>
