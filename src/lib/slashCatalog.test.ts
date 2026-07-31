@@ -24,6 +24,7 @@ describe("builtinSlashItems", () => {
       "new",
       "automations",
       "settings",
+      "parallel",
       "review-pr",
       "export",
       "copy",

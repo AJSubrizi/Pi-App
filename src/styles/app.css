@@ -17345,3 +17345,48 @@ html[data-theme="light"] .rim-sidebar {
 .tree-empty--error {
   color: var(--text-danger, #e5534b);
 }
+
+/* ── Parallel task batch strip ──────────────────────────────────────────── */
+
+.batch-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 16px 0;
+}
+
+.batch-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  max-width: 100%;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--bg-hover);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.batch-chip__title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
+}
+
+.batch-chip__model {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.75;
+}
+
+.batch-chip__status {
+  text-transform: lowercase;
+}
+
+.batch-chip--running .batch-chip__status {
+  color: var(--accent, #4c8dff);
+}
+
+.batch-chip--failed .batch-chip__status {
+  color: var(--text-danger, #e5534b);
+}

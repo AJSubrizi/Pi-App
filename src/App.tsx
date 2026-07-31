@@ -301,6 +301,12 @@ import { UserMenu } from "@/components/UserMenu";
 import { WorkspaceSwitcher } from "@/components/WorkspaceSwitcher";
 import { PrTree, type PrRepoState } from "@/components/PrTree";
 import {
+  parseTaskBatch,
+  planTaskWaves,
+  wrapTaskBatchAgentText,
+  type ParallelTask,
+} from "@/lib/parallelTasks";
+import {
   loadWorkspace,
   saveWorkspace,
   isComingSoon,
@@ -598,6 +604,11 @@ export default function App() {
   const firedAutomationIds = useRef<Set<string>>(new Set());
   /** Conversation is guiding the user to create a scheduled task. */
   const automationSetupDraftRef = useRef(false);
+  /** Composer is drafting a parallel task batch (set by /parallel). */
+  const taskBatchDraftRef = useRef(false);
+  const taskBatchAppliedRef = useRef<Set<string>>(new Set());
+  /** Set below; a ref because the stream hook is declared before the runner. */
+  const runTaskBatchRef = useRef<((tasks: ParallelTask[]) => void) | null>(null);
   const automationSetupSessionsRef = useRef<Set<string>>(new Set());
   const automationAppliedRef = useRef<Set<string>>(new Set());
   /** While openSession loads, do not let session.sessionId effect clobber viewing id. */
@@ -1437,6 +1448,42 @@ export default function App() {
    * Applies to all sessions (not only AI-created ones), so normal chat can schedule.
    * Deduped per assistant message id.
    */
+  /**
+   * Turn a finished batch reply into running tasks.
+   *
+   * Mirrors the automation hook: strip the fence from what the user sees, then
+   * act on it exactly once per assistant message.
+   */
+  const tryApplyTaskBatchFromSession = useCallback(
+    (sessionId: string) => {
+      if (!sessionId) return;
+      const msgs = messagesBySessionRef.current.get(sessionId) ?? [];
+      const assistant = [...msgs]
+        .reverse()
+        .find((m) => m.role === "assistant" && !m.isError);
+      if (!assistant || assistant.streaming) return;
+
+      const applyKey = assistant.id || `${sessionId}:batch`;
+      if (taskBatchAppliedRef.current.has(applyKey)) return;
+
+      const { tasks, cleanText } = parseTaskBatch(
+        assistant.content || "",
+        availableModels.map((m) => m.id),
+      );
+      if (cleanText !== (assistant.content || "")) {
+        const aid = assistant.id;
+        patchSessionMessages(sessionId, (prev) =>
+          prev.map((m) => (m.id === aid ? { ...m, content: cleanText } : m)),
+        );
+      }
+      if (tasks.length === 0) return;
+      taskBatchAppliedRef.current.add(applyKey);
+      taskBatchDraftRef.current = false;
+      runTaskBatchRef.current?.(tasks);
+    },
+    [availableModels, patchSessionMessages],
+  );
+
   const tryApplyAutomationFromSession = useCallback(
     async (sessionId: string) => {
       if (!sessionId) return;
@@ -1604,6 +1651,7 @@ export default function App() {
               // Backup apply path if stream `done` chunk was missed.
               if (s.sessionId) {
                 void tryApplyAutomationFromSession(s.sessionId);
+                tryApplyTaskBatchFromSession(s.sessionId);
               }
             }
           }),
@@ -1641,6 +1689,7 @@ export default function App() {
             // After a completed assistant stream, try silent automation create.
             if (chunk.done && chunk.sessionId) {
               void tryApplyAutomationFromSession(chunk.sessionId);
+              tryApplyTaskBatchFromSession(chunk.sessionId);
             }
           }),
         );
@@ -3794,6 +3843,8 @@ export default function App() {
         automationSetupSessionsRef.current.has(sendTargetId));
     if (inAutomationSetup) {
       agentText = wrapAutomationSetupAgentText(agentText);
+    } else if (taskBatchDraftRef.current) {
+      agentText = wrapTaskBatchAgentText(agentText);
     }
     const titleSeed =
       serializeForAgent(segments).replace(/\n/g, " ").trim() ||
@@ -5210,6 +5261,86 @@ export default function App() {
   }, [activeProject, showToast, tr]);
 
 
+
+  // ── Parallel task batches ────────────────────────────────────────────────
+
+  type BatchEntry = ParallelTask & {
+    sessionId: string | null;
+    status: "pending" | "starting" | "running" | "failed";
+    error: string | null;
+  };
+  const [taskBatch, setTaskBatch] = useState<BatchEntry[]>([]);
+
+  /**
+   * Launch a batch, one wave at a time.
+   *
+   * Each task gets its own session and model. The host keeps a streaming
+   * session alive in its background pool when focus moves on, so the tasks in
+   * a wave really do run together; waves exist only because exceeding
+   * `maxConcurrentAgents` would have the host recycle a process mid-run.
+   */
+  const runTaskBatch = useCallback(
+    async (tasks: ParallelTask[]) => {
+      if (tasks.length === 0) return;
+      const settings = await api.settingsGet().catch(() => null);
+      const cap = Math.max(1, settings?.maxConcurrentAgents ?? 3);
+
+      setTaskBatch(
+        tasks.map((t) => ({
+          ...t,
+          sessionId: null,
+          status: "pending" as const,
+          error: null,
+        })),
+      );
+
+      const mark = (title: string, patch: Partial<BatchEntry>) =>
+        setTaskBatch((prev) =>
+          prev.map((e) => (e.title === title ? { ...e, ...patch } : e)),
+        );
+
+      for (const wave of planTaskWaves(tasks, cap)) {
+        for (const task of wave) {
+          mark(task.title, { status: "starting" });
+          try {
+            const meta = (await api.sessionCreate(
+              activeProject?.id,
+              task.title,
+            )) as { id: string };
+            if (task.modelId) {
+              await api
+                .composerPrefsSet({
+                  sessionId: meta.id,
+                  projectId: activeProject?.id ?? null,
+                  modelId: task.modelId,
+                })
+                .catch(() => {
+                  /* soft-fail: the task still runs on the default model */
+                });
+            }
+            const snap = await api.sessionConnect({
+              projectPath: activeProject?.path,
+              sessionId: meta.id,
+              mode: "agent",
+            });
+            if (snap.state !== "ready") {
+              throw new Error(snap.lastError?.message || "connect failed");
+            }
+            await api.sessionSend(task.prompt);
+            mark(task.title, { status: "running", sessionId: meta.id });
+          } catch (e) {
+            mark(task.title, { status: "failed", error: String(e) });
+          }
+        }
+      }
+      await refreshSessions();
+      showToast(tr("batch.started", { n: tasks.length }));
+    },
+    [activeProject, refreshSessions, showToast, tr],
+  );
+
+  runTaskBatchRef.current = (tasks: ParallelTask[]) => void runTaskBatch(tasks);
+
   // ── PR workspace ─────────────────────────────────────────────────────────
 
   const persistPrRepos = useCallback((next: PrRepoState[]) => {
@@ -5774,6 +5905,11 @@ export default function App() {
             return;
           case "settings":
             navigateSettings("general");
+            return;
+          case "parallel":
+            taskBatchDraftRef.current = true;
+            showToast(tr("batch.hint"), 5000);
+            requestComposerFocus();
             return;
           case "review-pr":
             openReviewPrDialog();
@@ -8488,6 +8624,26 @@ export default function App() {
               </Tip>
             </div>
           </div>
+
+          {taskBatch.length > 0 ? (
+            <div className="batch-strip" aria-label={tr("batch.title")}>
+              {taskBatch.map((t) => (
+                <span
+                  key={t.title}
+                  className={"batch-chip batch-chip--" + t.status}
+                  title={t.error || t.prompt}
+                >
+                  <span className="batch-chip__title">{t.title}</span>
+                  <span className="batch-chip__model">
+                    {t.modelId || tr("batch.defaultModel")}
+                  </span>
+                  <span className="batch-chip__status">
+                    {tr(("batch." + t.status) as "batch.running")}
+                  </span>
+                </span>
+              ))}
+            </div>
+          ) : null}
 
           {isComingSoon(workspace) ? (
             <div className="ws-soon">

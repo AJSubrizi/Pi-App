@@ -118,6 +118,14 @@ export function builtinSlashItems(): SlashItem[] {
       action: "settings",
     },
     {
+      id: "parallel",
+      kind: "action",
+      name: "parallel",
+      titleKey: "slash.parallel",
+      descriptionKey: "slash.parallelDesc",
+      action: "parallel",
+    },
+    {
       id: "review-pr",
       kind: "action",
       name: "review-pr",
