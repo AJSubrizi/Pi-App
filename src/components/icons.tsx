@@ -16,6 +16,8 @@ import {
   IconGitBranch as TbGitBranch,
   IconBox as TbBox,
   IconBrush as TbBrush,
+  IconCode as TbCode,
+  IconGitPullRequest as TbGitPullRequest,
   IconCalendarTime as TbCalendarTime,
   IconCheck as TbCheck,
   IconClipboardList as TbClipboardList,
@@ -215,6 +217,11 @@ export const IconSend = wrap(TbSend);
 export const IconQueue = wrap(TbStack2);
 export const IconMic = wrap(TbMicrophone);
 export const IconLiveVoice = wrap(TbHeadphones);
+/** Workspace switcher (sidebar foot): code / pull requests / design. */
+export const IconWorkspaceCode = wrap(TbCode);
+export const IconWorkspacePr = wrap(TbGitPullRequest);
+export const IconWorkspaceDesign = wrap(TbBrush);
+
 export const IconPanel = wrap(TbLayoutSidebar);
 /** Right files / context pane (Codex-style top bar). */
 export const IconPanelRight = wrap(TbLayoutSidebarRight);

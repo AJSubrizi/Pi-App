@@ -17153,3 +17153,74 @@ html[data-theme="light"] .rim-sidebar {
 .rp-commit-modal__check input {
   cursor: pointer;
 }
+
+/* ── Workspace switcher (sidebar foot, above the profile row) ───────────── */
+
+.ws-switch {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 10px;
+  border-top: 1px solid var(--border-subtle, rgba(128, 128, 128, 0.16));
+}
+
+.ws-switch__btn {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
+}
+
+.ws-switch__btn:hover {
+  background: var(--menu-item-hover, rgba(128, 128, 128, 0.12));
+  color: var(--text-primary);
+}
+
+.ws-switch__btn--active {
+  background: var(--menu-item-hover, rgba(128, 128, 128, 0.16));
+  color: var(--text-primary);
+}
+
+/* Selectable, but visibly not finished yet. */
+.ws-switch__btn--soon {
+  opacity: 0.55;
+}
+
+.ws-switch__btn:focus-visible {
+  outline: 2px solid var(--focus-ring, #4c8dff);
+  outline-offset: 1px;
+}
+
+.ws-soon {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  padding: 48px 24px;
+  text-align: center;
+}
+
+.ws-soon__title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.ws-soon__body {
+  margin: 0;
+  max-width: 42ch;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}

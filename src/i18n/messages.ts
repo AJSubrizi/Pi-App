@@ -1767,6 +1767,13 @@ const en = {
   "slash.automationsDesc": "Open scheduled tasks",
   "slash.settings": "Settings",
   "slash.settingsDesc": "Open settings",
+  "workspace.code": "Code",
+  "workspace.pr": "Pull requests",
+  "workspace.design": "Design",
+  "workspace.comingSoon": "coming soon",
+  "workspace.soonTitle": "Design workspace",
+  "workspace.soonBody":
+    "A place to work on interfaces the way Code works on repositories. Not built yet.",
   "slash.reviewPr": "Review pull request",
   "slash.reviewPrDesc": "Fetch a GitHub PR diff and open a review chat",
   "reviewPr.title": "Review pull request",

@@ -297,6 +297,13 @@ import {
 } from "@/lib/a11yFocus";
 import { Spinner } from "@/components/ui/spinner";
 import { UserMenu } from "@/components/UserMenu";
+import { WorkspaceSwitcher } from "@/components/WorkspaceSwitcher";
+import {
+  loadWorkspace,
+  saveWorkspace,
+  isComingSoon,
+  type WorkspaceId,
+} from "@/lib/workspace";
 import type { SettingsSectionId } from "@/components/SettingsPage";
 import { Tip } from "@/components/ui/tooltip";
 import {
@@ -549,6 +556,10 @@ export default function App() {
   const [appView, setAppView] = useState<"workbench" | "settings">("workbench");
   /** Inside workbench: chat thread vs scheduled tasks list. */
   const [mainPane, setMainPane] = useState<"chat" | "automations">("chat");
+  /** Top-level context: what the sidebar lists and what "new chat" means. */
+  const [workspace, setWorkspace] = useState<WorkspaceId>(() =>
+    loadWorkspace(localStorage),
+  );
   const [settingsSection, setSettingsSection] =
     useState<SettingsSectionId>("general");
   /** Prevent overlapping automation runs. */
@@ -7903,6 +7914,20 @@ export default function App() {
             ) : null}
           </OverlayScroll>
 
+          <WorkspaceSwitcher
+            active={workspace}
+            onSelect={(id) => {
+              setWorkspace(id);
+              saveWorkspace(localStorage, id);
+            }}
+            labels={{
+              code: tr("workspace.code"),
+              pr: tr("workspace.pr"),
+              design: tr("workspace.design"),
+            }}
+            comingSoonSuffix={tr("workspace.comingSoon")}
+          />
+
           <UserMenu
             open={showUserMenu}
             onClose={() => setShowUserMenu(false)}
@@ -8252,7 +8277,12 @@ export default function App() {
             </div>
           </div>
 
-          {mainPane === "automations" ? (
+          {isComingSoon(workspace) ? (
+            <div className="ws-soon">
+              <h2 className="ws-soon__title">{tr("workspace.soonTitle")}</h2>
+              <p className="ws-soon__body">{tr("workspace.soonBody")}</p>
+            </div>
+          ) : mainPane === "automations" ? (
             <AutomationsPage
               t={(k, vars) =>
                 tr(k as Parameters<typeof tr>[0], vars as Record<string, string | number>)
