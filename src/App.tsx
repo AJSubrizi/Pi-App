@@ -22,6 +22,7 @@ import {
 } from "@/lib/theme";
 import {
   applySkinToDocument,
+  isThemeSkinId,
   applyWallpaperFlag,
   applyWallpaperScrimToDocument,
   clearWallpaper,
@@ -302,7 +303,12 @@ import {
   loadWorkspace,
   saveWorkspace,
   isComingSoon,
+  loadWorkspaceSkins,
+  saveWorkspaceSkins,
+  setWorkspaceSkin,
+  workspaceSkin,
   type WorkspaceId,
+  type WorkspaceSkins,
 } from "@/lib/workspace";
 import type { SettingsSectionId } from "@/components/SettingsPage";
 import { Tip } from "@/components/ui/tooltip";
@@ -382,7 +388,12 @@ type PlanState = SessionPlanState;
 export default function App() {
   const [theme, setTheme] = useState<Theme>(() => loadTheme(localStorage));
   const [userName, setUserName] = useState("");
-  const [skin, setSkin] = useState<ThemeSkinId>(() => loadSkin(localStorage));
+  const [skin, setSkin] = useState<ThemeSkinId>(() => {
+    const perWorkspace = loadWorkspaceSkins(localStorage, isThemeSkinId)[
+      loadWorkspace(localStorage)
+    ];
+    return isThemeSkinId(perWorkspace) ? perWorkspace : loadSkin(localStorage);
+  });
   const [wallpaperRecord, setWallpaperRecord] = useState<WallpaperRecord | null>(
     null,
   );
@@ -559,6 +570,10 @@ export default function App() {
   /** Top-level context: what the sidebar lists and what "new chat" means. */
   const [workspace, setWorkspace] = useState<WorkspaceId>(() =>
     loadWorkspace(localStorage),
+  );
+  /** Each workspace wears its own colour skin (Settings → Appearance). */
+  const [workspaceSkins, setWorkspaceSkins] = useState<WorkspaceSkins>(() =>
+    loadWorkspaceSkins(localStorage, isThemeSkinId),
   );
   const [settingsSection, setSettingsSection] =
     useState<SettingsSectionId>("general");
@@ -2133,7 +2148,8 @@ export default function App() {
     setTheme(next);
   };
 
-  const applySkinChoice = (next: ThemeSkinId) => {
+  /** Apply a skin to the shell without changing which workspace owns it. */
+  const applySkinOnly = (next: ThemeSkinId) => {
     saveSkin(localStorage, next);
     applySkinToDocument(next);
     setSkin(next);
@@ -2141,6 +2157,23 @@ export default function App() {
     if (preferred && preferred !== theme) {
       applyThemeChoice(preferred);
     }
+  };
+
+  /**
+   * User picked a skin in Appearance: apply it and record it as the skin of
+   * `owner` (the active workspace by default).
+   *
+   * `owner` is explicit because switching workspace applies a skin *before*
+   * `setWorkspace` has committed — passing the destination avoids writing the
+   * new skin onto the workspace being left.
+   */
+  const applySkinChoice = (next: ThemeSkinId, owner: WorkspaceId = workspace) => {
+    applySkinOnly(next);
+    setWorkspaceSkins((prev) => {
+      const updated = setWorkspaceSkin(prev, owner, next);
+      saveWorkspaceSkins(localStorage, updated);
+      return updated;
+    });
   };
 
   const applyWallpaperChoice = async (record: WallpaperRecord | null) => {
@@ -7919,6 +7952,10 @@ export default function App() {
             onSelect={(id) => {
               setWorkspace(id);
               saveWorkspace(localStorage, id);
+              const next = workspaceSkin(workspaceSkins, id);
+              if (isThemeSkinId(next) && next !== skin) {
+                applySkinOnly(next);
+              }
             }}
             labels={{
               code: tr("workspace.code"),

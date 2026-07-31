@@ -91,3 +91,74 @@ export function nextWorkspace(
 ): WorkspaceId {
   return clicked === current ? current : clicked;
 }
+
+// ── Per-workspace colour skin ──────────────────────────────────────────────
+
+export const WORKSPACE_SKINS_STORAGE_KEY = "pi-app.workspace-skins";
+
+/**
+ * Which colour skin each workspace wears.
+ *
+ * Switching workspace re-skins the shell, so the three contexts are
+ * recognisable at a glance. Defaults are distinct on purpose; the user can
+ * override any of them in Settings → Appearance.
+ *
+ * The skin id type is owned by `themeSkin.ts` — kept as a plain string here so
+ * this module stays free of that dependency and remains trivially testable.
+ */
+export type WorkspaceSkins = Record<WorkspaceId, string>;
+
+export const DEFAULT_WORKSPACE_SKINS: WorkspaceSkins = {
+  code: "default",
+  pr: "ocean",
+  design: "rose",
+};
+
+/**
+ * Read the map, filling any missing or non-string entry from the defaults.
+ *
+ * A partial object is expected, not exceptional: it is what a user who has
+ * only ever customised one workspace produces.
+ */
+export function loadWorkspaceSkins(
+  storage: WorkspaceStorage,
+  validSkin: (value: unknown) => boolean = () => true,
+): WorkspaceSkins {
+  const out: WorkspaceSkins = { ...DEFAULT_WORKSPACE_SKINS };
+  let raw: unknown;
+  try {
+    raw = JSON.parse(storage.getItem(WORKSPACE_SKINS_STORAGE_KEY) || "null");
+  } catch {
+    return out;
+  }
+  if (!raw || typeof raw !== "object") return out;
+  for (const id of WORKSPACE_IDS) {
+    const value = (raw as Record<string, unknown>)[id];
+    if (typeof value === "string" && validSkin(value)) out[id] = value;
+  }
+  return out;
+}
+
+export function saveWorkspaceSkins(
+  storage: WorkspaceStorage,
+  skins: WorkspaceSkins,
+): void {
+  try {
+    storage.setItem(WORKSPACE_SKINS_STORAGE_KEY, JSON.stringify(skins));
+  } catch {
+    // Private mode / quota: the choice still applies for this session.
+  }
+}
+
+/** Assign `skin` to one workspace, leaving the others untouched. */
+export function setWorkspaceSkin(
+  skins: WorkspaceSkins,
+  id: WorkspaceId,
+  skin: string,
+): WorkspaceSkins {
+  return { ...skins, [id]: skin };
+}
+
+export function workspaceSkin(skins: WorkspaceSkins, id: WorkspaceId): string {
+  return skins[id] ?? DEFAULT_WORKSPACE_SKINS[id];
+}

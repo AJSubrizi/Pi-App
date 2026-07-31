@@ -1098,7 +1098,8 @@ const en = {
   "settings.themeLight": "Light",
   "settings.themeDark": "Dark",
   "settings.skin": "Color skin",
-  "settings.skinDesc": "Accent and surface palette (works with light/dark)",
+  "settings.skinDesc":
+    "Accent and surface palette (works with light/dark). Applies to the workspace you are in, so each one can look different.",
   "settings.skin.default": "Default",
   "settings.skin.rose": "Rose",
   "settings.skin.gothic": "Gothic",

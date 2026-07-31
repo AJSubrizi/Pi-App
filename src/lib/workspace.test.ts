@@ -10,6 +10,12 @@ import {
   nextWorkspace,
   saveWorkspace,
   workspaceMeta,
+  DEFAULT_WORKSPACE_SKINS,
+  WORKSPACE_SKINS_STORAGE_KEY,
+  loadWorkspaceSkins,
+  saveWorkspaceSkins,
+  setWorkspaceSkin,
+  workspaceSkin,
   type WorkspaceStorage,
 } from "./workspace";
 
@@ -108,5 +114,63 @@ describe("nextWorkspace", () => {
 
   it("allows selecting a coming-soon workspace so it can explain itself", () => {
     expect(nextWorkspace("code", "design")).toBe("design");
+  });
+});
+
+describe("per-workspace skins", () => {
+  it("gives each workspace a distinct default", () => {
+    const values = Object.values(DEFAULT_WORKSPACE_SKINS);
+    expect(new Set(values).size).toBe(values.length);
+    expect(DEFAULT_WORKSPACE_SKINS.code).toBe("default");
+  });
+
+  it("round-trips a full map", () => {
+    const s = memoryStorage();
+    const next = setWorkspaceSkin(DEFAULT_WORKSPACE_SKINS, "pr", "ember");
+    saveWorkspaceSkins(s, next);
+    expect(loadWorkspaceSkins(s).pr).toBe("ember");
+  });
+
+  it("changing one workspace leaves the others alone", () => {
+    const next = setWorkspaceSkin(DEFAULT_WORKSPACE_SKINS, "design", "mist");
+    expect(next.design).toBe("mist");
+    expect(next.code).toBe(DEFAULT_WORKSPACE_SKINS.code);
+    expect(next.pr).toBe(DEFAULT_WORKSPACE_SKINS.pr);
+  });
+
+  it("fills gaps from defaults rather than returning undefined", () => {
+    const s = memoryStorage({
+      [WORKSPACE_SKINS_STORAGE_KEY]: JSON.stringify({ pr: "gothic" }),
+    });
+    const skins = loadWorkspaceSkins(s);
+    expect(skins.pr).toBe("gothic");
+    expect(skins.code).toBe(DEFAULT_WORKSPACE_SKINS.code);
+    expect(skins.design).toBe(DEFAULT_WORKSPACE_SKINS.design);
+  });
+
+  it("rejects entries the skin system would not recognise", () => {
+    const s = memoryStorage({
+      [WORKSPACE_SKINS_STORAGE_KEY]: JSON.stringify({
+        pr: "from-a-newer-build",
+        design: 42,
+      }),
+    });
+    const known = (v: unknown) => v === "ocean" || v === "rose";
+    const skins = loadWorkspaceSkins(s, known);
+    expect(skins.pr).toBe(DEFAULT_WORKSPACE_SKINS.pr);
+    expect(skins.design).toBe(DEFAULT_WORKSPACE_SKINS.design);
+  });
+
+  it("survives malformed or absent JSON", () => {
+    expect(loadWorkspaceSkins(memoryStorage())).toEqual(
+      DEFAULT_WORKSPACE_SKINS,
+    );
+    const bad = memoryStorage({ [WORKSPACE_SKINS_STORAGE_KEY]: "{oops" });
+    expect(loadWorkspaceSkins(bad)).toEqual(DEFAULT_WORKSPACE_SKINS);
+  });
+
+  it("reads a single workspace with a default fallback", () => {
+    expect(workspaceSkin(DEFAULT_WORKSPACE_SKINS, "pr")).toBe("ocean");
+    expect(workspaceSkin({} as never, "design")).toBe("rose");
   });
 });

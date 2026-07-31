@@ -1860,8 +1860,7 @@ html.platform-mac[data-theme="light"] .settings-page__content {
   position: relative;
   flex-shrink: 0;
   margin-top: 0;
-  padding: 8px 10px 10px;
-  border-top: 1px solid var(--border-subtle);
+  padding: 4px 10px 10px;
 }
 
 .sidebar__footer {
@@ -17159,9 +17158,9 @@ html[data-theme="light"] .rim-sidebar {
 .ws-switch {
   display: flex;
   align-items: center;
-  gap: 2px;
-  padding: 6px 10px;
-  border-top: 1px solid var(--border-subtle, rgba(128, 128, 128, 0.16));
+  justify-content: center;
+  gap: 4px;
+  padding: 8px 10px 4px;
 }
 
 .ws-switch__btn {
