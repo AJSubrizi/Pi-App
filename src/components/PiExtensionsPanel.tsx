@@ -324,6 +324,20 @@ export function PiExtensionsPanel({
         </div>
       </section>
 
+      <section aria-labelledby="pi-cache-title">
+        <div className="pi-ext__section-head pi-ext__section-head--plain">
+          <div>
+            <h3 id="pi-cache-title">{tr("piExt.cache.title")}</h3>
+            <p>{tr("piExt.cache.description")}</p>
+          </div>
+        </div>
+        <div className="pi-ext__catalog-list pi-ext__catalog-list--separate">
+          {PI_PACKAGE_CATALOG.filter(
+            (entry) => entry.group === "cache",
+          ).map(renderCatalogRow)}
+        </div>
+      </section>
+
       {pendingInstall.length ? (
         <section
           ref={reviewRef}

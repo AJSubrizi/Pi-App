@@ -26,6 +26,7 @@ import {
   IconMinimize,
   IconMic,
   IconPuzzle,
+  IconSkills,
   IconSearch,
   IconShare,
   IconSettings,
@@ -60,6 +61,7 @@ import {
 import type { DetectedEditor } from "@/lib/api";
 import * as api from "@/lib/api";
 import { ExtensionsPanel } from "@/components/ExtensionsPanel";
+import { SkillsPanel } from "@/components/SkillsPanel";
 import { PiExtensionsPanel } from "@/components/PiExtensionsPanel";
 import { ProvidersPanel } from "@/components/ProvidersPanel";
 import { ProviderConnectionsPanel } from "@/components/ProviderConnectionsPanel";
@@ -85,6 +87,7 @@ export type SettingsSectionId =
   | "archived"
   | "providers-models"
   | "extensions"
+  | "skills"
   | "runtime"
   | "shortcuts"
   | "about";
@@ -221,6 +224,7 @@ const NAV: {
     | "archive"
     | "providers"
     | "extensions"
+    | "skills"
     | "doctor"
     | "keyboard"
     | "info";
@@ -243,6 +247,12 @@ const NAV: {
     id: "extensions",
     icon: "extensions",
     labelKey: "settings.nav.extensions",
+    group: "system",
+  },
+  {
+    id: "skills",
+    icon: "skills",
+    labelKey: "settings.nav.skills",
     group: "system",
   },
   { id: "runtime", icon: "doctor", labelKey: "settings.nav.runtime", group: "system" },
@@ -270,6 +280,7 @@ function NavIcon({
   if (name === "providers") return <IconShare size={size} />;
   if (name === "keyboard") return <IconKeyboard size={size} />;
   if (name === "extensions") return <IconPuzzle size={size} />;
+  if (name === "skills") return <IconSkills size={size} />;
   if (name === "doctor") return <IconDoctor size={size} />;
   if (name === "info") return <IconInfo size={size} />;
   return <IconSettings size={size} />;
@@ -1076,6 +1087,8 @@ export function SettingsPage({
               ? t("settings.nav.providersModels")
             : section === "extensions"
               ? t("settings.nav.extensions")
+              : section === "skills"
+                ? t("settings.nav.skills")
               : section === "runtime"
                 ? t("settings.nav.runtime")
                 : section === "shortcuts"
@@ -2024,6 +2037,14 @@ export function SettingsPage({
               </>
             )}
           </>
+        )}
+
+        {section === "skills" && (
+          <SkillsPanel
+            projectPath={projectPath}
+            tr={t as Parameters<typeof SkillsPanel>[0]["tr"]}
+            onSkillsPrefsChanged={onSkillsPrefsChanged}
+          />
         )}
 
         {section === "extensions" && (

@@ -2334,6 +2334,7 @@ export default function App() {
           "archived",
           "providers-models",
           "extensions",
+          "skills",
           "runtime",
           "shortcuts",
           "about",

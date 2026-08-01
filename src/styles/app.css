@@ -4479,6 +4479,112 @@ html[data-theme="light"] .ui-check.is-mixed .ui-check__box {
   font-size: 13px;
 }
 
+/* Settings → Skills */
+.skills-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.skills-panel__install {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.skills-panel__install .settings-input {
+  min-width: 0;
+}
+
+.skills-panel__error,
+.skills-panel__ok,
+.skills-panel__empty {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.skills-panel__error {
+  color: var(--text-danger, #c24747);
+}
+
+.skills-panel__ok {
+  color: var(--text-success, #2f855a);
+}
+
+.skills-panel__empty {
+  color: var(--text-tertiary);
+}
+
+.skills-panel__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.skills-panel__row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.skills-panel__row:last-child {
+  border-bottom: 0;
+}
+
+.skills-panel__text {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.skills-panel__name {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.skills-panel__meta,
+.skills-panel__desc {
+  color: var(--text-tertiary);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.skills-panel__desc {
+  color: var(--text-secondary);
+}
+
+.skills-panel__toggle {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 7px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.skills-panel__toggle input {
+  accent-color: var(--accent, #3b7cff);
+}
+
+@media (max-width: 620px) {
+  .skills-panel__install {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .skills-panel__row {
+    flex-direction: column;
+    gap: 8px;
+  }
+}
+
 .settings-seg {
   display: inline-flex;
   padding: 3px;

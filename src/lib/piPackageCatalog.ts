@@ -16,7 +16,7 @@ export type PiPackageCatalogEntry = {
   titleKey: MessageKey;
   descriptionKey: MessageKey;
   access: PiPackageAccess[];
-  group: "foundation" | "optional";
+  group: "foundation" | "optional" | "cache";
 };
 
 /**
@@ -154,6 +154,59 @@ export const PI_PACKAGE_CATALOG: readonly PiPackageCatalogEntry[] = [
     descriptionKey: "piExt.package.voice.description",
     access: ["conversation", "system"],
     group: "optional",
+  },
+  // ── Cache performance ────────────────────────────────────────────────────
+  // These raise the prompt-cache hit rate the composer chip measures. All are
+  // provider-side behaviour tweaks; none touches the workspace.
+  {
+    id: "cache-optimizer",
+    source: "npm:pi-cache-optimizer@2.6.25",
+    packageName: "pi-cache-optimizer",
+    version: "2.6.25",
+    titleKey: "piExt.package.cacheOptimizer.title",
+    descriptionKey: "piExt.package.cacheOptimizer.description",
+    access: ["conversation", "provider"],
+    group: "cache",
+  },
+  {
+    id: "deepseek-cache",
+    source: "npm:@rohaquinlop/pi-deepseek-cache@0.5.1",
+    packageName: "@rohaquinlop/pi-deepseek-cache",
+    version: "0.5.1",
+    titleKey: "piExt.package.deepseekCache.title",
+    descriptionKey: "piExt.package.deepseekCache.description",
+    access: ["conversation", "provider"],
+    group: "cache",
+  },
+  {
+    id: "better-messages-cache",
+    source: "npm:@mcowger/pi-better-messages-cache@1.5.0",
+    packageName: "@mcowger/pi-better-messages-cache",
+    version: "1.5.0",
+    titleKey: "piExt.package.betterMessagesCache.title",
+    descriptionKey: "piExt.package.betterMessagesCache.description",
+    access: ["conversation", "provider"],
+    group: "cache",
+  },
+  {
+    id: "opencode-go-cache",
+    source: "npm:pi-opencode-go-cache@0.3.1",
+    packageName: "pi-opencode-go-cache",
+    version: "0.3.1",
+    titleKey: "piExt.package.opencodeGoCache.title",
+    descriptionKey: "piExt.package.opencodeGoCache.description",
+    access: ["conversation", "provider"],
+    group: "cache",
+  },
+  {
+    id: "provider-toolkit",
+    source: "npm:@ersintarhan/pi-toolkit@0.7.2",
+    packageName: "@ersintarhan/pi-toolkit",
+    version: "0.7.2",
+    titleKey: "piExt.package.providerToolkit.title",
+    descriptionKey: "piExt.package.providerToolkit.description",
+    access: ["conversation", "provider"],
+    group: "cache",
   },
 ] as const;
 

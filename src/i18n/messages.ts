@@ -91,6 +91,24 @@ const en = {
   "piExt.confirm.unpinned":
     "This source is not pinned. Its contents can change between installs.",
   "piExt.confirm.install": "Install reviewed packages",
+  "piExt.cache.title": "Cache performance",
+  "piExt.cache.description":
+    "Raise the prompt-cache hit rate the chip in the composer measures. Long sessions get dramatically cheaper when most of the prompt is reused.",
+  "piExt.package.cacheOptimizer.title": "Cache optimizer",
+  "piExt.package.cacheOptimizer.description":
+    "Stabilises prompts and cache keys across providers so prefixes stay reusable between turns.",
+  "piExt.package.deepseekCache.title": "DeepSeek cache",
+  "piExt.package.deepseekCache.description":
+    "Freezes date and working directory to stop daily cache busts on DeepSeek models, and reports the hit rate.",
+  "piExt.package.betterMessagesCache.title": "Anthropic breakpoints",
+  "piExt.package.betterMessagesCache.description":
+    "Dual cache-breakpoint strategy for Anthropic-compatible models (MiniMax, Kimi and friends).",
+  "piExt.package.opencodeGoCache.title": "OpenCode Go cache",
+  "piExt.package.opencodeGoCache.description":
+    "Adds stable prompt-cache keys, retention and cache-control breakpoints for Pi's OpenCode Go provider.",
+  "piExt.package.providerToolkit.title": "Provider cache toolkit",
+  "piExt.package.providerToolkit.description":
+    "Adds cache-aware provider adapters for Kimi, MiniMax and Mimo alongside provider-native web search tools.",
   "piExt.package.goal.title": "Goal manager",
   "piExt.package.goal.description":
     "Keeps a measurable objective, progress and stopping condition across autonomous turns.",
@@ -923,6 +941,22 @@ const en = {
   "settings.nav.archived": "Archived chats",
   "settings.nav.providersModels": "Providers & Models",
   "settings.nav.extensions": "Extensions",
+  "settings.nav.skills": "Skills",
+  "skills.installTitle": "Install a skill",
+  "skills.installDesc":
+    "Skills ship inside Pi packages. Paste an npm package, a git URL or a local path; installation runs through the Pi CLI.",
+  "skills.sourcePlaceholder": "npm:package, https://…, or ./path",
+  "skills.install": "Install",
+  "skills.installing": "Installing…",
+  "skills.installed": "Installed {source}",
+  "skills.badSource": "That does not look like an npm package, git URL or local path.",
+  "skills.listTitle": "Installed skills",
+  "skills.listDesc":
+    "Everything Pi discovered for this scope. Switching one off hides it from the slash palette without uninstalling it.",
+  "skills.empty": "No skills found. Install a package that provides some, or add files under ~/.pi.",
+  "skills.enabled": "On",
+  "skills.disabled": "Off",
+  "skills.toggleAria": "Toggle skill {name}",
   "settings.nav.runtime": "CLI / Runtime",
   "settings.nav.shortcuts": "Keyboard",
   "settings.nav.about": "About",
