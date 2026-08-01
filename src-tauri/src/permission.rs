@@ -535,6 +535,31 @@ pub fn pick_option_id(options: &serde_json::Value, prefer: &str) -> Option<Strin
     None
 }
 
+/// Select the option that matches an automatic host policy.
+///
+/// Full access should use a persistent allow option when the agent exposes one;
+/// falling back to `allow_once` makes the next tool call ask again. Other
+/// automatic policies intentionally keep the least-privileged once decision.
+pub fn pick_auto_allow_option_id(
+    options: &serde_json::Value,
+    policy: PermissionPolicy,
+) -> Option<String> {
+    let preferences: &[&str] = if policy == PermissionPolicy::AlwaysApprove {
+        &[
+            "allow_always",
+            "allow_command_always",
+            "always_allow_all_sessions",
+            "allow_once",
+            "allow",
+        ]
+    } else {
+        &["allow_once", "allow"]
+    };
+    preferences
+        .iter()
+        .find_map(|kind| pick_option_id(options, kind))
+}
+
 #[derive(Debug, Default)]
 pub struct SessionAllowCache {
     keys: HashSet<String>,

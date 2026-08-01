@@ -48,6 +48,21 @@ export interface MappedPermButton {
   label: string;
 }
 
+/** Choose the host-side automatic decision for an already-visible request. */
+export function automaticPermissionButton(
+  buttons: MappedPermButton[],
+  policy: "always_approve" | "dont_ask",
+): MappedPermButton | undefined {
+  if (policy === "dont_ask") {
+    return buttons.find((button) => button.decision === "deny");
+  }
+  // Full access should clear a stale prompt with the persistent option first.
+  return (
+    buttons.find((button) => button.decision === "allow_session") ??
+    buttons.find((button) => button.decision === "allow_once")
+  );
+}
+
 function oid(o: AcpPermissionOption): string {
   return o.optionId || o.id || "";
 }

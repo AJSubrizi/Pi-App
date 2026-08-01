@@ -29,8 +29,8 @@ use crate::error::{AgentError, AgentErrorCode};
 use crate::journal_throttle::{is_paragraph_break, JournalWriteThrottle};
 use crate::mock_acp::{self, MockConnectMode, MockStreamHandle, StreamChunk};
 use crate::permission::{
-    extract_path_target, extract_shell_command, may_auto_allow, may_auto_deny, pick_option_id,
-    scope_key, PermissionPolicy, SessionAllowCache,
+    extract_path_target, extract_shell_command, may_auto_allow, may_auto_deny,
+    pick_auto_allow_option_id, pick_option_id, scope_key, PermissionPolicy, SessionAllowCache,
 };
 use crate::process_limits::{
     can_spawn_process, is_idle_expired, normalize_idle_minutes, normalize_max_concurrent,
@@ -252,9 +252,15 @@ fn legacy_permission_ui_answer(
         .get("message")
         .and_then(serde_json::Value::as_str)
         .unwrap_or("");
-    if !title.eq_ignore_ascii_case("Permission Required")
-        || !message.to_ascii_lowercase().contains("requested tool")
-    {
+    let title_lower = title.to_ascii_lowercase();
+    let message_lower = message.to_ascii_lowercase();
+    let permission_title = title_lower.contains("permission")
+        && (title_lower.contains("required") || title_lower.contains("needed"));
+    let permission_message = message_lower.contains("tool")
+        && (message_lower.contains("request")
+            || message_lower.contains("permission")
+            || message_lower.contains("allow"));
+    if !permission_title || !permission_message {
         return None;
     }
     let allow = match policy {
@@ -265,16 +271,38 @@ fn legacy_permission_ui_answer(
     if method == "confirm" {
         return Some(if allow { "confirm" } else { "cancel" }.into());
     }
-    let wanted = if allow { "yes" } else { "no" };
+    let wanted = if allow {
+        ["yes", "allow", "approve", "confirm"]
+    } else {
+        ["no", "deny", "reject", "cancel"]
+    };
     raw.get("options")
         .and_then(serde_json::Value::as_array)
         .and_then(|options| {
             options
                 .iter()
-                .filter_map(serde_json::Value::as_str)
-                .find(|label| label.trim().eq_ignore_ascii_case(wanted))
+                .filter_map(|option| {
+                    option
+                        .as_str()
+                        .map(str::to_string)
+                        .or_else(|| {
+                            option
+                                .get("label")
+                                .and_then(serde_json::Value::as_str)
+                                .map(str::to_string)
+                        })
+                        .or_else(|| {
+                            option
+                                .get("name")
+                                .and_then(serde_json::Value::as_str)
+                                .map(str::to_string)
+                        })
+                })
+                .find(|label| {
+                    let normalized = label.trim().to_ascii_lowercase();
+                    wanted.iter().any(|candidate| normalized == *candidate)
+                })
         })
-        .map(str::to_string)
 }
 
 fn pi_rpc_image_mime(path: &Path) -> Option<&'static str> {
@@ -2043,7 +2071,7 @@ impl SessionManager {
                     path_target.clone()
                 };
                 let sk = scope_key(&tool_name, &sk_source);
-                let (auto, auto_deny, session_id, project_path) = {
+                let (auto, auto_deny, session_id, project_path, session_policy) = {
                     let mut guard = self.inner.lock();
                     if let Some(s) = guard.as_mut() {
                         Self::touch_activity_locked(s);
@@ -2066,6 +2094,7 @@ impl SessionManager {
                             auto_deny,
                             s.app_session_id.clone(),
                             s.project_path.clone(),
+                            s.policy,
                         )
                     } else {
                         return;
@@ -2078,11 +2107,7 @@ impl SessionManager {
                         // Pi CLI shell prompts use underscore optionIds (allow_once /
                         // allow_command_always / reject). Hyphenated ACP-style fallbacks
                         // are rejected as "unknown permission option".
-                        let option_id = pick_option_id(&options, "allow_once")
-                            .or_else(|| pick_option_id(&options, "allow_always"))
-                            .or_else(|| pick_option_id(&options, "allow_command_always"))
-                            .or_else(|| pick_option_id(&options, "always_allow_all_sessions"))
-                            .or_else(|| pick_option_id(&options, "allow"))
+                        let option_id = pick_auto_allow_option_id(&options, session_policy)
                             .unwrap_or_else(|| "allow_once".into());
                         let _ = acp
                             .respond_permission(rpc_id, PermissionOutcome::Selected { option_id })
@@ -2741,7 +2766,7 @@ impl SessionManager {
                     path_target.clone()
                 };
                 let sk = scope_key(&tool_name, &sk_source);
-                let (auto, auto_deny, session_id, project_path, acp) = {
+                let (auto, auto_deny, session_id, project_path, session_policy, acp) = {
                     let mut bg = self.background.lock();
                     if let Some(s) = bg.get_mut(app_session_id) {
                         Self::touch_activity_locked(s);
@@ -2762,6 +2787,7 @@ impl SessionManager {
                             auto_deny,
                             s.app_session_id.clone(),
                             s.project_path.clone(),
+                            s.policy,
                             s.acp.clone(),
                         )
                     } else {
@@ -2771,8 +2797,7 @@ impl SessionManager {
                 let _ = project_path;
                 if auto {
                     if let Some(acp) = acp {
-                        let option_id = pick_option_id(&options, "allow_once")
-                            .or_else(|| pick_option_id(&options, "allow"))
+                        let option_id = pick_auto_allow_option_id(&options, session_policy)
                             .unwrap_or_else(|| "allow_once".into());
                         let _ = acp
                             .respond_permission(rpc_id, PermissionOutcome::Selected { option_id })

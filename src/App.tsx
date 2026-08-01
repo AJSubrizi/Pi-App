@@ -133,6 +133,7 @@ import {
   type PermissionPolicyId,
 } from "@/lib/agentCatalog";
 import {
+  automaticPermissionButton,
   formatPermissionSummary,
   mapPermissionButtons,
 } from "@/lib/permissionOptions";
@@ -5691,10 +5692,10 @@ export default function App() {
       allowSession: tr("perm.allowSession"),
       deny: tr("perm.deny"),
     });
-    const pick = autoDeny
-      ? buttons.find((b) => b.decision === "deny")
-      : (buttons.find((b) => b.decision === "allow_once") ??
-        buttons.find((b) => b.decision === "allow_session"));
+    const pick = automaticPermissionButton(
+      buttons,
+      autoDeny ? "dont_ask" : "always_approve",
+    );
     if (!pick) return;
     const rpcId = perm.rpcId;
     void api

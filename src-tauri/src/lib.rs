@@ -32,6 +32,8 @@ mod operation_journal;
 mod paths;
 mod permission;
 #[cfg(test)]
+mod permission_auto_policy_test;
+#[cfg(test)]
 mod permission_host_test;
 mod permission_rules;
 mod pi_packages;
