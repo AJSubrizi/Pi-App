@@ -1350,7 +1350,7 @@ export function formatTurnErrorBody(
     ) {
       code = "QUOTA_EXCEEDED";
     } else if (
-      /not logged|unauthor|401|auth failed|access denied|failed to generate authentication/i.test(
+      /not logged|unauthor|401|auth failed|access denied|unpurchased|not purchased|model entitlement|failed to generate authentication/i.test(
         lower,
       )
     ) {

@@ -2750,6 +2750,9 @@ fn classify_rpc_error(e: &str) -> AgentError {
         || lower.contains("unauthor")
         || lower.contains("login")
         || lower.contains("access denied")
+        || lower.contains("unpurchased")
+        || lower.contains("not purchased")
+        || lower.contains("model entitlement")
         || lower.contains("authentication code")
     {
         return AgentError::new(AgentErrorCode::AuthFailed, e);
