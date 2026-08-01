@@ -1369,6 +1369,151 @@ fn parse_skills(v: &serde_json::Value) -> Vec<SkillDto> {
     out
 }
 
+/// Older Pi CLIs do not expose `pi inspect --json` yet, but they still use the
+/// documented on-disk `SKILL.md` convention. Keep Settings → Skills useful by
+/// reading those files as a compatibility fallback instead of showing the raw
+/// CLI error to users.
+fn parse_skill_markdown(path: &std::path::Path, source: &str) -> Option<SkillDto> {
+    let text = std::fs::read_to_string(path).ok()?;
+    let fallback_name = path
+        .parent()?
+        .file_name()?
+        .to_string_lossy()
+        .trim()
+        .to_string();
+    if fallback_name.is_empty() {
+        return None;
+    }
+
+    let mut name = fallback_name;
+    let mut description = String::new();
+    let mut user_invocable = true;
+    let mut in_frontmatter = false;
+    let mut saw_frontmatter = false;
+    for (index, raw_line) in text.lines().take(120).enumerate() {
+        let line = raw_line.trim();
+        if index == 0 && line == "---" {
+            in_frontmatter = true;
+            saw_frontmatter = true;
+            continue;
+        }
+        if in_frontmatter && line == "---" {
+            break;
+        }
+        if !in_frontmatter && saw_frontmatter {
+            continue;
+        }
+        let Some((key, value)) = line.split_once(':') else {
+            continue;
+        };
+        let value = value.trim().trim_matches(['"', '\'']);
+        match key.trim().to_ascii_lowercase().as_str() {
+            "name" if !value.is_empty() => name = value.to_string(),
+            "description" if !value.is_empty() => description = value.to_string(),
+            "user-invocable" | "user_invocable" | "userinvocable"
+                if value.eq_ignore_ascii_case("false") =>
+            {
+                user_invocable = false
+            }
+            _ => {}
+        }
+    }
+
+    Some(SkillDto {
+        name,
+        description,
+        source: source.to_string(),
+        path: Some(path.to_string_lossy().to_string()),
+        user_invocable,
+    })
+}
+
+fn scan_skill_tree(
+    root: &std::path::Path,
+    source: &str,
+    depth: u8,
+    seen: &mut std::collections::HashSet<String>,
+    out: &mut Vec<SkillDto>,
+) {
+    if depth == 0 {
+        return;
+    }
+    let Ok(entries) = std::fs::read_dir(root) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let Ok(file_type) = entry.file_type() else {
+            continue;
+        };
+        if file_type.is_symlink() {
+            continue;
+        }
+        if file_type.is_file()
+            && path
+                .file_name()
+                .is_some_and(|name| name.eq_ignore_ascii_case("SKILL.md"))
+        {
+            if let Some(skill) = parse_skill_markdown(&path, source) {
+                let key = format!("{}\n{}", skill.name, path.display());
+                if seen.insert(key) {
+                    out.push(skill);
+                }
+            }
+        } else if file_type.is_dir() {
+            scan_skill_tree(&path, source, depth - 1, seen, out);
+        }
+    }
+}
+
+fn scan_legacy_skills(project_path: Option<&str>) -> Vec<SkillDto> {
+    let settings = store::load_settings();
+    let home = crate::process_util::user_home();
+    let active_home = crate::paths::resolve_agent_pi_home(&settings.session_data_mode);
+    let mut roots: Vec<(std::path::PathBuf, &str, u8)> = vec![
+        (home.join(".pi").join("skills"), "user", 4),
+        (home.join(".pi").join("agent").join("skills"), "user", 4),
+        (active_home.join("skills"), "agent-home", 4),
+        (
+            home.join(".pi")
+                .join("agent")
+                .join("npm")
+                .join("node_modules"),
+            "package",
+            7,
+        ),
+        (active_home.join("npm").join("node_modules"), "package", 7),
+    ];
+    if let Some(project) = project_path.map(str::trim).filter(|path| !path.is_empty()) {
+        let project = std::path::PathBuf::from(project);
+        roots.push((project.join(".pi").join("skills"), "project", 4));
+    }
+
+    let mut seen = std::collections::HashSet::new();
+    let mut skills = Vec::new();
+    for (root, source, depth) in roots {
+        scan_skill_tree(&root, source, depth, &mut seen, &mut skills);
+    }
+    skills.sort_by(|left, right| {
+        left.name
+            .to_ascii_lowercase()
+            .cmp(&right.name.to_ascii_lowercase())
+            .then_with(|| left.source.cmp(&right.source))
+    });
+    skills
+}
+
+fn inspect_is_unsupported(error: Option<&String>) -> bool {
+    let Some(error) = error else {
+        return false;
+    };
+    let error = error.to_ascii_lowercase();
+    error.contains("unknown option")
+        || error.contains("unrecognized option")
+        || error.contains("unexpected argument")
+        || error.contains("unknown command")
+}
+
 fn parse_mcp_servers(v: &serde_json::Value) -> Vec<McpDto> {
     let Some(arr) = v
         .get("mcpServers")
@@ -1427,10 +1572,15 @@ pub async fn skills_list(project_path: Option<String>) -> Result<serde_json::Val
             .await
             .map_err(|e| e.to_string())?;
 
-    let skills = parsed.as_ref().map(parse_skills).unwrap_or_default();
+    let fallback = parsed.is_none();
+    let skills = parsed
+        .as_ref()
+        .map(parse_skills)
+        .unwrap_or_else(|| scan_legacy_skills(project_path.as_deref()));
     let skills = attach_skill_enabled(skills);
     let mut out = serde_json::json!({ "skills": skills });
-    if let Some(err) = error {
+    let show_error = !fallback || !inspect_is_unsupported(error.as_ref());
+    if let Some(err) = error.filter(|_| show_error) {
         out["error"] = serde_json::Value::String(err);
     }
     Ok(out)
@@ -4467,7 +4617,7 @@ pub async fn open_in_editor(
 
 #[cfg(test)]
 mod project_inspect_tests {
-    use super::build_project_inspect_summary;
+    use super::{build_project_inspect_summary, parse_skill_markdown};
 
     #[test]
     fn summary_strips_mcp_env_and_skill_descriptions() {
@@ -4521,6 +4671,31 @@ mod project_inspect_tests {
         );
         assert_eq!(out["skills"]["total"], 0);
         assert_eq!(out["error"], "Pi CLI CLI not found");
+    }
+
+    #[test]
+    fn legacy_skill_frontmatter_is_read_without_inspect() {
+        let root = std::env::temp_dir().join(format!(
+            "pi-skill-fallback-{}-{}",
+            std::process::id(),
+            uuid::Uuid::new_v4()
+        ));
+        let skill_dir = root.join("review");
+        std::fs::create_dir_all(&skill_dir).unwrap();
+        let skill_path = skill_dir.join("SKILL.md");
+        std::fs::write(
+            &skill_path,
+            "---\nname: review-code\ndescription: Review changed files\nuser-invocable: false\n---\n# Review\n",
+        )
+        .unwrap();
+
+        let skill = parse_skill_markdown(&skill_path, "project").unwrap();
+        assert_eq!(skill.name, "review-code");
+        assert_eq!(skill.description, "Review changed files");
+        assert_eq!(skill.source, "project");
+        assert!(!skill.user_invocable);
+        assert_eq!(skill.path.as_deref(), Some(skill_path.to_str().unwrap()));
+        let _ = std::fs::remove_dir_all(root);
     }
 }
 
