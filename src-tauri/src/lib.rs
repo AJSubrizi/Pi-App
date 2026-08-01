@@ -53,6 +53,7 @@ mod store_lock;
 mod stream_stall;
 mod support_bundle;
 mod terminal;
+mod token_usage;
 mod tray;
 mod tray_i18n;
 mod turn_complete;

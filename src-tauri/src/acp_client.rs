@@ -70,6 +70,12 @@ pub enum AcpEvent {
     PromptComplete {
         stop_reason: String,
     },
+    /// Real token counts for one assistant turn, cache reads included.
+    ///
+    /// Pi reports these on `turn_end`; the shell used to estimate instead.
+    Usage {
+        usage: crate::token_usage::TokenUsage,
+    },
     /// Provider/API retry loop (sessionUpdate = retry_state). Host caps retries.
     RetryState {
         attempt: u32,
@@ -1074,6 +1080,15 @@ impl AcpClient {
                     if let Some(event) = pi_fire_and_forget_ui_event(&method, msg) {
                         let _ = self.event_tx.send(event);
                     }
+                }
+            }
+            "turn_end" => {
+                // Real usage arrives here; a turn that failed before the
+                // provider billed anything carries none.
+                if let Some(usage) =
+                    crate::token_usage::parse_usage(msg.get("message").unwrap_or(&Value::Null))
+                {
+                    let _ = self.event_tx.send(AcpEvent::Usage { usage });
                 }
             }
             "extension_error" => {

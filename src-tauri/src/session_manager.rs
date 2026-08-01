@@ -147,6 +147,8 @@ type ProcessId = String;
 
 struct LiveSession {
     app_session_id: String,
+    /// Running token total for this session, cache reads included.
+    usage_total: crate::token_usage::TokenUsage,
     /// Stable id for the agent process / event pump (not the App session id).
     process_id: ProcessId,
     meta: SessionMeta,
@@ -1049,6 +1051,7 @@ impl SessionManager {
         let now = Instant::now();
         Some(LiveSession {
             app_session_id: parked.app_session_id,
+            usage_total: crate::token_usage::TokenUsage::default(),
             process_id: parked.process_id,
             meta: parked.meta,
             fsm,
@@ -1545,6 +1548,7 @@ impl SessionManager {
             let now = Instant::now();
             *self.inner.lock() = Some(LiveSession {
                 app_session_id: meta.id.clone(),
+                usage_total: crate::token_usage::TokenUsage::default(),
                 process_id: process_id.clone(),
                 meta: meta.clone(),
                 fsm,
@@ -1881,6 +1885,29 @@ impl SessionManager {
         }
 
         match ev {
+            AcpEvent::Usage { usage } => {
+                // Accumulate per session so the UI can show a running total and
+                // a cache hit rate that means something across a long chat.
+                let (app_sid, total) = {
+                    let mut guard = self.inner.lock();
+                    match guard.as_mut() {
+                        Some(s) => {
+                            s.usage_total.add(&usage);
+                            (s.meta.id.clone(), s.usage_total)
+                        }
+                        None => return,
+                    }
+                };
+                let _ = app.emit(
+                    "session://usage",
+                    serde_json::json!({
+                        "sessionId": app_sid,
+                        "turn": usage,
+                        "total": total,
+                        "cacheHitRate": total.cache_hit_rate(),
+                    }),
+                );
+            }
             AcpEvent::Stream {
                 kind,
                 text,
