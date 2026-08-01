@@ -17350,3 +17350,37 @@ html[data-theme="light"] .rim-sidebar {
 .batch-chip--failed .batch-chip__status {
   color: var(--text-danger, #e5534b);
 }
+
+/* ── Cache hit chip (composer row, beside context) ──────────────────────── */
+
+.cache-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  cursor: default;
+  user-select: none;
+}
+
+.cache-chip__rate {
+  line-height: 1;
+}
+
+/* Standing is carried by colour *and* by the number itself, so the meaning
+   survives for anyone who cannot separate these hues. */
+.cache-chip--good {
+  color: var(--ok, #2f855a);
+}
+
+.cache-chip--warming {
+  color: var(--warn, #9a5b12);
+}
+
+.cache-chip--cold {
+  color: var(--text-secondary);
+}

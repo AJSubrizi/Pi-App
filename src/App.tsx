@@ -296,6 +296,8 @@ import { Spinner } from "@/components/ui/spinner";
 import { UserMenu } from "@/components/UserMenu";
 import { WorkspaceSwitcher } from "@/components/WorkspaceSwitcher";
 import { PrTree } from "@/components/PrTree";
+import { CacheChip } from "@/components/CacheChip";
+import type { UsagePayload } from "@/lib/cacheUsage";
 import {
   usePrWorkspace,
   type PrWorkspaceDeps,
@@ -590,6 +592,9 @@ export default function App() {
   const [workspace, setWorkspace] = useState<WorkspaceId>(() =>
     loadWorkspace(localStorage),
   );
+
+  /** Real token usage from the host; null until a turn has been billed. */
+  const [sessionUsage, setSessionUsage] = useState<UsagePayload | null>(null);
 
   /** Each workspace wears its own colour skin (Settings → Appearance). */
   const [workspaceSkins, setWorkspaceSkins] = useState<WorkspaceSkins>(() =>
@@ -1634,6 +1639,14 @@ export default function App() {
                 tryApplyTaskBatchFromSession(s.sessionId);
               }
             }
+          }),
+        );
+        await track(
+          api.listen<UsagePayload>("session://usage", (payload) => {
+            // Keep only the viewed session's figures; a background task's
+            // usage would otherwise overwrite the chip you are looking at.
+            if (payload.sessionId !== viewingSessionIdRef.current) return;
+            setSessionUsage(payload);
           }),
         );
         await track(
@@ -9205,6 +9218,19 @@ export default function App() {
                         effort: v,
                       })
                       .catch((e) => showToast(String(e), 4000));
+                  }}
+                />
+                <CacheChip
+                  usage={sessionUsage}
+                  labels={{
+                    title: tr("cache.title"),
+                    tipCold: tr("cache.tipCold"),
+                    tipWarming: tr("cache.tipWarming"),
+                    tipGood: tr("cache.tipGood"),
+                    prompt: tr("cache.prompt"),
+                    cached: tr("cache.cached"),
+                    output: tr("cache.output"),
+                    cost: tr("cache.cost"),
                   }}
                 />
                 <ContextUsageChip
