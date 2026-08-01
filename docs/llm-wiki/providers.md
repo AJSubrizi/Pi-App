@@ -30,7 +30,7 @@ and the shared Pi profile in shared mode.
 
 `pi.dev/packages` is a package directory, not an implicit provider registry.
 Only explicitly reviewed, pinned packages may be offered as provider adapters.
-Installation remains in Settings → Extensions and uses the existing trust
+Installation remains in Settings → Packages and uses the existing trust
 review before invoking Pi CLI.
 
 API keys are never returned to the frontend after saving and must not be copied

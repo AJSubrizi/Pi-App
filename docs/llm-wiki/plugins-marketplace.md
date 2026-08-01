@@ -6,7 +6,7 @@ Community ask: install Pi plugins from the App without dropping to CLI.
 
 | Action | Where | Effect |
 |--------|--------|--------|
-| List installed | Settings → Extensions → Plugins | `pi plugin list --json` + inspect enrich |
+| List installed | Settings → Packages → Plugins | `pi plugin list --json` + inspect enrich |
 | Enable / disable | Same UI | CLI + `~/.pi/config.toml` `[plugins].disabled` |
 | Details | Modal | `pi plugin details` |
 | Uninstall | In-app confirm (GlassModal) | `pi plugin uninstall` |

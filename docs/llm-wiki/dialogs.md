@@ -133,6 +133,6 @@ Fix any surviving call as soon as you find one (search for `window.confirm`, `wi
 - `src/styles/app.css` — modal / menu / cmm layout
 - `src/components/ComposerModelMenu.tsx` / `ComposerProjectMenu.tsx` — composer chip menu examples
 - `src/components/StatusModal.tsx` — GlassModal example
-- `src/components/ExtensionsPanel.tsx` — Settings → Extensions, full-page skill / MCP management
+- `src/components/ExtensionsPanel.tsx` — package/MCP management surface used from Settings → Packages
 - `src/components/AutomationsPage.tsx` — sub-page with its own delete confirmation
 - `src/i18n/messages.ts` — `common.cancel` / `common.confirm` / `common.close`, etc.

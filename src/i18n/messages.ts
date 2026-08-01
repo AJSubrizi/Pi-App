@@ -940,7 +940,7 @@ const en = {
   "settings.nav.account": "Account",
   "settings.nav.archived": "Archived chats",
   "settings.nav.providersModels": "Providers & Models",
-  "settings.nav.extensions": "Extensions",
+  "settings.nav.extensions": "Packages",
   "settings.nav.skills": "Skills",
   "skills.installTitle": "Install a skill",
   "skills.installDesc":

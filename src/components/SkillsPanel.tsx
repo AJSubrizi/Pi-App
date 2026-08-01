@@ -142,9 +142,19 @@ export function SkillsPanel({
 
       <div className="settings-card">
         <div className="settings-row settings-row--stack">
-          <div className="settings-row__text">
-            <div className="settings-row__label">{tr("skills.listTitle")}</div>
-            <div className="settings-row__desc">{tr("skills.listDesc")}</div>
+          <div className="skills-panel__list-head">
+            <div className="settings-row__text">
+              <div className="settings-row__label">{tr("skills.listTitle")}</div>
+              <div className="settings-row__desc">{tr("skills.listDesc")}</div>
+            </div>
+            <button
+              type="button"
+              className="btn btn--ghost btn--sm"
+              onClick={() => void refresh()}
+              disabled={loading || installBusy}
+            >
+              {tr("common.refresh")}
+            </button>
           </div>
 
           {loading ? (

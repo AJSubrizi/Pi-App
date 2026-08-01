@@ -44,11 +44,12 @@ Doctor is a **structured health UI**, not a raw JSON dump.
 
 ## Skills / MCP management (Extensions)
 
-Full management surface: **Settings → Extensions** (`#/settings/extensions`).
+Full management surface: **Settings → Packages** (`#/settings/extensions`) for Pi packages, plus **Settings → Skills** (`#/settings/skills`) for the focused skill list.
 
 | Surface | Role |
 |---------|------|
-| Settings → Extensions | Skills + MCP list with **per-item enable toggles**, bulk **Enable all**, refresh; project cwd when a workbench project is active |
+| Settings → Packages | Pi packages and MCP/extension management with **per-item enable toggles**, bulk **Enable all**, refresh; project cwd when a workbench project is active |
+| Settings → Skills | Installed skills, explicit enable toggles, package/path installation and refresh |
 | `/mcp` slash | Quick `McpStatusModal`; **Manage in Settings** opens Extensions |
 | Composer `+` / slash skills | Invocable **and enabled** skills only (chips); loaded via `skills_list` |
 

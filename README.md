@@ -183,7 +183,7 @@ stay in the operating-system keychain.
 
 ## Packages
 
-**Settings → Packages** manages Pi packages the same way the CLI does:
+**Settings → Packages** manages Pi packages the same way the CLI does. **Settings → Skills** lists installed skills, lets you enable or disable them, and accepts new npm, git or local skill sources:
 
 - npm · git · local path  
 - user-wide or current project  

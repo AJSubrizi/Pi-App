@@ -4495,6 +4495,13 @@ html[data-theme="light"] .ui-check.is-mixed .ui-check__box {
   min-width: 0;
 }
 
+.skills-panel__list-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
 .skills-panel__error,
 .skills-panel__ok,
 .skills-panel__empty {
@@ -4574,6 +4581,11 @@ html[data-theme="light"] .ui-check.is-mixed .ui-check__box {
 }
 
 @media (max-width: 620px) {
+  .skills-panel__list-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
   .skills-panel__install {
     align-items: stretch;
     flex-direction: column;
