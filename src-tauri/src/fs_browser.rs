@@ -61,6 +61,7 @@ fn file_mtime_ms(path: &Path) -> u64 {
         .unwrap_or(0)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn ok_result(
     path: &Path,
     relative_path: String,

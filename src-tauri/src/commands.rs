@@ -702,6 +702,7 @@ pub async fn composer_prefs_resolve(
 
 /// Persist composer fields at the configured memory scope + apply live.
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub async fn composer_prefs_set(
     app: tauri::AppHandle,
     mgr: State<'_, Arc<SessionManager>>,
@@ -4533,6 +4534,7 @@ pub async fn providers_activate(
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub async fn providers_upsert(
     id: String,
     model: String,
