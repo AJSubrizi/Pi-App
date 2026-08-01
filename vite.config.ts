@@ -29,6 +29,39 @@ export default defineConfig(() => ({
       ignored: ["**/src-tauri/**"],
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        // Keep file viewers and terminal runtimes out of the launch bundle.
+        // They are already lazy-loaded by ResourceViewer, so stable vendor
+        // chunks let the browser cache each capability independently.
+        manualChunks(id) {
+          if (!id.includes("node_modules")) return undefined;
+          if (id.includes("/pdfjs-dist/") || id.includes("/react-pdf/")) {
+            return "vendor-pdf";
+          }
+          if (id.includes("/xlsx/")) {
+            return "vendor-spreadsheet";
+          }
+          if (id.includes("/docx-preview/")) {
+            return "vendor-document";
+          }
+          if (id.includes("/@xterm/") || id.includes("/xterm/")) {
+            return "vendor-terminal";
+          }
+          if (
+            id.includes("/react-markdown/") ||
+            id.includes("/remark-gfm/") ||
+            id.includes("/streamdown/") ||
+            id.includes("/highlight.js/")
+          ) {
+            return "vendor-markdown";
+          }
+          return undefined;
+        },
+      },
+    },
+  },
   test: {
     environment: "node",
     include: ["src/**/*.{test,spec}.ts", "src/**/*.{test,spec}.tsx"],
