@@ -38,13 +38,25 @@ need_cmd cargo
 
 OS="$(uname -s)"
 
+# Updater artifacts require a private signing key. Local contributors often
+# only need a runnable installer, so disable that final signing step when the
+# key is absent. CI/release builds keep the production config and still sign.
+tauri_build() {
+  local -a config_args=()
+  if [[ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" ]]; then
+    config_args=(--config '{"bundle":{"createUpdaterArtifacts":false}}')
+    echo "Updater signing key not set: building unsigned local artifacts"
+  fi
+  pnpm exec tauri build "${config_args[@]}" "$@"
+}
+
 build_target() {
   local triple="$1"
   echo ""
   echo "======== Building target: $triple ========"
   rustup target add "$triple" >/dev/null 2>&1 || true
   # Frontend is built via beforeBuildCommand in tauri.conf.json
-  pnpm exec tauri build --target "$triple"
+  tauri_build --target "$triple"
   echo "Artifacts under: src-tauri/target/${triple}/release/bundle/"
 }
 
@@ -71,10 +83,10 @@ build_windows() {
     fi
     echo "Using runner: cargo-xwin (cross-compile from $OS)"
     # Official Tauri path: https://v2.tauri.app/distribute/windows-installer/
-    pnpm exec tauri build --runner cargo-xwin --target "$triple"
+    tauri_build --runner cargo-xwin --target "$triple"
   else
     echo "Using native Windows MSVC toolchain"
-    pnpm exec tauri build --target "$triple"
+    tauri_build --target "$triple"
   fi
 
   echo "Artifacts under: src-tauri/target/${triple}/release/bundle/"
@@ -88,7 +100,7 @@ build_windows() {
 case "$TARGET_ALIAS" in
   host|"")
     echo "======== Building host default ========"
-    pnpm exec tauri build
+    tauri_build
     echo "Artifacts under: src-tauri/target/release/bundle/"
     ;;
   mac-arm|aarch64-apple-darwin)
