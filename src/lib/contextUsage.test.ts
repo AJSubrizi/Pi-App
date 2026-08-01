@@ -284,3 +284,55 @@ describe("hydrateContextUsageFromMessages", () => {
     ).toEqual(INITIAL_CONTEXT_USAGE);
   });
 });
+
+describe("measured context", () => {
+  it("takes the provider's prompt size as known, replacing the estimate", () => {
+    const next = reduceContextUsage(INITIAL_CONTEXT_USAGE, {
+      type: "measured",
+      promptTokens: 12_345,
+    });
+    expect(next.knownTokens).toBe(12_345);
+  });
+
+  /**
+   * A cached prompt token still occupies the window, so context fullness must
+   * count it even though it was nearly free.
+   */
+  it("supersedes a figure from an earlier compact", () => {
+    const afterCompact = reduceContextUsage(INITIAL_CONTEXT_USAGE, {
+      type: "compact",
+      tokensAfter: 500,
+      messageId: "m1",
+    });
+    const next = reduceContextUsage(afterCompact, {
+      type: "measured",
+      promptTokens: 9000,
+      messageId: "m2",
+    });
+    expect(next.knownTokens).toBe(9000);
+    expect(next.lastCompactMessageId).toBe("m2");
+    // The compact summary itself is history and stays visible.
+    expect(next.lastCompact?.tokensAfter).toBe(500);
+  });
+
+  it("keeps a good figure when the reported one is nonsense", () => {
+    const good = reduceContextUsage(INITIAL_CONTEXT_USAGE, {
+      type: "measured",
+      promptTokens: 1000,
+    });
+    for (const bad of [NaN, -1, Infinity]) {
+      expect(
+        reduceContextUsage(good, { type: "measured", promptTokens: bad })
+          .knownTokens,
+      ).toBe(1000);
+    }
+  });
+
+  it("is cleared by reset like any other session state", () => {
+    const measured = reduceContextUsage(INITIAL_CONTEXT_USAGE, {
+      type: "measured",
+      promptTokens: 42,
+    });
+    expect(reduceContextUsage(measured, { type: "reset" }).knownTokens).toBeNull();
+  });
+});

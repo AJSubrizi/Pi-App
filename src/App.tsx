@@ -1647,6 +1647,18 @@ export default function App() {
             // usage would otherwise overwrite the chip you are looking at.
             if (payload.sessionId !== viewingSessionIdRef.current) return;
             setSessionUsage(payload);
+            // The provider just told us exactly how full the window was, so
+            // the context chip can stop estimating from character counts.
+            //
+            // The *turn*, not the session total: occupancy is the size of the
+            // last prompt. Summing every turn would climb forever and report a
+            // window many times fuller than it is.
+            const promptTokens = payload.turn.input + payload.turn.cacheRead;
+            if (promptTokens > 0) {
+              setContextUsage((prev) =>
+                reduceContextUsage(prev, { type: "measured", promptTokens }),
+              );
+            }
           }),
         );
         await track(

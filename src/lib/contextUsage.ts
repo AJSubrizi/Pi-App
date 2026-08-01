@@ -64,7 +64,15 @@ export type ContextUsageAction =
       note?: string;
       messageId?: string;
     }
-  | { type: "hydrate"; messages: ContextUsageMessage[] };
+  | { type: "hydrate"; messages: ContextUsageMessage[] }
+  /**
+   * Exact prompt size reported by the provider for the turn just finished.
+   *
+   * `input + cacheRead` is what the context window actually held, whether or
+   * not those tokens were billed at full price — a cached token still occupies
+   * the window. This supersedes the chars/4 estimate for as long as it holds.
+   */
+  | { type: "measured"; promptTokens: number; messageId?: string };
 
 function finiteToken(n: number | undefined | null): number | undefined {
   if (n == null || !Number.isFinite(n) || n < 0) return undefined;
@@ -101,6 +109,18 @@ export function reduceContextUsage(
           note: action.note,
           messageId: action.messageId,
         },
+      };
+    }
+    case "measured": {
+      const measured = finiteToken(action.promptTokens);
+      // A malformed figure must not discard a good one already held.
+      if (measured === undefined) return state;
+      return {
+        ...state,
+        knownTokens: measured,
+        // The measurement covers everything up to here, so post-compact
+        // growth must be counted from this point, not the old marker.
+        lastCompactMessageId: action.messageId ?? state.lastCompactMessageId,
       };
     }
     case "hydrate":
