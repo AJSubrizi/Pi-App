@@ -149,6 +149,30 @@ describe("create dialog", () => {
     const { result } = renderHook(() => useWorktreeDialogs(deps()));
     expect(result.current.create.previewPath).toBeNull();
   });
+
+  it("clears a stale error as soon as the user edits a field", async () => {
+    const { result } = renderHook(() => useWorktreeDialogs(deps()));
+    act(() => result.current.create.openDialog());
+    await act(async () => {
+      await result.current.create.submit();
+    });
+    expect(result.current.create.error).toBeTruthy();
+
+    act(() => result.current.create.setName("f"));
+    expect(result.current.create.error).toBeNull();
+  });
+
+  it("close() resets, so the next open is not greeted by the last failure", async () => {
+    const { result } = renderHook(() => useWorktreeDialogs(deps()));
+    act(() => result.current.create.openDialog());
+    await act(async () => {
+      await result.current.create.submit();
+    });
+
+    act(() => result.current.create.close());
+    expect(result.current.create.open).toBe(false);
+    expect(result.current.create.error).toBeNull();
+  });
 });
 
 describe("prune dialog", () => {
@@ -217,6 +241,19 @@ describe("prune dialog", () => {
     expect(result.current.gc.open).toBe(true);
     expect(result.current.gc.error).toContain("locked");
     expect(d.refreshWorktrees).not.toHaveBeenCalled();
+  });
+
+  it("close() drops the preview and the force flag together", async () => {
+    mocked.gitWorktreeGc.mockResolvedValue({ prunedCount: 4 } as never);
+    const { result } = renderHook(() => useWorktreeDialogs(deps()));
+    act(() => result.current.gc.openDialog());
+    act(() => result.current.gc.setForce(true));
+    await waitFor(() => expect(result.current.gc.preview).not.toBeNull());
+
+    act(() => result.current.gc.close());
+    expect(result.current.gc.open).toBe(false);
+    expect(result.current.gc.preview).toBeNull();
+    expect(result.current.gc.force).toBe(false);
   });
 
   it("does nothing at all without a project", async () => {

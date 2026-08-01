@@ -48,10 +48,15 @@ export interface WorktreeDialogs {
     error: string | null;
     /** Where the worktree will land, shown under the name field. */
     previewPath: string | null;
+    /** Open a chat on the new worktree once it exists. */
+    startChat: boolean;
+    setStartChat: (v: boolean) => void;
+    /** Typing clears a stale error, so the dialog stops shouting mid-fix. */
     setName: (v: string) => void;
     setStartPoint: (v: string) => void;
     openDialog: (opts?: { startNewChat?: boolean }) => void;
-    setOpen: (v: boolean) => void;
+    /** Dismiss and reset, so the next open starts clean. */
+    close: () => void;
     submit: () => Promise<void>;
   };
   gc: {
@@ -63,7 +68,8 @@ export interface WorktreeDialogs {
     preview: api.GitWorktreeGcResult | null;
     setForce: (v: boolean) => void;
     openDialog: () => void;
-    setOpen: (v: boolean) => void;
+    /** Dismiss and reset, so a stale preview never greets the next open. */
+    close: () => void;
     submit: () => Promise<void>;
   };
 }
@@ -85,6 +91,16 @@ export function useWorktreeDialogs(deps: WorktreeDialogsDeps): WorktreeDialogs {
   const [previewBusy, setPreviewBusy] = useState(false);
   const [gcError, setGcError] = useState<string | null>(null);
   const [preview, setPreview] = useState<api.GitWorktreeGcResult | null>(null);
+
+  /** Editing any field clears the previous failure. */
+  const editName = useCallback((v: string) => {
+    setName(v);
+    setCreateError(null);
+  }, []);
+  const editStartPoint = useCallback((v: string) => {
+    setStartPoint(v);
+    setCreateError(null);
+  }, []);
 
   // ── Create ───────────────────────────────────────────────────────────────
 
@@ -159,6 +175,18 @@ export function useWorktreeDialogs(deps: WorktreeDialogsDeps): WorktreeDialogs {
 
   // ── Prune ────────────────────────────────────────────────────────────────
 
+  const closeCreate = useCallback(() => {
+    setCreateOpen(false);
+    setCreateError(null);
+  }, []);
+
+  const closeGc = useCallback(() => {
+    setGcOpen(false);
+    setGcError(null);
+    setPreview(null);
+    setForce(false);
+  }, []);
+
   const openGc = useCallback(() => {
     setForce(false);
     setGcError(null);
@@ -221,10 +249,12 @@ export function useWorktreeDialogs(deps: WorktreeDialogsDeps): WorktreeDialogs {
       busy: createBusy,
       error: createError,
       previewPath,
-      setName,
-      setStartPoint,
+      startChat,
+      setStartChat,
+      setName: editName,
+      setStartPoint: editStartPoint,
       openDialog: openCreate,
-      setOpen: setCreateOpen,
+      close: closeCreate,
       submit: submitCreate,
     },
     gc: {
@@ -236,7 +266,7 @@ export function useWorktreeDialogs(deps: WorktreeDialogsDeps): WorktreeDialogs {
       preview,
       setForce,
       openDialog: openGc,
-      setOpen: setGcOpen,
+      close: closeGc,
       submit: submitGc,
     },
   };
