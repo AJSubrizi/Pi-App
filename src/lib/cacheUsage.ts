@@ -87,9 +87,23 @@ export type CacheChipView = {
  * A session with no measured prompt tokens shows no chip at all: a "0%" badge
  * before the first billed turn would read as a cache that is failing, when in
  * fact nothing has been measured.
+ *
+ * `viewedSessionId` guards against showing one chat's figures while another is
+ * open. Enforcing it here rather than by clearing state at every switch means
+ * a new navigation path cannot forget to do it and leave stale numbers on
+ * screen — silently wrong is worse than absent.
  */
-export function cacheChipView(payload: UsagePayload | null): CacheChipView | null {
+export function cacheChipView(
+  payload: UsagePayload | null,
+  viewedSessionId?: string | null,
+): CacheChipView | null {
   if (!payload) return null;
+  if (
+    viewedSessionId !== undefined &&
+    payload.sessionId !== (viewedSessionId ?? "")
+  ) {
+    return null;
+  }
   const { total, cacheHitRate } = payload;
   if (cacheHitRate === null) return null;
 

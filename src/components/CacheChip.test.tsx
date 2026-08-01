@@ -44,24 +44,35 @@ function payload(over: Partial<UsagePayload> = {}): UsagePayload {
 
 describe("CacheChip", () => {
   it("shows the measured rate", () => {
-    render(<CacheChip usage={payload()} labels={labels} />);
+    render(<CacheChip usage={payload()} viewedSessionId="s1" labels={labels} />);
     expect(screen.getByText("80%")).toBeDefined();
   });
 
+  it("hides another chat's figures instead of showing them here", () => {
+    const { container } = render(
+      <CacheChip usage={payload()} viewedSessionId="other" labels={labels} />,
+    );
+    expect(container.textContent).toBe("");
+  });
+
   it("renders nothing before anything has been measured", () => {
-    const { container } = render(<CacheChip usage={null} labels={labels} />);
+    const { container } = render(<CacheChip usage={null} viewedSessionId="s1" labels={labels} />);
     expect(container.textContent).toBe("");
   });
 
   it("renders nothing when no prompt tokens were counted", () => {
     const { container } = render(
-      <CacheChip usage={payload({ cacheHitRate: null })} labels={labels} />,
+      <CacheChip
+        usage={payload({ cacheHitRate: null })}
+        viewedSessionId="s1"
+        labels={labels}
+      />,
     );
     expect(container.textContent).toBe("");
   });
 
   it("carries the breakdown for screen readers, not just the tooltip", () => {
-    render(<CacheChip usage={payload()} labels={labels} />);
+    render(<CacheChip usage={payload()} viewedSessionId="s1" labels={labels} />);
     const label = screen.getByLabelText(/Cache 80%/);
     expect(label.getAttribute("aria-label")).toContain("Cached: 8k");
     expect(label.getAttribute("aria-label")).toContain("Cost: $0.42");
@@ -70,6 +81,7 @@ describe("CacheChip", () => {
   it("marks a cold cache differently from a good one", () => {
     const { container, rerender } = render(
       <CacheChip
+        viewedSessionId="s1"
         usage={payload({
           cacheHitRate: 0,
           total: {
@@ -86,13 +98,14 @@ describe("CacheChip", () => {
     );
     expect(container.querySelector(".cache-chip--cold")).not.toBeNull();
 
-    rerender(<CacheChip usage={payload()} labels={labels} />);
+    rerender(<CacheChip usage={payload()} viewedSessionId="s1" labels={labels} />);
     expect(container.querySelector(".cache-chip--good")).not.toBeNull();
   });
 
   it("omits cost when the provider reported none", () => {
     render(
       <CacheChip
+        viewedSessionId="s1"
         usage={payload({
           total: {
             input: 2000,

@@ -111,6 +111,19 @@ describe("cacheChipView", () => {
     expect(cacheChipView(payload({ cacheHitRate: null }))).toBeNull();
   });
 
+  /**
+   * Switching chats must not leave the previous one's numbers on screen. The
+   * guard lives here so no navigation path can forget to clear state.
+   */
+  it("hides figures that belong to a different session", () => {
+    expect(cacheChipView(payload(), "s1")).not.toBeNull();
+    expect(cacheChipView(payload(), "other")).toBeNull();
+    expect(cacheChipView(payload(), null)).toBeNull();
+    // Omitting the argument keeps the unguarded behaviour for callers that
+    // have already narrowed by session.
+    expect(cacheChipView(payload())).not.toBeNull();
+  });
+
   it("reports a genuinely cold cache rather than hiding it", () => {
     const v = cacheChipView(
       payload({

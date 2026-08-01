@@ -9222,6 +9222,7 @@ export default function App() {
                 />
                 <CacheChip
                   usage={sessionUsage}
+                  viewedSessionId={session.sessionId ?? null}
                   labels={{
                     title: tr("cache.title"),
                     tipCold: tr("cache.tipCold"),

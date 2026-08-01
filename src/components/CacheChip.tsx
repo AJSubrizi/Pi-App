@@ -23,12 +23,15 @@ export type CacheChipLabels = {
 
 export function CacheChip({
   usage,
+  viewedSessionId,
   labels,
 }: {
   usage: UsagePayload | null;
+  /** Figures from another chat are not shown. */
+  viewedSessionId: string | null;
   labels: CacheChipLabels;
 }) {
-  const view = cacheChipView(usage);
+  const view = cacheChipView(usage, viewedSessionId);
   // Nothing measured yet: no chip, rather than a 0% that reads as failure.
   if (!view) return null;
 
