@@ -285,7 +285,7 @@ mod tests {
         let path = enriched_path_env().expect("enriched path");
         assert!(
             path.split(path_list_separator())
-                .any(|p| PathBuf::from(p) == bin),
+                .any(|p| Path::new(p) == bin.as_path()),
             "enriched PATH is missing npm global bin {}",
             bin.display()
         );
