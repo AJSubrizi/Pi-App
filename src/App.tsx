@@ -478,8 +478,6 @@ export default function App() {
   const executeSendFromQueueRef = useRef<ExecuteSendFromQueue>(
     async () => false,
   );
-  const skillInfos = useMemo<SkillInfo[]>(() => [], []);
-  const skillsLoading = false;
   const [slashQuery, setSlashQuery] = useState<{
     start: number;
     query: string;
@@ -545,6 +543,38 @@ export default function App() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [sessions, setSessions] = useState<SessionRow[]>([]);
   const [activeProject, setActiveProject] = useState<Project | null>(null);
+  /** Skills discovered by Pi for the active project, used by the slash palette. */
+  const [skillInfos, setSkillInfos] = useState<SkillInfo[]>([]);
+  const [skillsLoading, setSkillsLoading] = useState(false);
+  const refreshSkills = useCallback(async () => {
+    if (!api.isTauri()) {
+      setSkillInfos([]);
+      setSkillsLoading(false);
+      return;
+    }
+    setSkillsLoading(true);
+    try {
+      const result = await api.skillsList(activeProject?.path ?? null);
+      setSkillInfos(
+        (result.skills ?? [])
+          .filter((skill) => skill.enabled !== false)
+          .map((skill) => ({
+            name: skill.name,
+            description: skill.description ?? "",
+            source: skill.source,
+            userInvocable: skill.userInvocable,
+          })),
+      );
+    } catch {
+      // A missing CLI should not remove built-in slash commands.
+      setSkillInfos([]);
+    } finally {
+      setSkillsLoading(false);
+    }
+  }, [activeProject?.path]);
+  useEffect(() => {
+    void refreshSkills();
+  }, [refreshSkills]);
   /** Per-session message cache so switching away mid-turn does not drop the UI. */
   const messagesBySessionRef = useRef<Map<string, ChatMessage[]>>(new Map());
   const viewingSessionIdRef = useRef<string | null>(null);
@@ -7380,6 +7410,9 @@ export default function App() {
             deleteSessionsConfirm(rows);
           }}
           projectPath={activeProject?.path ?? null}
+          onSkillsPrefsChanged={() => {
+            void refreshSkills();
+          }}
           onAskPiForCapability={(request) => {
             void newChat(activeProject ?? null, {
               seedDraft: request
