@@ -1229,17 +1229,17 @@ fn pi_fire_and_forget_ui_event(method: &str, payload: Value) -> Option<AcpEvent>
     })
 }
 
-/// Parse compact-related sessionUpdate → (trigger, before, after, summary, note)
-fn parse_context_compact_update(
-    kind: &str,
-    update: &Value,
-) -> Option<(
-    String,
-    Option<u64>,
-    Option<u64>,
-    Option<String>,
-    Option<String>,
-)> {
+#[derive(Debug, Clone)]
+struct ContextCompactUpdate {
+    trigger: String,
+    tokens_before: Option<u64>,
+    tokens_after: Option<u64>,
+    summary_preview: Option<String>,
+    note: Option<String>,
+}
+
+/// Parse compact-related sessionUpdate into a normalized update.
+fn parse_context_compact_update(kind: &str, update: &Value) -> Option<ContextCompactUpdate> {
     let tokens_before = update
         .get("tokens_before")
         .or_else(|| update.get("tokensBefore"))
@@ -1288,7 +1288,13 @@ fn parse_context_compact_update(
         || kind == "tokens_used"
         || kind == "compaction_checkpoint"
     {
-        Some((trigger, tokens_before, tokens_after, summary_preview, note))
+        Some(ContextCompactUpdate {
+            trigger,
+            tokens_before,
+            tokens_after,
+            summary_preview,
+            note,
+        })
     } else {
         None
     }
@@ -2346,15 +2352,13 @@ pub fn decode_session_update(params: &Value) -> Vec<AcpEvent> {
         | "context_compact"
         | "auto_compact"
         | "compaction_checkpoint" => {
-            if let Some((trigger, before, after, summary, note)) =
-                parse_context_compact_update(kind, update)
-            {
+            if let Some(compact) = parse_context_compact_update(kind, update) {
                 out.push(AcpEvent::ContextCompact {
-                    trigger,
-                    tokens_before: before,
-                    tokens_after: after,
-                    summary_preview: summary,
-                    note,
+                    trigger: compact.trigger,
+                    tokens_before: compact.tokens_before,
+                    tokens_after: compact.tokens_after,
+                    summary_preview: compact.summary_preview,
+                    note: compact.note,
                 });
             }
         }
@@ -2364,15 +2368,13 @@ pub fn decode_session_update(params: &Value) -> Vec<AcpEvent> {
                 || update.get("tokens_after").is_some()
                 || update.get("tokensAfter").is_some()
             {
-                if let Some((trigger, before, after, summary, note)) =
-                    parse_context_compact_update(kind, update)
-                {
+                if let Some(compact) = parse_context_compact_update(kind, update) {
                     out.push(AcpEvent::ContextCompact {
-                        trigger,
-                        tokens_before: before,
-                        tokens_after: after,
-                        summary_preview: summary,
-                        note,
+                        trigger: compact.trigger,
+                        tokens_before: compact.tokens_before,
+                        tokens_after: compact.tokens_after,
+                        summary_preview: compact.summary_preview,
+                        note: compact.note,
                     });
                     return out;
                 }
