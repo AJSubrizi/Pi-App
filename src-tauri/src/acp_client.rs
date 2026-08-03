@@ -3052,4 +3052,201 @@ mod live_handshake_tests {
         client.kill().await;
         assert!(!sid.is_empty());
     }
+
+    /// Drive one real billed turn on a named model and assert the app gets back
+    /// what its cost and context surfaces are built on.
+    ///
+    /// The handshake test above proves we can open a session; it does not prove
+    /// a prompt on a *chosen* model answers, nor that Pi reports the usage the
+    /// cache chip, the ledger and the context gauge all read. Opt-in because it
+    /// spends money:
+    ///
+    /// ```text
+    /// PI_APP_LIVE_MODEL=xai-auth/grok-4.5 cargo test live_model_turn -- --nocapture
+    /// ```
+    #[tokio::test]
+    async fn live_model_turn_reports_usage() {
+        let Ok(model_id) = std::env::var("PI_APP_LIVE_MODEL") else {
+            eprintln!("skip live model turn (set PI_APP_LIVE_MODEL=<provider/model>)");
+            return;
+        };
+        let cli = which::which("pi").expect("pi cli");
+        let cwd = std::env::current_dir().unwrap();
+        let (client, mut events) = AcpClient::spawn_with_options(
+            cli,
+            cwd,
+            SpawnOptions {
+                model_id: Some(model_id.clone()),
+                ..SpawnOptions::default()
+            },
+        )
+        .expect("spawn");
+
+        let collector = tokio::spawn(async move {
+            let mut assistant = String::new();
+            let mut usage: Option<crate::token_usage::TokenUsage> = None;
+            let mut reported_model: Option<String> = None;
+            while let Some(event) = events.recv().await {
+                match event {
+                    AcpEvent::State {
+                        model_id: Some(model_id),
+                        ..
+                    } => {
+                        reported_model = Some(model_id);
+                    }
+                    AcpEvent::Stream { kind, text, .. } => {
+                        if matches!(kind, StreamKind::Assistant) {
+                            assistant.push_str(&text);
+                        }
+                    }
+                    AcpEvent::Usage { usage: u } => {
+                        let mut total = usage.unwrap_or_default();
+                        total.add(&u);
+                        usage = Some(total);
+                    }
+                    AcpEvent::Error { error } => panic!("agent error: {error:?}"),
+                    AcpEvent::ProcessExited | AcpEvent::PromptComplete { .. } => break,
+                    _ => {}
+                }
+            }
+            (assistant, usage, reported_model)
+        });
+
+        tokio::time::timeout(
+            Duration::from_secs(60),
+            client.initialize_and_open_session(None),
+        )
+        .await
+        .expect("handshake timeout")
+        .expect("handshake");
+
+        client
+            .prompt("Reply with exactly the word: ready", &[])
+            .await
+            .expect("prompt");
+
+        let (assistant, usage, reported_model) =
+            tokio::time::timeout(Duration::from_secs(30), collector)
+                .await
+                .expect("event drain timeout")
+                .expect("collector");
+        client.kill().await;
+
+        eprintln!("requested model : {model_id}");
+        eprintln!("reported model  : {reported_model:?}");
+        eprintln!("assistant       : {}", assistant.trim());
+        eprintln!("usage           : {usage:?}");
+
+        assert!(
+            !assistant.trim().is_empty(),
+            "{model_id} produced no assistant text"
+        );
+
+        // The cache chip, the usage ledger and the budget guard are all built
+        // on this object. If Pi stops reporting it, every one of them silently
+        // reverts to showing nothing.
+        let usage = usage.unwrap_or_else(|| panic!("{model_id} reported no usage"));
+        assert!(
+            usage.input + usage.cache_read > 0,
+            "{model_id} reported no prompt tokens: {usage:?}"
+        );
+        assert!(usage.output > 0, "{model_id} reported no output tokens");
+        assert!(
+            usage.cache_hit_rate().is_some(),
+            "cache hit rate is undefined despite counted prompt tokens"
+        );
+    }
+
+    /// Measure whether a second turn in the same session actually reads from
+    /// cache — the premise the cache chip, the cache packages and every
+    /// long-session cost estimate rest on.
+    ///
+    /// A first turn legitimately reads nothing; what matters is that it *writes*
+    /// and that the next turn reads what it wrote. This prints the figures
+    /// rather than asserting a threshold, because the answer is a property of
+    /// the provider, not of this code:
+    ///
+    /// ```text
+    /// PI_APP_LIVE_MODEL=xai-auth/grok-4.5 cargo test live_cache_across_turns -- --nocapture
+    /// ```
+    #[tokio::test]
+    async fn live_cache_across_turns() {
+        let Ok(model_id) = std::env::var("PI_APP_LIVE_MODEL") else {
+            eprintln!("skip live cache probe (set PI_APP_LIVE_MODEL=<provider/model>)");
+            return;
+        };
+        let cli = which::which("pi").expect("pi cli");
+        let cwd = std::env::current_dir().unwrap();
+        let (client, mut events) = AcpClient::spawn_with_options(
+            cli,
+            cwd,
+            SpawnOptions {
+                model_id: Some(model_id.clone()),
+                ..SpawnOptions::default()
+            },
+        )
+        .expect("spawn");
+
+        let (tx, mut turns) = tokio::sync::mpsc::unbounded_channel();
+        tokio::spawn(async move {
+            let mut current = crate::token_usage::TokenUsage::default();
+            while let Some(event) = events.recv().await {
+                match event {
+                    AcpEvent::Usage { usage } => current.add(&usage),
+                    AcpEvent::PromptComplete { .. } => {
+                        let _ = tx.send(current);
+                        current = crate::token_usage::TokenUsage::default();
+                    }
+                    AcpEvent::ProcessExited => break,
+                    _ => {}
+                }
+            }
+        });
+
+        tokio::time::timeout(
+            Duration::from_secs(60),
+            client.initialize_and_open_session(None),
+        )
+        .await
+        .expect("handshake timeout")
+        .expect("handshake");
+
+        let mut measured = Vec::new();
+        for prompt in ["Reply with exactly: one", "Reply with exactly: two"] {
+            client.prompt(prompt, &[]).await.expect("prompt");
+            let usage = tokio::time::timeout(Duration::from_secs(60), turns.recv())
+                .await
+                .expect("turn timeout")
+                .expect("turn usage");
+            measured.push(usage);
+        }
+        client.kill().await;
+
+        for (index, usage) in measured.iter().enumerate() {
+            let rate = usage
+                .cache_hit_rate()
+                .map(|r| format!("{:.1}%", r * 100.0))
+                .unwrap_or_else(|| "n/a".into());
+            eprintln!(
+                "turn {}: input={} cache_read={} cache_write={} hit={} cost={:?}",
+                index + 1,
+                usage.input,
+                usage.cache_read,
+                usage.cache_write,
+                rate,
+                usage.cost_total
+            );
+        }
+
+        let first = measured[0];
+        let second = measured[1];
+        eprintln!(
+            "\nsecond turn re-read {} of the {} prompt tokens the first turn paid for",
+            second.cache_read, first.input
+        );
+        assert!(
+            second.input + second.cache_read > 0,
+            "second turn reported no prompt tokens at all"
+        );
+    }
 }

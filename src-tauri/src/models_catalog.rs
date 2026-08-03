@@ -85,13 +85,21 @@ pub fn list_available_models() -> AvailableModelsResult {
                     let model = cols[1];
                     let id = format!("{provider}/{model}");
                     let reasoning = cols.get(4).is_some_and(|v| *v == "yes");
+                    // The CLI reports the real window in the `context` column.
+                    // Guessing it from the id instead was wrong for every model
+                    // outside a four-name table — a 1M-context model shown as
+                    // 128K reads as full at an eighth of its actual capacity.
+                    let context_window = cols
+                        .get(2)
+                        .and_then(|raw| parse_context_window(raw))
+                        .unwrap_or_else(|| context_window_for(&id));
                     by_id.insert(
                         id.clone(),
                         AvailableModel {
                             id: id.clone(),
                             label: model.to_string(),
                             source: provider.to_string(),
-                            context_window: Some(context_window_for(&id)),
+                            context_window: Some(context_window),
                             is_default: false,
                             reasoning_efforts: if reasoning {
                                 pi_thinking_efforts()
@@ -148,6 +156,29 @@ pub fn list_available_models() -> AvailableModelsResult {
     }
 }
 
+/// Parse the `context` column of `pi --list-models` — `500K`, `1M`, `204.8K`.
+///
+/// The CLI prints binary window sizes in decimal notation (`131.1K` for
+/// 131,072), so this reads a little low. That is the right direction to be
+/// wrong in for a gauge that answers "how full am I": it warns marginally
+/// early rather than claiming room that is not there.
+fn parse_context_window(raw: &str) -> Option<u64> {
+    let trimmed = raw.trim();
+    let (digits, multiplier) = match trimmed.as_bytes().last()? {
+        b'K' | b'k' => (&trimmed[..trimmed.len() - 1], 1_000.0_f64),
+        b'M' | b'm' => (&trimmed[..trimmed.len() - 1], 1_000_000.0_f64),
+        _ => (trimmed, 1.0_f64),
+    };
+    let value: f64 = digits.parse().ok()?;
+    if !value.is_finite() || value <= 0.0 {
+        return None;
+    }
+    Some((value * multiplier).round() as u64)
+}
+
+/// Last-resort window for entries with no CLI row to read — custom providers,
+/// and the synthetic `auto`. Only ever a guess; anything the CLI lists uses
+/// [`parse_context_window`] against the real reported figure instead.
 fn context_window_for(id: &str) -> u64 {
     let lower = id.to_ascii_lowercase();
     if lower.contains("claude") {
@@ -155,9 +186,6 @@ fn context_window_for(id: &str) -> u64 {
     }
     if lower.contains("gpt-5") {
         return 400_000;
-    }
-    if lower.contains("grok") {
-        return 131_072;
     }
     if lower.contains("gemini") {
         return 1_000_000;
@@ -188,4 +216,67 @@ fn pi_thinking_efforts() -> Vec<ReasoningEffort> {
 }
 
 #[cfg(test)]
-mod tests {}
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_the_suffixes_the_cli_prints() {
+        assert_eq!(parse_context_window("500K"), Some(500_000));
+        assert_eq!(parse_context_window("1M"), Some(1_000_000));
+        assert_eq!(parse_context_window("1.0M"), Some(1_000_000));
+        assert_eq!(parse_context_window("204.8K"), Some(204_800));
+        assert_eq!(parse_context_window("131.1K"), Some(131_100));
+        assert_eq!(parse_context_window(" 128K "), Some(128_000));
+        assert_eq!(parse_context_window("65536"), Some(65_536));
+    }
+
+    #[test]
+    fn refuses_what_it_cannot_read_so_the_caller_can_fall_back() {
+        assert_eq!(parse_context_window(""), None);
+        assert_eq!(parse_context_window("n/a"), None);
+        assert_eq!(parse_context_window("K"), None);
+        assert_eq!(parse_context_window("0"), None);
+        assert_eq!(parse_context_window("-5K"), None);
+    }
+
+    /// Regression: the window was guessed from the model id against a table
+    /// naming only claude / gpt-5 / grok / gemini. A catalog of qwen, minimax,
+    /// kimi, glm and grok models — an ordinary multi-provider setup — got the
+    /// 128K default for almost every entry, so a 1M-context model reported
+    /// itself full at an eighth of its capacity.
+    #[test]
+    fn reads_the_real_window_for_a_multi_provider_catalog() {
+        let listing = "\
+provider               model                   context  max-out  thinking  images
+minimax                MiniMax-M3              1M       128K     yes       yes
+qwen-token-plan        kimi-k2.7-code          262.1K   262.1K   yes       yes
+qwen-token-plan        qwen3.7-max             1M       131.1K   yes       no
+xai-auth               grok-4.5                500K     131.1K   yes       yes
+zai                    glm-4.5-air             131.1K   98.3K    yes       no";
+
+        let windows: Vec<u64> = listing
+            .lines()
+            .skip(1)
+            .filter_map(|line| {
+                let cols = line.split_whitespace().collect::<Vec<_>>();
+                cols.get(2).and_then(|raw| parse_context_window(raw))
+            })
+            .collect();
+
+        assert_eq!(
+            windows,
+            vec![1_000_000, 262_100, 1_000_000, 500_000, 131_100]
+        );
+        // None of them collapse onto the old id-guessed defaults.
+        assert!(!windows.contains(&128_000));
+        assert!(!windows.contains(&131_072));
+    }
+
+    #[test]
+    fn the_thinking_column_is_still_read_from_the_same_row() {
+        let line = "xai-auth               grok-4.5                500K     131.1K   yes       yes";
+        let cols = line.split_whitespace().collect::<Vec<_>>();
+        assert_eq!(parse_context_window(cols[2]), Some(500_000));
+        assert!(cols.get(4).is_some_and(|v| *v == "yes"));
+    }
+}
