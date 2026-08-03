@@ -33,6 +33,11 @@ export function PrTree({
   onAddRepo,
   onRemoveRepo,
   onOpenPr,
+  onPostComment = () => undefined,
+  reviewModelId = null,
+  availableModels = [],
+  onReviewModel = () => undefined,
+  onMultiReview = () => undefined,
 }: {
   repos: PrRepoState[];
   /** `owner/name#number` of the PR whose review chat is open. */
@@ -45,16 +50,40 @@ export function PrTree({
     noPulls: string;
     loading: string;
     draft: string;
+    reviewModel?: string;
+    defaultModel?: string;
+    comment?: string;
+    multiReview?: string;
   };
   onToggle: (slug: string) => void;
   onAddRepo: () => void;
   onRemoveRepo: (slug: string) => void;
   onOpenPr: (slug: string, pr: GhPullRequest) => void;
+  onPostComment?: (slug: string, pr: GhPullRequest) => void;
+  reviewModelId?: string | null;
+  availableModels?: Array<{ id: string; label: string }>;
+  onReviewModel?: (modelId: string | null) => void;
+  onMultiReview?: (slug: string, pr: GhPullRequest) => void;
 }) {
   return (
     <div className="pr-tree">
       <div className="tree-section__head">
         <span className="tree-section__label">{labels.repos}</span>
+        <label className="pr-tree__model">
+          <span>{labels.reviewModel}</span>
+          <select
+            aria-label={labels.reviewModel}
+            value={reviewModelId ?? ""}
+            onChange={(event) => onReviewModel(event.target.value || null)}
+          >
+            <option value="">{labels.defaultModel}</option>
+            {availableModels.map((model) => (
+              <option value={model.id} key={model.id}>
+                {model.label || model.id}
+              </option>
+            ))}
+          </select>
+        </label>
         <button
           type="button"
           className="tree-icon-btn"
@@ -113,22 +142,41 @@ export function PrTree({
                   repo.pulls.map((pr) => {
                     const id = `${repo.slug}#${pr.number}`;
                     return (
-                      <button
-                        key={id}
-                        type="button"
+                      <div key={id} className="pr-tree__pr-wrap">
+                        <button
+                          type="button"
                         className={
                           "pr-tree__pr" +
                           (activePr === id ? " pr-tree__pr--active" : "")
                         }
                         title={`#${pr.number} ${pr.title}`}
                         onClick={() => onOpenPr(repo.slug, pr)}
-                      >
-                        <span className="pr-tree__pr-num">#{pr.number}</span>
-                        <span className="pr-tree__pr-title">{pr.title}</span>
-                        {pr.isDraft ? (
-                          <span className="pr-tree__badge">{labels.draft}</span>
-                        ) : null}
-                      </button>
+                        >
+                          <span className="pr-tree__pr-num">#{pr.number}</span>
+                          <span className="pr-tree__pr-title">{pr.title}</span>
+                          {pr.isDraft ? (
+                            <span className="pr-tree__badge">{labels.draft}</span>
+                          ) : null}
+                        </button>
+                        <button
+                          type="button"
+                          className="tree-icon-btn pr-tree__comment"
+                          title={labels.comment}
+                          aria-label={`${labels.comment} #${pr.number}`}
+                          onClick={() => onPostComment(repo.slug, pr)}
+                        >
+                          {"↗"}
+                        </button>
+                        <button
+                          type="button"
+                          className="tree-icon-btn pr-tree__comment"
+                          title={labels.multiReview}
+                          aria-label={`${labels.multiReview} #${pr.number}`}
+                          onClick={() => onMultiReview(repo.slug, pr)}
+                        >
+                          {"2×"}
+                        </button>
+                      </div>
                     );
                   })
                 )}

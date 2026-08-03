@@ -63,6 +63,8 @@ type Props = {
   };
   /** Linked worktrees for the active project (loaded by parent). */
   worktrees?: GitWorktreeEntry[];
+  /** Actual workspace root, including an SSH worktree when the runtime is remote. */
+  currentWorkspacePath?: string | null;
   /**
    * `true` only after host confirmed a git work tree.
    * `false` = not a git repo / git missing — section hidden.
@@ -92,6 +94,7 @@ export function ComposerProjectMenu({
   projects,
   labels,
   worktrees = [],
+  currentWorkspacePath = null,
   worktreesAvailable = null,
   worktreesLoading = false,
   worktreesReason = null,
@@ -115,7 +118,8 @@ export function ComposerProjectMenu({
   onOpenRef.current = onOpen;
 
   // Only for confirmed git work trees — hide while loading / non-git / no project.
-  const showWorktrees = !!activeProject && worktreesAvailable === true;
+  const showWorktrees =
+    (!!activeProject || !!currentWorkspacePath) && worktreesAvailable === true;
   const canCreate = showWorktrees && !!onCreateWorktree && !!labels.worktreeNew;
   const canCreateChat =
     showWorktrees &&
@@ -320,7 +324,10 @@ export function ComposerProjectMenu({
                     aria-busy={worktreesLoading || undefined}
                   >
                     {worktrees.map((wt) => {
-                      const current = pathsEqual(wt.path, activeProject?.path);
+                      const current = pathsEqual(
+                        wt.path,
+                        currentWorkspacePath || activeProject?.path,
+                      );
                       const name = worktreeLabel(wt);
                       const meta = [
                         wt.isMain ? labels.worktreeMain : null,

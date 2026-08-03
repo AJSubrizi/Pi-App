@@ -27,7 +27,7 @@ export type WorkspaceMeta = {
 export const WORKSPACES: WorkspaceMeta[] = [
   { id: "code", labelKey: "workspace.code", comingSoon: false },
   { id: "pr", labelKey: "workspace.pr", comingSoon: false },
-  { id: "design", labelKey: "workspace.design", comingSoon: true },
+  { id: "design", labelKey: "workspace.design", comingSoon: false },
 ];
 
 export function isWorkspaceId(value: unknown): value is WorkspaceId {
@@ -166,6 +166,28 @@ export function workspaceSkin(skins: WorkspaceSkins, id: WorkspaceId): string {
 // ── PR workspace: selected repositories ────────────────────────────────────
 
 export const PR_REPOS_STORAGE_KEY = "pi-app.pr-repos";
+export const PR_REVIEW_MODEL_STORAGE_KEY = "pi-app.pr-review-model";
+
+export function loadPrReviewModel(storage: WorkspaceStorage): string | null {
+  try {
+    const value = storage.getItem(PR_REVIEW_MODEL_STORAGE_KEY)?.trim();
+    return value || null;
+  } catch {
+    return null;
+  }
+}
+
+export function savePrReviewModel(
+  storage: WorkspaceStorage,
+  modelId: string | null,
+): void {
+  try {
+    if (modelId?.trim()) storage.setItem(PR_REVIEW_MODEL_STORAGE_KEY, modelId.trim());
+    else storage.setItem(PR_REVIEW_MODEL_STORAGE_KEY, "");
+  } catch {
+    // Private mode / quota: the choice still applies for this session.
+  }
+}
 
 /**
  * Repositories pinned into the PR workspace tree, as `owner/name`.

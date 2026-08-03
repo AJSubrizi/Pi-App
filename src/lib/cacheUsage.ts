@@ -17,11 +17,37 @@ export type TokenUsage = {
 
 export type UsagePayload = {
   sessionId: string;
+  modelId?: string | null;
   turn: TokenUsage;
   total: TokenUsage;
   /** `0..1`, or null when no prompt tokens have been counted yet. */
   cacheHitRate: number | null;
 };
+
+export type CacheBreakCause = "model" | "attachments" | "prompt" | "unknown";
+
+/**
+ * Explain a material cache-rate drop without pretending the provider exposes
+ * its cache key. The caller supplies the few local signals the shell can know.
+ */
+export function cacheBreakCause(
+  previous: UsagePayload | null,
+  current: UsagePayload,
+  signals: { attachmentsChanged?: boolean; promptChanged?: boolean } = {},
+): CacheBreakCause | null {
+  if (!previous || previous.sessionId !== current.sessionId) return null;
+  const previousRate = previous.cacheHitRate;
+  const currentRate = current.cacheHitRate;
+  if (previousRate == null || currentRate == null || previousRate - currentRate < 0.25) {
+    return null;
+  }
+  if (previous.modelId && current.modelId && previous.modelId !== current.modelId) {
+    return "model";
+  }
+  if (signals.attachmentsChanged) return "attachments";
+  if (signals.promptChanged) return "prompt";
+  return "unknown";
+}
 
 /** How the chip should read the rate. */
 export type CacheStanding = "cold" | "warming" | "good";

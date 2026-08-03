@@ -271,27 +271,45 @@ export function EmbeddedBrowser({
     void openExternalUrl(url);
   };
 
+  const moveHistory = async (direction: "back" | "forward") => {
+    const webview = webviewRef.current;
+    if (!webview || !isTauri()) return;
+    const method = direction === "back" ? webview.goBack : webview.goForward;
+    if (typeof method !== "function") return;
+    try {
+      await method.call(webview);
+    } catch {
+      // A page without history is a normal browser state, not a pane error.
+    }
+  };
+
   /** Shared navigation bar (Codex-style): back / forward / reload / URL / open. */
-  const navBar = (withReload: boolean) => (
+  const navBar = (withReload: boolean, withHistory: boolean) => (
     <div className="embedded-browser__bar embedded-browser__bar--nav">
-      <button
-        type="button"
-        className="chrome-btn embedded-browser__navbtn"
-        disabled
-        title={`${navLabels?.back ?? "Back"} (${navLabels?.soon ?? "Soon"})`}
-        aria-label={navLabels?.back ?? "Back"}
-      >
-        <IconArrowLeft size={14} />
-      </button>
-      <button
-        type="button"
-        className="chrome-btn embedded-browser__navbtn"
-        disabled
-        title={`${navLabels?.forward ?? "Forward"} (${navLabels?.soon ?? "Soon"})`}
-        aria-label={navLabels?.forward ?? "Forward"}
-      >
-        <IconArrowRight size={14} />
-      </button>
+      {withHistory ? (
+        <>
+          <button
+            type="button"
+            className="chrome-btn embedded-browser__navbtn"
+            disabled={!ready}
+            onClick={() => void moveHistory("back")}
+            title={navLabels?.back ?? "Back"}
+            aria-label={navLabels?.back ?? "Back"}
+          >
+            <IconArrowLeft size={14} />
+          </button>
+          <button
+            type="button"
+            className="chrome-btn embedded-browser__navbtn"
+            disabled={!ready}
+            onClick={() => void moveHistory("forward")}
+            title={navLabels?.forward ?? "Forward"}
+            aria-label={navLabels?.forward ?? "Forward"}
+          >
+            <IconArrowRight size={14} />
+          </button>
+        </>
+      ) : null}
       {withReload ? (
         <button
           type="button"
@@ -390,7 +408,7 @@ export function EmbeddedBrowser({
   if (!isTauri()) {
     return (
       <div className={"embedded-browser " + className}>
-        {navBar(false)}
+        {navBar(false, false)}
         <iframe
           className="rp-preview__frame rp-preview__frame--browser"
           title={title || url}
@@ -407,7 +425,7 @@ export function EmbeddedBrowser({
 
   return (
     <div className={"embedded-browser embedded-browser--native " + className}>
-      {navBar(true)}
+      {navBar(true, true)}
       {/* Host rectangle — native webview is painted on top of this area */}
       <div
         ref={hostRef}

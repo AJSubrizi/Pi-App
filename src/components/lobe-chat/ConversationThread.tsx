@@ -305,6 +305,7 @@ export interface ConversationThreadProps {
   canRewindSession?: boolean;
   onRewindToUserMessage?: (message: ChatMessage) => void;
   onForkFromUserMessage?: (message: ChatMessage) => void;
+  onRetryInterrupted?: (message: ChatMessage) => void;
   onOpenResource?: (
     target: import("@/components/ResourceViewer").ResourceOpenTarget,
   ) => void;
@@ -349,6 +350,7 @@ export function ConversationThread({
   canRewindSession = false,
   onRewindToUserMessage,
   onForkFromUserMessage,
+  onRetryInterrupted,
   onOpenResource,
   onAddAttachmentToComposer,
   attachLabels,
@@ -459,13 +461,39 @@ export function ConversationThread({
             </div>
           ) : null}
 
-          {messages.map((m) => {
+          {messages.map((m, messageIndex) => {
+            const previousAssistantModel = (() => {
+              for (let i = messageIndex - 1; i >= 0; i -= 1) {
+                const previous = messages[i];
+                if (previous?.role === "assistant" && !previous.isError) {
+                  return previous.modelId || null;
+                }
+              }
+              return null;
+            })();
+            const modelChanged =
+              m.role === "assistant" &&
+              !!m.modelId &&
+              !!previousAssistantModel &&
+              m.modelId !== previousAssistantModel;
             if (
               m.marker === "turn_cancelled" ||
               (m.role === "tool" && m.content?.startsWith("turn_cancelled"))
             ) {
               return (
-                <TurnCancelledRow key={m.id} message={m} locale={locale} />
+                <TurnCancelledRow
+                  key={m.id}
+                  message={m}
+                  locale={locale}
+                  onRetry={onRetryInterrupted ? () => {
+                    for (let i = messageIndex - 1; i >= 0; i -= 1) {
+                      if (messages[i]?.role === "user") {
+                        onRetryInterrupted(messages[i]!);
+                        break;
+                      }
+                    }
+                  } : undefined}
+                />
               );
             }
 
@@ -748,6 +776,11 @@ export function ConversationThread({
                     aria-live={m.streaming ? "polite" : undefined}
                     data-find-assistant={isFindCurrent ? "current" : undefined}
                   >
+                    {modelChanged ? (
+                      <span className="lobe-chat-model-badge" title={m.effort || undefined}>
+                        {m.modelId}
+                      </span>
+                    ) : null}
                     {showThinkingPlaceholder ? (
                       <Thinking
                         locale={locale}
@@ -908,7 +941,7 @@ export function ConversationThread({
             </div>
           ) : null}
 
-          {/* Plan UI lives only in PlanStatusBar (top) + ResourceViewer Plan mode. */}
+          {/* Plan UI lives in ResourceViewer Plan mode. */}
         </div>
       </div>
 

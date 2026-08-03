@@ -28,6 +28,8 @@ export interface OfficeDocumentPreviewProps {
   locale: Locale;
   /** Plain-text extract from host (pptx / fallback). */
   textFallback?: string | null;
+  /** Base64 payload for files hosted by a remote workspace. */
+  base64?: string | null;
   errorFromHost?: string | null;
   /**
    * When true (ResourceViewer embed), hide the filename title bar so the host
@@ -48,6 +50,7 @@ export function OfficeDocumentPreview({
   name,
   locale,
   textFallback,
+  base64 = null,
   errorFromHost,
   embedded = false,
 }: OfficeDocumentPreviewProps) {
@@ -108,7 +111,7 @@ export function OfficeDocumentPreview({
 
     void (async () => {
       try {
-        const buf = await fetchPreviewArrayBuffer(absolutePath, kind);
+        const buf = await fetchPreviewArrayBuffer(absolutePath, kind, base64);
         if (cancelled) return;
         setLoad({ status: "ready", buffer: buf });
       } catch (e) {
@@ -123,7 +126,7 @@ export function OfficeDocumentPreview({
     return () => {
       cancelled = true;
     };
-  }, [absolutePath, kind, errorFromHost, tr]);
+  }, [absolutePath, base64, kind, errorFromHost, tr]);
 
   // DOCX render — reflow to pane width (full text, no side clip)
   useEffect(() => {
@@ -257,14 +260,16 @@ export function OfficeDocumentPreview({
         {textFallback ? (
           <pre className="office-preview__fallback">{textFallback}</pre>
         ) : null}
-        <div className="office-preview__actions">
-          <button type="button" className="btn btn--solid" onClick={() => void openExternal()}>
-            {tr("office.openExternal")}
-          </button>
-          <button type="button" className="btn btn--ghost" onClick={() => void pathReveal(absolutePath)}>
-            {tr("resources.revealFolder")}
-          </button>
-        </div>
+        {!base64 ? (
+          <div className="office-preview__actions">
+            <button type="button" className="btn btn--solid" onClick={() => void openExternal()}>
+              {tr("office.openExternal")}
+            </button>
+            <button type="button" className="btn btn--ghost" onClick={() => void pathReveal(absolutePath)}>
+              {tr("resources.revealFolder")}
+            </button>
+          </div>
+        ) : null}
       </div>
     );
   }

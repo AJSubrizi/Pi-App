@@ -163,3 +163,17 @@ jobs:
             TAG="v$(python3 -c 'import json; print(json.load(open("package.json"))["version"])')"
           fi
           bash scripts/package-windows-portable.sh "$TAG"
+
+  verify-update-manifest:
+    name: Verify published updater manifest
+    needs: publish
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Validate latest.json and every platform asset
+        run: node scripts/validate-update-manifest.mjs

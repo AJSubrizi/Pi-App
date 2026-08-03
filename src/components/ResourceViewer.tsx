@@ -145,6 +145,8 @@ export interface ResourceViewerProps {
   sessionId?: string | null;
   projectPath: string | null;
   projectName: string | null;
+  /** Remote workspaces do not use the host's local checkpoint store. */
+  remoteRuntime?: boolean;
   locale: Locale;
   onClose?: () => void;
   /** When set, open the file/url then call onOpenRequestConsumed. */
@@ -330,6 +332,7 @@ export function ResourceViewer({
   sessionId = null,
   projectPath,
   projectName,
+  remoteRuntime = false,
   locale,
   onClose,
   openRequest,
@@ -637,9 +640,10 @@ export function ResourceViewer({
   }, [projectPath, refreshWorkspaceStatus]);
 
   const refreshCheckpoints = useCallback(async () => {
-    if (!projectId || !sessionId || !api.isTauri()) {
+    if (remoteRuntime || !projectId || !sessionId || !api.isTauri()) {
       setTurnCheckpoints([]);
       setCheckpointsLoading(false);
+      setCheckpointError(null);
       return;
     }
     setCheckpointsLoading((current) => current || turnCheckpoints.length === 0);
@@ -656,7 +660,7 @@ export function ResourceViewer({
     } finally {
       setCheckpointsLoading(false);
     }
-  }, [projectId, sessionId, turnCheckpoints.length]);
+  }, [projectId, remoteRuntime, sessionId, turnCheckpoints.length]);
 
   useEffect(() => {
     if (sideMode !== "changes") return;
@@ -2369,6 +2373,7 @@ export function ResourceViewer({
           name={preview.name}
           locale={locale}
           textFallback={preview.text}
+          base64={preview.base64}
           errorFromHost={preview.error}
           embedded
         />
@@ -3858,7 +3863,7 @@ export function ResourceViewer({
                         <button
                           type="button"
                           className="rp-checkpoints__refresh"
-                          disabled={checkpointsLoading || checkpointBusy}
+                          disabled={remoteRuntime || checkpointsLoading || checkpointBusy}
                           onClick={() => void refreshCheckpoints()}
                         >
                           {tr("common.refresh")}
@@ -3875,7 +3880,9 @@ export function ResourceViewer({
                         </div>
                       ) : turnCheckpoints.length === 0 ? (
                         <div className="rp-changes-section__empty">
-                          {tr("changes.checkpoints.empty")}
+                          {remoteRuntime
+                            ? tr("changes.checkpoints.remoteUnavailable")
+                            : tr("changes.checkpoints.empty")}
                         </div>
                       ) : (
                         turnCheckpoints.slice(0, 8).map((checkpoint) => (

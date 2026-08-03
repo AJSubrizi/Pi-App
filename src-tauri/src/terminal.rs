@@ -13,6 +13,8 @@ use std::{
 use tauri::{AppHandle, Emitter};
 use uuid::Uuid;
 
+use crate::{remote_runtime, store};
+
 struct TerminalSession {
     master: Box<dyn MasterPty + Send>,
     writer: Box<dyn Write + Send>,
@@ -66,10 +68,57 @@ pub async fn terminal_start(
         })
         .map_err(|error| error.to_string())?;
 
-    let mut command = shell_command();
-    if let Some(path) = project_path.map(PathBuf::from).filter(|path| path.is_dir()) {
-        command.cwd(path);
-    }
+    let settings = store::load_settings().remote_runtime;
+    let command = if settings.enabled {
+        if settings.transport != "ssh" {
+            return Err("REMOTE_TERMINAL_DIRECT_UNSUPPORTED".into());
+        }
+        remote_runtime::validate(&settings)?;
+        let ssh = remote_runtime::ssh_executable().ok_or("REMOTE_SSH_MISSING")?;
+        let mut ssh_command = CommandBuilder::new(ssh);
+        ssh_command.args([
+            "-tt",
+            "-o",
+            "BatchMode=yes",
+            "-o",
+            "StrictHostKeyChecking=yes",
+            "-o",
+            "ConnectTimeout=12",
+        ]);
+        ssh_command.arg("-p");
+        ssh_command.arg(settings.port.to_string());
+        let identity = settings.identity_file.trim();
+        if !identity.is_empty() {
+            let expanded = crate::cli_probe::expand_user_path(identity);
+            if !std::path::Path::new(&expanded).is_file() {
+                return Err("REMOTE_IDENTITY_NOT_FOUND".into());
+            }
+            ssh_command.arg("-i");
+            ssh_command.arg(expanded);
+        }
+        let cwd = project_path
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or(settings.cwd.trim());
+        if cwd.is_empty() {
+            return Err("REMOTE_VALUE_INVALID".into());
+        }
+        let remote_shell = format!(
+            "cd {} && exec \"${{SHELL:-sh}}\" -l",
+            remote_runtime::remote_path(cwd)
+        );
+        ssh_command.arg(format!("{}@{}", settings.user.trim(), settings.host.trim()));
+        ssh_command.arg("--");
+        ssh_command.arg(remote_shell);
+        ssh_command
+    } else {
+        let mut local_command = shell_command();
+        if let Some(path) = project_path.map(PathBuf::from).filter(|path| path.is_dir()) {
+            local_command.cwd(path);
+        }
+        local_command
+    };
 
     let child = pair
         .slave

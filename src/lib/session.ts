@@ -53,6 +53,9 @@ export interface ChatMessage {
   content: string;
   /** Joined thought text (legacy + journal). Prefer thoughtPhases for UI. */
   thought?: string;
+  /** Model attribution persisted by the Host for this turn. */
+  modelId?: string | null;
+  effort?: string | null;
   /**
    * Separate thinking segments for this assistant message.
    * Phase 0 = pre-tool reasoning; later phases = resumed thinking after tools.

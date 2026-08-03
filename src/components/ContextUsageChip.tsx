@@ -37,6 +37,8 @@ export type ContextUsageChipLabels = {
   breakdownThought: string;
   /** Shown under role rows when breakdown is estimated-only. */
   breakdownEstimatedNote: string;
+  threshold: string;
+  thresholdReached: string;
 };
 
 type Props = {
@@ -44,6 +46,7 @@ type Props = {
   labels: ContextUsageChipLabels;
   disabled?: boolean;
   onCompact: () => void;
+  thresholdPercent?: number;
 };
 
 function tipFor(
@@ -132,6 +135,7 @@ export function ContextUsageChip({
   labels,
   disabled,
   onCompact,
+  thresholdPercent = 85,
 }: Props) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -158,6 +162,8 @@ export function ContextUsageChip({
 
   const tip = useMemo(() => tipFor(display, labels), [display, labels]);
   const source = sourceLabel(display.source, labels);
+  const thresholdReached =
+    display.windowPercent != null && display.windowPercent >= thresholdPercent;
   const lastDetail = display.lastCompact
     ? formatLastCompactDetail(display.lastCompact, labels)
     : null;
@@ -171,7 +177,8 @@ export function ContextUsageChip({
           className={
             "chip chip--context" +
             (open ? " is-open" : "") +
-            (display.source === "unknown" ? " chip--muted" : "")
+            (display.source === "unknown" ? " chip--muted" : "") +
+            (thresholdReached ? " chip--context-alert" : "")
           }
           disabled={disabled}
           aria-haspopup="menu"
@@ -202,6 +209,22 @@ export function ContextUsageChip({
                 <span className="ctx-chip__src">{source}</span>
               </span>
             </div>
+            {display.windowTokens ? (
+              <div className="ctx-chip__row">
+                <span className="ctx-chip__k">{labels.current}</span>
+                <span className="ctx-chip__v">
+                  {display.windowPercent ?? 0}% / {formatTokenCount(display.windowTokens)}
+                </span>
+              </div>
+            ) : null}
+            {display.windowTokens ? (
+              <div className="ctx-chip__row">
+                <span className="ctx-chip__k">{labels.threshold}</span>
+                <span className="ctx-chip__v">
+                  {thresholdPercent}%{thresholdReached ? ` · ${labels.thresholdReached}` : ""}
+                </span>
+              </div>
+            ) : null}
             {display.breakdown ? (
               <BreakdownRows breakdown={display.breakdown} labels={labels} />
             ) : null}

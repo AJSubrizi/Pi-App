@@ -170,6 +170,9 @@ pub struct AcpClient {
 pub struct SpawnOptions {
     pub model_id: Option<String>,
     pub effort: Option<String>,
+    /// Remote cwd override for an SSH/direct runtime session. Local spawns
+    /// ignore this field; the configured runtime root remains the fallback.
+    pub remote_cwd: Option<String>,
 }
 
 /// Pi tool-filter primitives → spawn args.
@@ -202,6 +205,14 @@ pub fn tool_filter_args(allow: &[String], deny: &[String]) -> Vec<String> {
     args
 }
 
+/// Thinking levels accepted by Pi's CLI and `set_thinking_level` RPC command.
+pub fn is_valid_thinking_level(level: &str) -> bool {
+    matches!(
+        level.trim(),
+        "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max"
+    )
+}
+
 impl AcpClient {
     pub fn use_mock() -> bool {
         std::env::var("PI_APP_RPC")
@@ -215,8 +226,16 @@ impl AcpClient {
         cwd: PathBuf,
         opts: SpawnOptions,
     ) -> Result<(Arc<Self>, mpsc::UnboundedReceiver<AcpEvent>), AgentError> {
-        let settings = crate::store::load_settings();
+        let mut settings = crate::store::load_settings();
         if settings.remote_runtime.enabled && settings.remote_runtime.transport != "direct" {
+            if let Some(remote_cwd) = opts
+                .remote_cwd
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+            {
+                settings.remote_runtime.cwd = remote_cwd.to_string();
+            }
             return Self::spawn_ssh(settings.remote_runtime, opts);
         }
         Self::spawn_with_home(cli_path, cwd, &settings.session_data_mode, opts)
@@ -265,10 +284,7 @@ impl AcpClient {
         }
         if let Some(ref e) = opts.effort {
             let e = e.trim();
-            if matches!(
-                e,
-                "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max"
-            ) {
+            if is_valid_thinking_level(e) {
                 cmd.args(["--thinking", e]);
             }
         }
@@ -384,12 +400,12 @@ impl AcpClient {
         {
             extra_args.extend(["--model".into(), model.into()]);
         }
-        if let Some(effort) = opts.effort.as_deref().map(str::trim).filter(|value| {
-            matches!(
-                *value,
-                "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max"
-            )
-        }) {
+        if let Some(effort) = opts
+            .effort
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| is_valid_thinking_level(value))
+        {
             extra_args.extend(["--thinking".into(), effort.into()]);
         }
         let remote_command = crate::remote_runtime::pi_rpc_command(&settings, &extra_args);
@@ -470,8 +486,16 @@ impl AcpClient {
     /// Connect to a managed Pi RPC gateway over authenticated WSS. The gateway
     /// transports one JSONL record per WebSocket text message.
     pub async fn connect_direct(
-        settings: crate::store::RemoteRuntimeSettings,
+        mut settings: crate::store::RemoteRuntimeSettings,
+        remote_cwd: Option<String>,
     ) -> Result<(Arc<Self>, mpsc::UnboundedReceiver<AcpEvent>), AgentError> {
+        if let Some(remote_cwd) = remote_cwd
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            settings.cwd = remote_cwd.to_string();
+        }
         let token = crate::remote_runtime::remote_token()
             .map_err(|error| AgentError::new(AgentErrorCode::CliNotFound, error))?;
         let socket = crate::remote_runtime::connect_websocket(&settings, &token)
@@ -1727,6 +1751,30 @@ impl AcpClient {
         Ok(())
     }
 
+    /// Apply the Pi thinking level to the currently open session.
+    ///
+    /// The CLI flag is still passed at spawn time, but an already-running Pi
+    /// process can retain the previous level when the host preference changes.
+    /// Applying the RPC command makes the persisted composer choice authoritative
+    /// for both warm sessions and sessions whose host metadata was updated first.
+    pub async fn set_thinking_level(&self, level: &str) -> Result<(), String> {
+        let level = level.trim();
+        if !is_valid_thinking_level(level) {
+            return Err(format!("invalid thinking level: {level}"));
+        }
+        if self.dialect != TransportDialect::PiRpc {
+            return Err("set_thinking_level is only supported by Pi RPC transport".into());
+        }
+        self.pi_request_timeout(
+            "set_thinking_level",
+            json!({ "level": level }),
+            HANDSHAKE_TIMEOUT_SECS,
+        )
+        .await
+        .map(|_| ())
+        .map_err(|e| format!("set_thinking_level: {e}"))
+    }
+
     /// Switch product session mode (`session/set_mode`). Tries candidate modeIds.
     pub async fn set_mode(&self, product_mode: &str) -> Result<String, String> {
         if self.dialect == TransportDialect::PiRpc {
@@ -2094,6 +2142,28 @@ mod tool_filter_tests {
     fn deny_alone_omits_allow_flag() {
         let args = tool_filter_args(&[], &["web_fetch".into()]);
         assert_eq!(args, vec!["--exclude-tools", "web_fetch"]);
+    }
+}
+
+#[cfg(test)]
+mod thinking_level_tests {
+    use super::*;
+
+    #[test]
+    fn accepts_every_pi_thinking_level() {
+        for level in ["off", "minimal", "low", "medium", "high", "xhigh", "max"] {
+            assert!(is_valid_thinking_level(level), "{level} should be valid");
+        }
+    }
+
+    #[test]
+    fn rejects_unknown_thinking_levels() {
+        for level in ["", " ultra ", "MEDIUM"] {
+            assert!(
+                !is_valid_thinking_level(level),
+                "{level:?} should be invalid"
+            );
+        }
     }
 }
 

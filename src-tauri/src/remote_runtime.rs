@@ -1,6 +1,7 @@
 use futures_util::SinkExt;
 use serde::Serialize;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 use tokio::process::Command;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::tungstenite::http::HeaderValue;
@@ -18,6 +19,8 @@ pub struct RemoteRuntimeProbe {
 
 const REMOTE_TOKEN_SERVICE: &str = "dev.pi.app.remote-rpc";
 const REMOTE_TOKEN_ACCOUNT: &str = "bearer-token";
+const DIRECT_CONNECT_TIMEOUT: Duration = Duration::from_secs(12);
+const DIRECT_CONNECT_RETRIES: usize = 3;
 
 fn safe_account_part(value: &str) -> bool {
     !value.is_empty()
@@ -97,25 +100,40 @@ pub async fn connect_websocket(
     if token.trim().is_empty() {
         return Err("REMOTE_TOKEN_MISSING".into());
     }
-    let mut request = settings
-        .direct_url
-        .trim()
-        .into_client_request()
-        .map_err(|error| format!("REMOTE_URL_INVALID: {error}"))?;
     let bearer = HeaderValue::from_str(&format!("Bearer {}", token.trim()))
         .map_err(|_| "REMOTE_TOKEN_INVALID")?;
-    request.headers_mut().insert("Authorization", bearer);
-    let (socket, _) = tokio_tungstenite::connect_async(request)
+    let mut last_error = String::from("REMOTE_CONNECT_FAILED");
+    for attempt in 0..DIRECT_CONNECT_RETRIES {
+        let mut request = settings
+            .direct_url
+            .trim()
+            .into_client_request()
+            .map_err(|error| format!("REMOTE_URL_INVALID: {error}"))?;
+        request
+            .headers_mut()
+            .insert("Authorization", bearer.clone());
+        match tokio::time::timeout(
+            DIRECT_CONNECT_TIMEOUT,
+            tokio_tungstenite::connect_async(request),
+        )
         .await
-        .map_err(|error| format!("REMOTE_CONNECT_FAILED: {error}"))?;
-    Ok(socket)
+        {
+            Ok(Ok((socket, _))) => return Ok(socket),
+            Ok(Err(error)) => last_error = format!("REMOTE_CONNECT_FAILED: {error}"),
+            Err(_) => last_error = "REMOTE_CONNECT_TIMEOUT".into(),
+        }
+        if attempt + 1 < DIRECT_CONNECT_RETRIES {
+            tokio::time::sleep(Duration::from_millis(250 * (attempt as u64 + 1))).await;
+        }
+    }
+    Err(last_error)
 }
 
 pub fn shell_quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', "'\"'\"'"))
 }
 
-fn remote_path(value: &str) -> String {
+pub fn remote_path(value: &str) -> String {
     if value == "~" {
         return "\"$HOME\"".into();
     }

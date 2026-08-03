@@ -10,12 +10,16 @@ mod agent_subagents;
 mod agents_catalog;
 mod app_update;
 mod artifacts;
+mod automation_headless;
+mod automation_ledger;
+mod automation_scheduler;
 mod checkpoints;
 mod cli_install;
 mod cli_probe;
 mod cli_sessions;
 mod cli_update;
 mod commands;
+mod crash_reporting;
 mod editors;
 mod error;
 mod extensions;
@@ -25,6 +29,7 @@ mod hooks;
 #[cfg(test)]
 mod integration_test;
 mod journal_throttle;
+mod mcp;
 mod media_protocol;
 mod mock_acp;
 mod models_catalog;
@@ -42,6 +47,7 @@ mod process_util;
 mod project_rules;
 mod providers;
 mod remote_runtime;
+mod remote_workspace;
 mod repository_trust;
 mod secrets;
 mod session_content_search;
@@ -60,10 +66,31 @@ mod tray;
 mod tray_i18n;
 mod turn_complete;
 mod usage;
+mod usage_ledger;
 
 use std::sync::Arc;
 
 use session_manager::SessionManager;
+
+/// Run the external MCP stdio adapter without starting the desktop window.
+/// The adapter talks to the authenticated loopback endpoint owned by a running
+/// Pi Desktop process.
+pub fn run_mcp_stdio() -> Result<(), String> {
+    mcp::run_stdio()
+}
+
+pub fn revoke_mcp_runtime_token() -> Result<(), String> {
+    mcp::revoke_runtime_token()
+}
+
+pub fn clear_mcp_runtime_token_revocation() -> Result<(), String> {
+    mcp::clear_runtime_token_revocation()
+}
+
+/// Run the optional host scheduler without opening the desktop window.
+pub fn run_automation_daemon() -> Result<(), String> {
+    automation_headless::run()
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -81,6 +108,9 @@ pub fn run() {
     }
     if let Err(error) = checkpoints::reconcile_incomplete() {
         tracing::warn!("checkpoint startup reconciliation: {error}");
+    }
+    if let Err(error) = automation_ledger::reconcile_stale(chrono::Duration::minutes(10)) {
+        tracing::warn!("automation ledger startup reconciliation: {error}");
     }
 
     let session_mgr = Arc::new(SessionManager::new());
@@ -147,11 +177,14 @@ pub fn run() {
                 let mgr = app.state::<Arc<SessionManager>>().inner().clone();
                 mgr.start_idle_watchdog(app.handle().clone());
                 mgr.start_stream_stall_watchdog(app.handle().clone());
+                automation_scheduler::start(app.handle().clone(), Arc::clone(&mgr));
+                mcp::start_loopback(app.handle().clone(), mgr);
             }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             commands::session_get_state,
+            commands::sessions_running,
             commands::session_connect,
             commands::session_send,
             commands::session_stop,
@@ -190,6 +223,7 @@ pub fn run() {
             commands::session_set_archived,
             commands::session_set_pinned,
             commands::session_set_project,
+            commands::session_set_remote_cwd,
             commands::session_set_scheduled,
             commands::session_messages,
             commands::session_media_root,
@@ -276,6 +310,7 @@ pub fn run() {
             commands::session_rewind_points,
             commands::session_rewind_execute,
             commands::session_fork,
+            commands::session_adopt_answer,
             commands::doctor_report,
             commands::export_support_bundle,
             commands::export_session_bundle,
@@ -293,6 +328,10 @@ pub fn run() {
             terminal::terminal_resize,
             terminal::terminal_stop,
             usage::usage_profile,
+            usage::usage_budget_status,
+            usage::session_cache_standings,
+            usage::usage_session_summary,
+            usage::usage_provider_health,
             speech::speech_status,
             speech::speech_install,
             speech::speech_transcribe,
@@ -310,6 +349,8 @@ pub fn run() {
             commands::git_worktrees_list,
             commands::git_worktree_add,
             commands::git_worktree_remove,
+            commands::git_worktree_diff,
+            commands::git_worktree_adopt,
             commands::git_worktree_gc,
             commands::git_show_file,
             gh_cli::gh_available,
@@ -317,6 +358,7 @@ pub fn run() {
             gh_cli::gh_pr_list,
             gh_cli::gh_pr_diff,
             gh_cli::gh_pr_create,
+            gh_cli::gh_pr_comment,
             commands::fs_list_dir,
             commands::fs_read_file,
             commands::fs_write_file,
@@ -330,6 +372,10 @@ pub fn run() {
             commands::automation_update,
             commands::automation_set_enabled,
             commands::automation_mark_run,
+            commands::automation_run_start,
+            commands::automation_run_finish,
+            commands::automation_runs_list,
+            commands::automation_run_triage,
             commands::automation_delete,
             commands::session_import_transcript,
             commands::session_import_transcript_file,

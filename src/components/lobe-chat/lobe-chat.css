@@ -112,6 +112,15 @@
   gap: 4px;
 }
 
+.lobe-chat-model-badge {
+  align-self: flex-start;
+  margin: 0 0 8px;
+  color: var(--text-tertiary, #858585);
+  font-size: 10px;
+  line-height: 1.2;
+  letter-spacing: 0.02em;
+}
+
 /* ── Message rows ── */
 .lobe-chat-item {
   position: relative;

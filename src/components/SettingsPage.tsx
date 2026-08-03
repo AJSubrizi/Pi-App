@@ -139,6 +139,17 @@ export interface SettingsPageProps {
   onPrefsScope?: (v: ComposerPrefsScope) => void;
   /** Live valid models (for display only in settings). */
   availableModels?: ModelOption[];
+  /** Stable routing roles such as fast/deep/review. */
+  modelRoles?: Record<string, string>;
+  onModelRoles?: (value: Record<string, string>) => void;
+  /** Optional transient fallbacks, ordered after each role's primary model. */
+  fallbackChains?: Record<string, string[]>;
+  onFallbackChains?: (value: Record<string, string[]>) => void;
+  budgetMonthlyByTier?: Record<string, number>;
+  budgetSessionByTier?: Record<string, number>;
+  onBudgetChange?: (monthly: Record<string, number>, session: Record<string, number>) => void;
+  compactionThresholdPercent?: number;
+  onCompactionThresholdPercent?: (value: number) => void;
   manualCliPath: string;
   onManualCliPath: (v: string) => void;
   onCliBlur: (v: string) => void;
@@ -180,6 +191,8 @@ export interface SettingsPageProps {
   /** Store App API keys in OS keychain (default off → secrets.json). */
   storeApiKeysInKeychain?: boolean;
   onStoreApiKeysInKeychain?: (v: boolean) => void;
+  crashReportingEnabled?: boolean;
+  onCrashReportingEnabled?: (v: boolean) => void;
   /** OS sandbox for agent spawn: off | workspace | read-only | strict | devbox. */
   sandboxProfile?: string;
   onSandboxProfile?: (v: string) => void;
@@ -756,6 +769,15 @@ export function SettingsPage({
   prefsScope = "global",
   onPrefsScope,
   availableModels = [],
+  modelRoles = {},
+  onModelRoles,
+  fallbackChains = {},
+  onFallbackChains,
+  budgetMonthlyByTier = {},
+  budgetSessionByTier = {},
+  onBudgetChange,
+  compactionThresholdPercent = 85,
+  onCompactionThresholdPercent,
   manualCliPath,
   onManualCliPath,
   onCliBlur,
@@ -771,6 +793,8 @@ export function SettingsPage({
   onStreamStallSeconds,
   storeApiKeysInKeychain = false,
   onStoreApiKeysInKeychain,
+  crashReportingEnabled = false,
+  onCrashReportingEnabled,
   sandboxProfile = "off",
   onSandboxProfile,
   maxAgentTurns = 0,
@@ -805,6 +829,7 @@ export function SettingsPage({
   onOpenShortcutsHelp,
 }: SettingsPageProps) {
   const [query, setQuery] = useState("");
+  const roleNames = ["fast", "deep", "cheap", "review", "local"] as const;
   const [editors, setEditors] = useState<DetectedEditor[]>([]);
   const [clearMemoryOpen, setClearMemoryOpen] = useState(false);
   const [clearMemoryBusy, setClearMemoryBusy] = useState(false);
@@ -1214,7 +1239,73 @@ export function SettingsPage({
           </div>
         )}
 
-        {section === "context" && <ContextSettingsPanel t={t} />}
+        {section === "context" && (
+          <>
+            <ContextSettingsPanel t={t} />
+            <div className="settings-card budget-settings">
+              <h2 className="settings-page__h2">{t("budget.title")}</h2>
+              <p className="settings-row__desc">{t("budget.description")}</p>
+              <div className="budget-settings__grid">
+                {(["cheap", "default", "premium", "local"] as const).map((tier) => (
+                  <div className="budget-settings__row" key={tier}>
+                    <strong>{t(`budget.tier.${tier}`)}</strong>
+                    <label>
+                      <span>{t("budget.monthly")}</span>
+                      <input
+                        className="settings-input"
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        value={budgetMonthlyByTier[tier] ?? ""}
+                        placeholder={t("budget.unlimited")}
+                        onChange={(event) => {
+                          const value = Number(event.target.value);
+                          const next = { ...budgetMonthlyByTier };
+                          if (Number.isFinite(value) && value > 0) next[tier] = value;
+                          else delete next[tier];
+                          onBudgetChange?.(next, budgetSessionByTier);
+                        }}
+                      />
+                    </label>
+                    <label>
+                      <span>{t("budget.session")}</span>
+                      <input
+                        className="settings-input"
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        value={budgetSessionByTier[tier] ?? ""}
+                        placeholder={t("budget.unlimited")}
+                        onChange={(event) => {
+                          const value = Number(event.target.value);
+                          const next = { ...budgetSessionByTier };
+                          if (Number.isFinite(value) && value > 0) next[tier] = value;
+                          else delete next[tier];
+                          onBudgetChange?.(budgetMonthlyByTier, next);
+                        }}
+                      />
+                    </label>
+                  </div>
+                ))}
+              </div>
+              <label className="settings-row settings-row--stack">
+                <span className="settings-row__label">{t("budget.compaction")}</span>
+                <span className="settings-row__desc">{t("budget.compactionDescription")}</span>
+                <input
+                  className="settings-input"
+                  type="number"
+                  min={50}
+                  max={98}
+                  value={compactionThresholdPercent}
+                  onChange={(event) => {
+                    const value = Number(event.target.value);
+                    if (Number.isFinite(value)) onCompactionThresholdPercent?.(Math.min(98, Math.max(50, Math.round(value))));
+                  }}
+                />
+              </label>
+            </div>
+          </>
+        )}
         {section === "usage" && onUserName && (
           <UsageProfilePage
             t={t}
@@ -1563,6 +1654,23 @@ export function SettingsPage({
                       onStoreApiKeysInKeychain(!storeApiKeysInKeychain)
                     }
                     ariaLabel={t("settings.storeApiKeysInKeychain")}
+                  />
+                </div>
+              ) : null}
+              {onCrashReportingEnabled ? (
+                <div className="settings-row">
+                  <div className="settings-row__text">
+                    <div className="settings-row__label">
+                      {t("settings.crashReporting")}
+                    </div>
+                    <div className="settings-row__desc">
+                      {t("settings.crashReportingDesc")}
+                    </div>
+                  </div>
+                  <UiCheck
+                    checked={crashReportingEnabled}
+                    onChange={() => onCrashReportingEnabled(!crashReportingEnabled)}
+                    ariaLabel={t("settings.crashReporting")}
                   />
                 </div>
               ) : null}
@@ -2117,6 +2225,52 @@ export function SettingsPage({
                     {t("providersModels.modelsEmpty")}
                   </p>
                 )}
+              </div>
+            </div>
+            <div className="settings-card providers-models__roles">
+              <h2 className="settings-page__h2">{t("modelRoles.title")}</h2>
+              <p className="settings-row__desc">{t("modelRoles.description")}</p>
+              <div className="model-roles__grid">
+                {roleNames.map((role) => (
+                  <div className="model-roles__row" key={role}>
+                    <label>
+                      <span>{t(`modelRoles.${role}`)}</span>
+                      <select
+                        value={modelRoles[role] ?? ""}
+                        onChange={(event) => {
+                          const next = { ...modelRoles };
+                          if (event.target.value) next[role] = event.target.value;
+                          else delete next[role];
+                          onModelRoles?.(next);
+                        }}
+                      >
+                        <option value="">{t("modelRoles.unassigned")}</option>
+                        {availableModels.map((model) => (
+                          <option value={model.id} key={model.id}>
+                            {model.label || model.id}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="model-roles__fallback">
+                      <span>{t("modelRoles.fallback")}</span>
+                      <input
+                        value={(fallbackChains[role] ?? []).join(", ")}
+                        placeholder={t("modelRoles.fallbackPlaceholder")}
+                        onChange={(event) => {
+                          const values = event.target.value
+                            .split(",")
+                            .map((value) => value.trim())
+                            .filter(Boolean);
+                          const next = { ...fallbackChains };
+                          if (values.length) next[role] = values;
+                          else delete next[role];
+                          onFallbackChains?.(next);
+                        }}
+                      />
+                    </label>
+                  </div>
+                ))}
               </div>
             </div>
             <div className="settings-card providers-models__packages">

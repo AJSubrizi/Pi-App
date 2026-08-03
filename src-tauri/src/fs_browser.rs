@@ -2,7 +2,7 @@
 //! All paths are resolved under an explicit project root (no escape).
 
 use base64::Engine;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io::Read;
 use std::path::{Component, Path, PathBuf};
@@ -11,7 +11,7 @@ const MAX_TEXT_BYTES: u64 = 2 * 1024 * 1024; // 2 MiB text preview
 /// Office packages streamed to the UI for rich render (docx-preview / xlsx / pdf).
 const MAX_OFFICE_STREAM_BYTES: u64 = 40 * 1024 * 1024;
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FsEntry {
     pub name: String,
@@ -21,7 +21,7 @@ pub struct FsEntry {
     pub ext: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FsReadResult {
     pub relative_path: String,
@@ -43,7 +43,7 @@ pub struct FsReadResult {
 }
 
 /// Result of writing a text file from the resource pane.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FsWriteResult {
     pub relative_path: String,

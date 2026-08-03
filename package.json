@@ -1,7 +1,7 @@
 {
   "name": "pi-app",
   "private": true,
-  "version": "0.2.12",
+  "version": "0.3.0",
   "description": "Desktop GUI for Pi — projects, sessions and packages over Pi RPC",
   "author": "Pi contributors",
   "license": "MIT",
@@ -27,6 +27,7 @@
     "build:all": "bash scripts/build-local.sh all",
     "setup:cross": "bash scripts/setup-cross-compile.sh",
     "release:tag": "bash scripts/release-tag.sh",
+    "release:validate-update": "node scripts/validate-update-manifest.mjs",
     "preview": "vite preview",
     "tauri": "tauri",
     "test": "vitest run",

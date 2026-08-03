@@ -71,8 +71,8 @@ describe("workspace ids", () => {
     );
   });
 
-  it("marks only design as coming soon", () => {
-    expect(isComingSoon("design")).toBe(true);
+  it("marks all declared workspaces as available", () => {
+    expect(isComingSoon("design")).toBe(false);
     expect(isComingSoon("code")).toBe(false);
     expect(isComingSoon("pr")).toBe(false);
   });
@@ -117,7 +117,7 @@ describe("nextWorkspace", () => {
     expect(nextWorkspace("pr", "pr")).toBe("pr");
   });
 
-  it("allows selecting a coming-soon workspace so it can explain itself", () => {
+  it("allows selecting the design workspace", () => {
     expect(nextWorkspace("code", "design")).toBe("design");
   });
 });

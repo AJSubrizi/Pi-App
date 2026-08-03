@@ -21,8 +21,31 @@ export async function sessionGetState(): Promise<SessionSnapshot> {
   return invoke("session_get_state");
 }
 
+export interface RunningSessionSnapshot {
+  sessionId: string;
+  title: string;
+  state: SessionSnapshot["state"];
+  modelId: string | null;
+  elapsedSecs: number;
+  usage: {
+    input: number;
+    output: number;
+    cacheRead: number;
+    cacheWrite: number;
+    totalTokens: number;
+    costTotal: number | null;
+  };
+}
+
+export async function sessionsRunning(): Promise<RunningSessionSnapshot[]> {
+  if (!isTauri()) return [];
+  return invoke("sessions_running");
+}
+
 export async function sessionConnect(opts?: {
   projectPath?: string;
+  /** Remote SSH workspace/worktree path for this session. */
+  remotePath?: string;
   sessionId?: string;
   mode?: string;
 }): Promise<SessionSnapshot> {
@@ -37,6 +60,7 @@ export async function sessionConnect(opts?: {
   }
   return invoke("session_connect", {
     projectPath: opts?.projectPath ?? null,
+    remotePath: opts?.remotePath ?? null,
     sessionId: opts?.sessionId ?? null,
     mode: opts?.mode ?? null,
   });
@@ -54,17 +78,23 @@ export async function sessionSend(
   text: string,
   displayText?: string | null,
   attachments?: Array<{ path: string; name: string; isDir: boolean }> | null,
+  sessionId?: string | null,
 ): Promise<SessionSnapshot> {
   return invoke("session_send", {
     text,
     displayText: displayText ?? null,
     attachments: attachments?.length ? attachments : null,
+    sessionId: sessionId ?? null,
   });
 }
 
-/** Drop last user turn (agent rewind + local journal) before edit-resend. */
-export async function sessionRewindDropLastUser(): Promise<SessionSnapshot> {
-  return invoke("session_rewind_drop_last_user");
+/** Drop last user turn before edit-resend; an id prevents focus races. */
+export async function sessionRewindDropLastUser(
+  sessionId?: string | null,
+): Promise<SessionSnapshot> {
+  return invoke("session_rewind_drop_last_user", {
+    sessionId: sessionId ?? null,
+  });
 }
 
 /** One user-prompt checkpoint on the rewind timeline. */
@@ -131,8 +161,26 @@ export async function sessionFork(
   });
 }
 
-export async function sessionStop(): Promise<SessionSnapshot> {
-  return invoke("session_stop");
+export async function sessionAdoptAnswer(
+  sessionId: string,
+  content: string,
+  modelId?: string | null,
+) {
+  return invoke<{
+    id: string;
+    role: "assistant";
+    content: string;
+    marker?: string | null;
+    createdAt: string;
+  }>("session_adopt_answer", {
+    sessionId,
+    content,
+    modelId: modelId ?? null,
+  });
+}
+
+export async function sessionStop(sessionId?: string | null): Promise<SessionSnapshot> {
+  return invoke("session_stop", { sessionId: sessionId ?? null });
 }
 
 export async function sessionDisconnect(): Promise<SessionSnapshot> {
@@ -263,10 +311,10 @@ export type AppUpdateCheck = {
   assetNames: string[];
 };
 
-/** Prefer direct installer; only AJSubrizi/Pi-App URLs. */
+/** Prefer direct installer; only the official Pi-App release URLs. */
 export function resolveAppUpdateOpenUrl(r: AppUpdateCheck): string {
   const ok = (u: string) =>
-    /github\.com\/ajsubrizi\/pi-app/i.test(u) && !/ronglecat/i.test(u);
+    /github\.com\/ajsubrizi\/pi-app/i.test(u);
   const dl = (r.downloadUrl || "").trim();
   if (dl && ok(dl)) return dl;
   const page = (r.htmlUrl || "").trim();
@@ -374,6 +422,39 @@ export async function gitWorktreeAdd(
     projectPath,
     name,
     startPoint: startPoint?.trim() || null,
+  });
+}
+
+export interface GitWorktreeDiffResult {
+  path: string;
+  branch: string | null;
+  diff: string;
+  status: string;
+}
+
+export async function gitWorktreeDiff(projectPath: string, worktreePath: string) {
+  return invoke<GitWorktreeDiffResult>("git_worktree_diff", {
+    projectPath,
+    worktreePath,
+  });
+}
+
+export interface GitWorktreeAdoptResult {
+  merged: boolean;
+  branch: string | null;
+  removed: string[];
+  cleanupErrors: string[];
+}
+
+export async function gitWorktreeAdopt(
+  projectPath: string,
+  worktreePath: string,
+  cleanupPaths: string[],
+) {
+  return invoke<GitWorktreeAdoptResult>("git_worktree_adopt", {
+    projectPath,
+    worktreePath,
+    cleanupPaths,
   });
 }
 
@@ -486,7 +567,10 @@ export async function terminalStop(terminalId: string) {
 export interface UsageDay {
   date: string;
   activities: number;
-  estimatedTokens: number;
+  tokens?: number;
+  costTotal?: number | null;
+  /** Compatibility for old local timeline fixtures. */
+  estimatedTokens?: number;
 }
 
 export interface UsageTool {
@@ -496,6 +580,10 @@ export interface UsageTool {
 
 export interface UsageProfile {
   days: UsageDay[];
+  measuredTokens: number;
+  measuredCostTotal: number | null;
+  maxMeasuredSessionTokens: number;
+  models: Array<{ modelId: string; tokens: number; costTotal: number | null }>;
   totalEstimatedTokens: number;
   maxSessionTokens: number;
   longestActivitySecs: number;
@@ -507,12 +595,26 @@ export interface UsageProfile {
   modelsUsed: number;
   mostUsedEffort: string | null;
   topTools: UsageTool[];
+  projects: Array<{ projectId: string; tokens: number; costTotal: number | null }>;
+  cacheDays: Array<{ date: string; cacheRead: number; input: number; hitRate: number }>;
+  mostExpensiveTurn: {
+    sessionId: string;
+    modelId: string | null;
+    recordedAt: string;
+    costTotal: number;
+    totalTokens: number;
+  } | null;
+  adoptions: Array<{ modelId: string; count: number }>;
 }
 
 export async function usageProfile() {
   if (!isTauri()) {
     return {
       days: [],
+      measuredTokens: 0,
+      measuredCostTotal: null,
+      maxMeasuredSessionTokens: 0,
+      models: [],
       totalEstimatedTokens: 0,
       maxSessionTokens: 0,
       longestActivitySecs: 0,
@@ -524,9 +626,87 @@ export async function usageProfile() {
       modelsUsed: 0,
       mostUsedEffort: null,
       topTools: [],
+      projects: [],
+      cacheDays: [],
+      mostExpensiveTurn: null,
+      adoptions: [],
     } satisfies UsageProfile;
   }
   return invoke<UsageProfile>("usage_profile");
+}
+
+export interface UsageBudgetStatus {
+  tier: string;
+  monthCost: number;
+  sessionCost: number;
+  monthlyLimit: number | null;
+  sessionLimit: number | null;
+  warning: boolean;
+  requiresConfirm: boolean;
+}
+
+export async function usageBudgetStatus(
+  sessionId: string | null,
+  modelId: string,
+) {
+  if (!isTauri()) {
+    return {
+      tier: "default",
+      monthCost: 0,
+      sessionCost: 0,
+      monthlyLimit: null,
+      sessionLimit: null,
+      warning: false,
+      requiresConfirm: false,
+    } satisfies UsageBudgetStatus;
+  }
+  return invoke<UsageBudgetStatus>("usage_budget_status", {
+    sessionId,
+    modelId,
+  });
+}
+
+export interface SessionCacheStanding {
+  sessionId: string;
+  cacheRead: number;
+  input: number;
+  hitRate: number;
+}
+
+export async function sessionCacheStandings() {
+  if (!isTauri()) return [] as SessionCacheStanding[];
+  return invoke<SessionCacheStanding[]>("session_cache_standings");
+}
+
+export interface SessionUsageSummary {
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+  totalTokens: number;
+  costTotal: number | null;
+}
+
+export async function usageSessionSummary(sessionId: string) {
+  if (!isTauri()) {
+    return { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, costTotal: null } satisfies SessionUsageSummary;
+  }
+  return invoke<SessionUsageSummary>("usage_session_summary", { sessionId });
+}
+
+export interface UsageProviderHealth {
+  providerId: string;
+  modelId: string | null;
+  sampleCount: number;
+  successCount: number;
+  failureCount: number;
+  averageLatencyMs: number | null;
+  failureRate: number | null;
+}
+
+export async function usageProviderHealth() {
+  if (!isTauri()) return [] as UsageProviderHealth[];
+  return invoke<UsageProviderHealth[]>("usage_provider_health");
 }
 
 /** Optional git unified diff for a project file (session Changes panel). */
@@ -817,6 +997,7 @@ export async function sessionsList() {
       title: string;
       updatedAt: string;
       modelId: string | null;
+      remoteCwd?: string | null;
       archived?: boolean;
       /** Pinned chats float to the top of the sidebar */
       pinned?: boolean;
@@ -936,6 +1117,17 @@ export async function sessionSetProject(
   }>("session_set_project", { id, projectId });
 }
 
+/** Persist the remote SSH workspace/worktree used by a chat. */
+export async function sessionSetRemoteCwd(
+  id: string,
+  remoteCwd: string | null,
+) {
+  return invoke<{
+    id: string;
+    remoteCwd?: string | null;
+  }>("session_set_remote_cwd", { id, remoteCwd });
+}
+
 export async function sessionDelete(id: string) {
   return invoke("session_delete", { id });
 }
@@ -947,6 +1139,8 @@ export async function sessionMessages(id: string) {
       role: string;
       content: string;
       thought?: string | null;
+      modelId?: string | null;
+      effort?: string | null;
       createdAt: string;
       isError?: boolean;
       marker?: string | null;
@@ -1032,6 +1226,16 @@ export interface AppSettings {
   toolsAllow?: string[];
   /** Pi `--exclude-tools` denylist (tool names). Empty → CLI default. */
   toolsDeny?: string[];
+  modelRoles?: Record<string, string>;
+  /** Opt-in transient fallback chains keyed by model role. */
+  fallbackChains?: Record<string, string[]>;
+  /** Optional spend ceilings keyed by model tier (cheap/default/premium/local). */
+  budgetMonthlyByTier?: Record<string, number>;
+  budgetSessionByTier?: Record<string, number>;
+  /** Start compaction when context reaches this percentage of its window. */
+  compactionThresholdPercent?: number;
+  /** Local-only crash records; disabled by default. */
+  crashReportingEnabled?: boolean;
   /** Reopen last active chat once after launch (default true). */
   reopenLastSession?: boolean;
   /** Last successfully opened session id (startup restore). */
@@ -1087,6 +1291,7 @@ export interface AvailableModel {
   id: string;
   label: string;
   source: string;
+  contextWindow?: number;
   isDefault?: boolean;
   /** Per-model efforts from CLI models_cache; omit/empty → static fallback. */
   reasoningEfforts?: ReasoningEffort[];
@@ -2304,6 +2509,9 @@ export interface AutomationDto {
   updatedAt: string;
   lastRunAt?: string | null;
   nextRunAt?: string | null;
+  lastRunLate?: boolean;
+  lastRunError?: string | null;
+  lastRunErrorAt?: string | null;
 }
 
 export interface AutomationInputDto {
@@ -2319,6 +2527,7 @@ export interface AutomationInputDto {
   weekdays?: number[];
   notify?: string;
   nextRunAt?: string | null;
+  ranLate?: boolean;
 }
 
 export async function automationsList(): Promise<AutomationDto[]> {
@@ -2341,6 +2550,7 @@ export async function automationCreate(
       title: input.title.trim(),
       prompt: input.prompt.trim(),
       enabled: input.enabled ?? true,
+      repo: input.repo ?? "",
       projectId: input.projectId ?? null,
       modelId: input.modelId ?? null,
       effort: input.effort ?? null,
@@ -2386,6 +2596,7 @@ export async function automationUpdate(
       title: input.title.trim(),
       prompt: input.prompt.trim(),
       enabled: input.enabled ?? prev.enabled,
+      repo: input.repo !== undefined ? input.repo ?? "" : prev.repo ?? "",
       projectId: input.projectId !== undefined ? input.projectId : prev.projectId,
       modelId: input.modelId !== undefined ? input.modelId : prev.modelId,
       effort: input.effort !== undefined ? input.effort : prev.effort,
@@ -2441,6 +2652,7 @@ export async function automationMarkRun(
   id: string,
   lastRunAt: string,
   nextRunAt: string | null,
+  ranLate = false,
 ): Promise<AutomationDto> {
   if (!isTauri()) {
     const { loadAutomationsLocal, saveAutomationsLocal } =
@@ -2452,6 +2664,7 @@ export async function automationMarkRun(
       ...list[idx],
       lastRunAt,
       nextRunAt,
+      lastRunLate: ranLate,
       updatedAt: new Date().toISOString(),
     };
     list[idx] = next;
@@ -2462,6 +2675,95 @@ export async function automationMarkRun(
     id,
     lastRunAt,
     nextRunAt,
+    ranLate,
+  });
+}
+
+export interface AutomationRunDto {
+  id: string;
+  automationId: string;
+  sessionId?: string | null;
+  trigger: string;
+  retryOf?: string | null;
+  attempt: number;
+  scheduledAt?: string | null;
+  startedAt: string;
+  updatedAt: string;
+  finishedAt?: string | null;
+  durationMs?: number | null;
+  ranLate: boolean;
+  status: string;
+  error?: string | null;
+  triage: string;
+  triageNote?: string | null;
+  modelId?: string | null;
+  effort?: string | null;
+}
+
+/** Start and attach a durable automation run to an existing session. */
+export async function automationRunStart(
+  automationId: string,
+  sessionId: string,
+  opts?: {
+    trigger?: string;
+    retryOf?: string | null;
+    scheduledAt?: string | null;
+    ranLate?: boolean;
+  },
+): Promise<AutomationRunDto> {
+  if (!isTauri()) {
+    throw new Error("automation run ledger requires the desktop host");
+  }
+  return invoke<AutomationRunDto>("automation_run_start", {
+    automationId,
+    sessionId,
+    trigger: opts?.trigger ?? "manual",
+    retryOf: opts?.retryOf ?? null,
+    scheduledAt: opts?.scheduledAt ?? null,
+    ranLate: opts?.ranLate ?? false,
+  });
+}
+
+export async function automationRunFinish(
+  runId: string,
+  status: "completed" | "failed" | "interrupted" | "cancelled",
+  error?: string | null,
+  durationMs?: number | null,
+): Promise<AutomationRunDto> {
+  if (!isTauri()) {
+    throw new Error("automation run ledger requires the desktop host");
+  }
+  return invoke<AutomationRunDto>("automation_run_finish", {
+    runId,
+    status,
+    durationMs: durationMs ?? null,
+    error: error ?? null,
+  });
+}
+
+export async function automationRunsList(
+  automationId?: string | null,
+  limit = 50,
+): Promise<AutomationRunDto[]> {
+  if (!isTauri()) return [];
+  return invoke<AutomationRunDto[]>("automation_runs_list", {
+    automationId: automationId ?? null,
+    limit: Math.min(500, Math.max(1, limit)),
+  });
+}
+
+export async function automationRunTriage(
+  runId: string,
+  triage: string,
+  note?: string | null,
+): Promise<AutomationRunDto> {
+  if (!isTauri()) {
+    throw new Error("automation run ledger requires the desktop host");
+  }
+  return invoke<AutomationRunDto>("automation_run_triage", {
+    runId,
+    triage,
+    note: note ?? null,
   });
 }
 
@@ -2513,7 +2815,7 @@ export async function gitWorktreeGc(
         projectPath: string;
         dryRun?: boolean;
         force?: boolean;
-        expire?: string | null;
+        maxAge?: string | null;
       },
   forceArg?: boolean,
   dryRunArg?: boolean,
@@ -2524,14 +2826,14 @@ export async function gitWorktreeGc(
           projectPath: projectPathOrOpts,
           force: forceArg ?? false,
           dryRun: dryRunArg ?? false,
-          expire: null as string | null,
+          maxAge: null as string | null,
         }
       : projectPathOrOpts;
   return invoke<GitWorktreeGcResult>("git_worktree_gc", {
     projectPath: opts.projectPath,
     dryRun: opts.dryRun ?? false,
     force: opts.force ?? false,
-    expire: opts.expire ?? null,
+    maxAge: opts.maxAge ?? null,
   });
 }
 
@@ -2876,6 +3178,14 @@ export interface GhOpResult {
   reason?: string | null;
 }
 
+export interface GhPrComment {
+  number: number;
+  path: string;
+  line: number;
+  side: "RIGHT" | "LEFT" | string;
+  body: string;
+}
+
 export interface GhRepo {
   nameWithOwner: string;
   name: string;
@@ -2935,5 +3245,26 @@ export async function ghPrCreate(args: {
     body: args.body,
     draft: args.draft,
     base: args.base ?? null,
+  });
+}
+
+/** Publishes one line-anchored review comment after explicit confirmation. */
+export async function ghPrComment(args: {
+  projectPath?: string | null;
+  repo?: string | null;
+  number: number;
+  path: string;
+  line: number;
+  side?: "RIGHT" | "LEFT";
+  body: string;
+}) {
+  return invoke<GhPrComment>("gh_pr_comment", {
+    projectPath: args.projectPath ?? null,
+    repo: args.repo ?? null,
+    number: args.number,
+    path: args.path,
+    line: args.line,
+    side: args.side ?? "RIGHT",
+    body: args.body,
   });
 }

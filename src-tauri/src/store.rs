@@ -1,5 +1,6 @@
 //! Independent store under ~/.pi-app: projects, sessions index, settings, secrets.
 
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -89,6 +90,11 @@ pub struct Project {
     pub mode: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub permission_policy: Option<String>,
+    /// Optional model defaults for the plan/review modes. Empty means inherit.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plan_model_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub review_model_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -97,6 +103,12 @@ pub struct SessionMeta {
     pub id: String,
     pub project_id: Option<String>,
     pub title: String,
+    /// Remote workspace path selected for this chat, when the SSH runtime is active.
+    /// Local projects continue to use `project_id`; this keeps POSIX paths out of
+    /// the desktop project registry while allowing a session to resume its
+    /// remote worktree after a restart.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub remote_cwd: Option<String>,
     pub agent_session_id: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -117,6 +129,12 @@ pub struct SessionMeta {
     /// Created by shell scheduled automation (`runAutomation`).
     #[serde(default)]
     pub scheduled: bool,
+    /// Automation definition that owns this scheduled session, when known.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scheduled_automation_id: Option<String>,
+    /// Active append-only automation run attached to this session.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub active_automation_run_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -225,6 +243,23 @@ pub struct AppSettings {
     /// spawned agents. Empty → omit the flag.
     #[serde(default)]
     pub tools_deny: Vec<String>,
+    /// Stable human roles mapped to model ids (fast/deep/cheap/review/local).
+    #[serde(default)]
+    pub model_roles: BTreeMap<String, String>,
+    /// Optional spend ceilings by model tier. Missing/zero means unlimited.
+    #[serde(default)]
+    pub budget_monthly_by_tier: BTreeMap<String, f64>,
+    #[serde(default)]
+    pub budget_session_by_tier: BTreeMap<String, f64>,
+    /// Context percentage at which automatic compaction may begin.
+    #[serde(default = "default_compaction_threshold_percent")]
+    pub compaction_threshold_percent: u8,
+    /// Opt-in fallback chains keyed by stable model role.
+    #[serde(default)]
+    pub fallback_chains: BTreeMap<String, Vec<String>>,
+    /// Crash reports are local-only and disabled until the user opts in.
+    #[serde(default)]
+    pub crash_reporting_enabled: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -320,6 +355,10 @@ fn default_plan_enabled() -> bool {
     true
 }
 
+fn default_compaction_threshold_percent() -> u8 {
+    85
+}
+
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
@@ -358,6 +397,12 @@ impl Default for AppSettings {
             use_leader: false,
             tools_allow: Vec::new(),
             tools_deny: Vec::new(),
+            model_roles: BTreeMap::new(),
+            budget_monthly_by_tier: BTreeMap::new(),
+            budget_session_by_tier: BTreeMap::new(),
+            compaction_threshold_percent: default_compaction_threshold_percent(),
+            fallback_chains: BTreeMap::new(),
+            crash_reporting_enabled: false,
         }
     }
 }
@@ -404,6 +449,11 @@ pub struct ChatMessageStored {
     pub role: String,
     pub content: String,
     pub thought: Option<String>,
+    /// Model and reasoning effort that produced this turn. Older journals omit both.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effort: Option<String>,
     pub created_at: DateTime<Utc>,
     /// True when this assistant row records a turn failure (retries exhausted, etc.).
     #[serde(default)]
@@ -530,6 +580,8 @@ pub fn add_project(path: String, trust: bool) -> Result<Project, String> {
         effort: None,
         mode: None,
         permission_policy: None,
+        plan_model_id: None,
+        review_model_id: None,
     };
     list.push(p.clone());
     save_projects(&list)?;
@@ -677,6 +729,7 @@ pub fn create_session(
         id: id.clone(),
         project_id,
         title: title.unwrap_or_else(|| "New chat".into()),
+        remote_cwd: None,
         agent_session_id: None,
         created_at: now,
         updated_at: now,
@@ -687,6 +740,8 @@ pub fn create_session(
         mode: None,
         permission_policy: None,
         scheduled,
+        scheduled_automation_id: None,
+        active_automation_run_id: None,
     };
     let mut list = load_sessions_index();
     list.insert(0, meta.clone());
@@ -742,6 +797,26 @@ pub fn set_session_scheduled(id: &str, scheduled: bool) -> Result<SessionMeta, S
     s.scheduled = scheduled;
     s.updated_at = Utc::now();
     let clone = s.clone();
+    save_sessions_index(&list)?;
+    Ok(clone)
+}
+
+/// Attach a durable automation run to its newly created session.
+pub fn attach_automation_run(
+    session_id: &str,
+    automation_id: &str,
+    run_id: &str,
+) -> Result<SessionMeta, String> {
+    let mut list = load_sessions_index();
+    let session = list
+        .iter_mut()
+        .find(|session| session.id == session_id)
+        .ok_or_else(|| "session not found".to_string())?;
+    session.scheduled = true;
+    session.scheduled_automation_id = Some(automation_id.to_string());
+    session.active_automation_run_id = Some(run_id.to_string());
+    session.updated_at = Utc::now();
+    let clone = session.clone();
     save_sessions_index(&list)?;
     Ok(clone)
 }
@@ -922,8 +997,9 @@ pub fn fork_session(
 
 // ─── Automations (scheduled tasks shell) ───────────────────────────────────
 
-/// Host-side scheduled automation. Execution is driven by the UI when the app is open
-/// (or later by CLI headless); this store is the source of truth for the list.
+/// Host-side scheduled automation. The Rust scheduler owns execution while the
+/// app process is alive; this store is the source of truth for the list and its
+/// last durable outcome.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Automation {
@@ -959,6 +1035,15 @@ pub struct Automation {
     pub updated_at: DateTime<Utc>,
     pub last_run_at: Option<DateTime<Utc>>,
     pub next_run_at: Option<DateTime<Utc>>,
+    /// True when the most recent run was caught up after its scheduled slot.
+    #[serde(default)]
+    pub last_run_late: bool,
+    /// Sanitized detail from the most recent failed run, if any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_run_error: Option<String>,
+    /// Timestamp of the most recent failed run.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_run_error_at: Option<DateTime<Utc>>,
 }
 
 fn default_true() -> bool {
@@ -1039,6 +1124,9 @@ pub fn create_automation(input: AutomationInput) -> Result<Automation, String> {
         updated_at: now,
         last_run_at: None,
         next_run_at: input.next_run_at,
+        last_run_late: false,
+        last_run_error: None,
+        last_run_error_at: None,
     };
     let mut list = load_automations();
     list.insert(0, auto.clone());
@@ -1109,6 +1197,7 @@ pub fn mark_automation_run(
     id: &str,
     last_run_at: DateTime<Utc>,
     next_run_at: Option<DateTime<Utc>>,
+    ran_late: bool,
 ) -> Result<Automation, String> {
     let mut list = load_automations();
     let auto = list
@@ -1117,9 +1206,144 @@ pub fn mark_automation_run(
         .ok_or_else(|| "automation not found".to_string())?;
     auto.last_run_at = Some(last_run_at);
     auto.next_run_at = next_run_at;
+    auto.last_run_late = ran_late;
+    auto.last_run_error = None;
+    auto.last_run_error_at = None;
     auto.updated_at = Utc::now();
     let clone = auto.clone();
     save_automations(&list)?;
+    Ok(clone)
+}
+
+/// Persist a failed scheduled attempt and advance its cursor.
+///
+/// A failure must consume the due slot: leaving `next_run_at` untouched makes
+/// the host scheduler retry the same automation on every 30-second tick. One-
+/// shot automations are paused after their single attempt so the user can
+/// inspect the error and use the existing "Run now" action deliberately.
+pub fn mark_automation_failure(
+    id: &str,
+    attempted_at: DateTime<Utc>,
+    next_run_at: Option<DateTime<Utc>>,
+    ran_late: bool,
+    error: &str,
+    disable_after_failure: bool,
+) -> Result<Automation, String> {
+    let mut list = load_automations();
+    let auto = list
+        .iter_mut()
+        .find(|a| a.id == id)
+        .ok_or_else(|| "automation not found".to_string())?;
+    let detail = redact_text(error)
+        .trim()
+        .chars()
+        .take(600)
+        .collect::<String>();
+    auto.last_run_at = Some(attempted_at);
+    auto.next_run_at = next_run_at;
+    auto.last_run_late = ran_late;
+    auto.last_run_error = Some(if detail.is_empty() {
+        "scheduled run failed".into()
+    } else {
+        detail
+    });
+    auto.last_run_error_at = Some(attempted_at);
+    if disable_after_failure {
+        auto.enabled = false;
+    }
+    auto.updated_at = Utc::now();
+    let clone = auto.clone();
+    save_automations(&list)?;
+    Ok(clone)
+}
+
+/// Update the latest automation summary after the owned session reaches a
+/// terminal state. The append-only run ledger remains the detailed source of
+/// truth; this keeps the existing Automations list accurate as well.
+pub fn mark_automation_run_outcome(
+    id: &str,
+    attempted_at: DateTime<Utc>,
+    status: &str,
+    error: Option<&str>,
+) -> Result<Automation, String> {
+    let mut list = load_automations();
+    let auto = list
+        .iter_mut()
+        .find(|a| a.id == id)
+        .ok_or_else(|| "automation not found".to_string())?;
+    let is_latest = auto
+        .last_run_at
+        .is_none_or(|last_run| attempted_at >= last_run);
+    if is_latest {
+        auto.last_run_at = Some(attempted_at);
+        if status == "completed" {
+            auto.last_run_error = None;
+            auto.last_run_error_at = None;
+        } else {
+            let detail = redact_text(error.unwrap_or("scheduled run did not complete"))
+                .trim()
+                .chars()
+                .take(600)
+                .collect::<String>();
+            auto.last_run_error = Some(if detail.is_empty() {
+                "scheduled run did not complete".into()
+            } else {
+                detail
+            });
+            auto.last_run_error_at = Some(attempted_at);
+        }
+    }
+    auto.updated_at = Utc::now();
+    let clone = auto.clone();
+    save_automations(&list)?;
+    Ok(clone)
+}
+
+/// Apply automation-specific model/effort without changing global defaults.
+pub fn set_session_agent_prefs(
+    session_id: &str,
+    model_id: Option<&str>,
+    effort: Option<&str>,
+) -> Result<(), String> {
+    let mut list = load_sessions_index();
+    let session = list
+        .iter_mut()
+        .find(|s| s.id == session_id)
+        .ok_or_else(|| "session not found".to_string())?;
+    if let Some(model) = model_id.filter(|v| !v.trim().is_empty()) {
+        session.model_id = Some(model.trim().to_string());
+    }
+    if let Some(value) = effort.filter(|v| !v.trim().is_empty()) {
+        session.effort = Some(value.trim().to_string());
+    }
+    session.updated_at = Utc::now();
+    save_sessions_index(&list)
+}
+
+/// Remember the remote workspace/worktree used by a chat.
+///
+/// The value is intentionally lexical. The SSH bridge validates it again at
+/// command execution time, and the remote runtime validates the configured
+/// host separately. Empty input clears the override and returns to the
+/// runtime's configured root on the next connection.
+pub fn set_session_remote_cwd(id: &str, remote_cwd: Option<String>) -> Result<SessionMeta, String> {
+    let cwd = remote_cwd
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+    if let Some(value) = cwd.as_deref() {
+        if value.len() > 4_096 || value.contains(['\0', '\n', '\r']) || value.starts_with('-') {
+            return Err("invalid remote workspace path".into());
+        }
+    }
+    let mut list = load_sessions_index();
+    let session = list
+        .iter_mut()
+        .find(|session| session.id == id)
+        .ok_or_else(|| "session not found".to_string())?;
+    session.remote_cwd = cwd;
+    session.updated_at = Utc::now();
+    let clone = session.clone();
+    save_sessions_index(&list)?;
     Ok(clone)
 }
 
@@ -1194,6 +1418,22 @@ fn global_prefs(settings: &AppSettings) -> (String, String, String, String) {
     )
 }
 
+/// Select the model override that belongs to the active product mode.
+///
+/// `review` is intentionally separate from `plan`: PR review is a quality
+/// gate, while planning is a different kind of context and often benefits
+/// from a cheaper model. Empty overrides inherit the ordinary project model.
+fn project_model_for_mode(project: &Project, mode: &str, inherited: String) -> String {
+    let override_id = match mode.trim().to_ascii_lowercase().as_str() {
+        "plan" => project.plan_model_id.clone(),
+        "review" => project.review_model_id.clone(),
+        _ => project.model_id.clone(),
+    };
+    override_id
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or(inherited)
+}
+
 /// Resolve effective composer prefs for the active project/session + configured scope.
 ///
 /// Model / effort / mode follow `composer_prefs_scope`.
@@ -1235,7 +1475,7 @@ pub fn resolve_composer_prefs(project_id: Option<&str>, session_id: Option<&str>
         ComposerPrefsScope::Project => {
             if let Some(p) = proj {
                 ComposerPrefs {
-                    model_id: p.model_id.filter(|s| !s.is_empty()).unwrap_or(g_model),
+                    model_id: project_model_for_mode(&p, &g_mode, g_model),
                     effort: p.effort.filter(|s| !s.is_empty()).unwrap_or(g_effort),
                     mode: p.mode.filter(|s| !s.is_empty()).unwrap_or(g_mode),
                     permission_policy,
@@ -1256,9 +1496,8 @@ pub fn resolve_composer_prefs(project_id: Option<&str>, session_id: Option<&str>
         ComposerPrefsScope::Session => {
             let p_model = proj
                 .as_ref()
-                .and_then(|p| p.model_id.clone())
-                .filter(|s| !s.is_empty())
-                .unwrap_or(g_model.clone());
+                .map(|p| project_model_for_mode(p, &g_mode, g_model.clone()))
+                .unwrap_or_else(|| g_model.clone());
             let p_effort = proj
                 .as_ref()
                 .and_then(|p| p.effort.clone())
@@ -1534,6 +1773,7 @@ mod tests {
             id: id.into(),
             project_id: None,
             title: id.into(),
+            remote_cwd: None,
             agent_session_id: None,
             created_at: updated,
             updated_at: updated,
@@ -1544,6 +1784,8 @@ mod tests {
             mode: None,
             permission_policy: None,
             scheduled: false,
+            scheduled_automation_id: None,
+            active_automation_run_id: None,
         }
     }
 
@@ -1575,5 +1817,42 @@ mod tests {
         let m: SessionMeta = serde_json::from_str(raw).expect("deserialize legacy session");
         assert!(!m.pinned);
         assert!(!m.archived);
+        assert!(m.remote_cwd.is_none());
+    }
+
+    #[test]
+    fn session_meta_remote_cwd_round_trips() {
+        let updated = Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap();
+        let mut session = sample_session("remote", false, updated);
+        session.remote_cwd = Some("/srv/pi/worktree".into());
+        let encoded = serde_json::to_string(&session).expect("serialize session");
+        let decoded: SessionMeta = serde_json::from_str(&encoded).expect("deserialize session");
+        assert_eq!(decoded.remote_cwd.as_deref(), Some("/srv/pi/worktree"));
+    }
+
+    #[test]
+    fn session_meta_automation_fields_default_for_legacy_rows() {
+        let raw = r#"{
+            "id":"x","title":"scheduled","scheduled":true,
+            "createdAt":"2024-01-01T00:00:00Z",
+            "updatedAt":"2024-01-01T00:00:00Z"
+        }"#;
+        let session: SessionMeta = serde_json::from_str(raw).expect("deserialize legacy session");
+        assert!(session.scheduled);
+        assert!(session.scheduled_automation_id.is_none());
+        assert!(session.active_automation_run_id.is_none());
+    }
+
+    #[test]
+    fn automation_failure_fields_default_for_legacy_rows() {
+        let raw = r#"{
+            "id":"a","title":"t","prompt":"p","enabled":true,
+            "projectId":null,"modelId":null,"effort":null,
+            "createdAt":"2024-01-01T00:00:00Z","updatedAt":"2024-01-01T00:00:00Z",
+            "lastRunAt":null,"nextRunAt":null
+        }"#;
+        let row: Automation = serde_json::from_str(raw).expect("deserialize legacy automation");
+        assert!(row.last_run_error.is_none());
+        assert!(row.last_run_error_at.is_none());
     }
 }

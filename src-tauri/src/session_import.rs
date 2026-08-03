@@ -254,6 +254,8 @@ pub fn import_transcript_as_session(
             role,
             content,
             thought: None,
+            model_id: None,
+            effort: None,
             created_at: now,
             is_error: false,
             attachments: None,

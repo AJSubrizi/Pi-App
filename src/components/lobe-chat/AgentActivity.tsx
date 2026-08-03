@@ -57,9 +57,11 @@ export function LiveToolText({
 export function TurnCancelledRow({
   message,
   locale,
+  onRetry,
 }: {
   message: ChatMessage;
   locale: Locale;
+  onRetry?: () => void;
 }) {
   const tr = useMemo(() => createT(locale), [locale]);
   const reason = message.toolStatus || "";
@@ -75,6 +77,11 @@ export function TurnCancelledRow({
         <IconStop size={13} />
       </span>
       <span className="lobe-chat-live-tool__title">{label}</span>
+      {reason === "agent_exit" && onRetry ? (
+        <button type="button" className="lobe-chat-live-tool__retry" onClick={onRetry}>
+          {tr("activity.retryInterrupted")}
+        </button>
+      ) : null}
     </div>
   );
 }

@@ -95,6 +95,28 @@ pub fn write_support_bundle(doctor_json: &str) -> Result<PathBuf, String> {
         }
     }
 
+    // Local-only crash records enter an archive only after the user explicitly
+    // requested one. The app has no background upload client for this file.
+    let crash_file = paths::crash_reports_file();
+    if crash_file.is_file() {
+        let crash_text = read_capped_text(&crash_file, MAX_LOG_BYTES_EACH)?;
+        zip.start_file("crash-reports.jsonl", opts)
+            .map_err(|e| format!("zip crash reports: {e}"))?;
+        zip.write_all(store::redact_text(&crash_text).as_bytes())
+            .map_err(|e| format!("write crash reports: {e}"))?;
+    }
+
+    // Automation lifecycle rows contain no prompts, but errors and notes are
+    // still redacted before entering a user-requested support archive.
+    let automation_runs_file = paths::automation_runs_file();
+    if automation_runs_file.is_file() {
+        let runs = read_capped_text(&automation_runs_file, MAX_LOG_BYTES_EACH)?;
+        zip.start_file("automation-runs.jsonl", opts)
+            .map_err(|e| format!("zip automation runs: {e}"))?;
+        zip.write_all(store::redact_text(&runs).as_bytes())
+            .map_err(|e| format!("write automation runs: {e}"))?;
+    }
+
     // README for the recipient
     let readme = "Pi support bundle\n\
 \n\
@@ -103,8 +125,12 @@ Contents:\n\
 - settings.json — app settings with secrets redacted\n\
 - meta.json — app/OS versions and counts\n\
 - logs/ — recent log files (redacted, size-capped)\n\
+- crash-reports.jsonl - local-only error records, when enabled (redacted)\n\
+- crash-reports.jsonl - scheduled-run lifecycle records, when present (redacted)\n\
 \n\
-This archive never includes secrets.json or account auth snapshots.\n\
+This archive never includes secrets.json or account auth snapshots. Crash records\n\
+are never uploaded automatically; they enter this archive only after you explicitly\n\
+request a support bundle.\n\
 ";
     zip.start_file("README.txt", opts)
         .map_err(|e| format!("zip readme: {e}"))?;
@@ -631,6 +657,8 @@ pub fn reset_app_data(keep_secrets: bool) -> Result<serde_json::Value, String> {
         "operations-v1.json",
         "checkpoints-v1.json",
         "repository-trust-v1.json",
+        "crash-reports.jsonl",
+        "automation-runs.jsonl",
     ];
     if !keep_secrets {
         // Wipe OS keychain entries + secrets.json (no-op parts when missing).
@@ -783,6 +811,8 @@ mod tests {
                 role: "user".into(),
                 content: "hello with sk-session-secret-value".into(),
                 thought: None,
+                model_id: None,
+                effort: None,
                 created_at: chrono::Utc::now(),
                 is_error: false,
                 attachments: None,

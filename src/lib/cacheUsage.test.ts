@@ -1,12 +1,32 @@
 import { describe, expect, it } from "vitest";
 import {
   cacheChipView,
+  cacheBreakCause,
   cacheStanding,
   formatCacheRate,
   formatCost,
   formatTokens,
   type UsagePayload,
 } from "./cacheUsage";
+
+const measured = (rate: number, modelId = "openai/gpt") => ({
+  sessionId: "s1",
+  modelId,
+  turn: { input: 1, output: 1, cacheRead: 1, cacheWrite: 0, totalTokens: 2 },
+  total: { input: 1, output: 1, cacheRead: 1, cacheWrite: 0, totalTokens: 2 },
+  cacheHitRate: rate,
+});
+
+describe("cacheBreakCause", () => {
+  it("attributes a sharp drop to a model switch when the host can prove it", () => {
+    expect(cacheBreakCause(measured(0.9, "openai/gpt"), measured(0.4, "anthropic/sonnet"))).toBe("model");
+  });
+
+  it("keeps the heuristic honest for attachment and unknown changes", () => {
+    expect(cacheBreakCause(measured(0.9), measured(0.5), { attachmentsChanged: true })).toBe("attachments");
+    expect(cacheBreakCause(measured(0.9), measured(0.5))).toBe("unknown");
+  });
+});
 
 describe("cacheStanding", () => {
   it("splits the range into cost-meaningful bands", () => {

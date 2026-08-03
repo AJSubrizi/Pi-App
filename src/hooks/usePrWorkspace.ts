@@ -25,7 +25,10 @@ export interface PrWorkspaceDeps {
   /** Opens the app's own dialog — never `window.confirm` (see dialogs.md). */
   openDialog: (dialog: PrWorkspaceDialog) => void;
   /** Starts a chat seeded with the review prompt. */
-  startReviewChat: (seedDraft: string) => Promise<void>;
+  startReviewChat: (seedDraft: string, modelId: string | null) => Promise<void>;
+  reviewModelId?: string | null;
+  postInlineComment?: (slug: string, pr: GhPullRequest) => void;
+  startMultiReview?: (slug: string, pr: GhPullRequest) => void;
 }
 
 export type PrWorkspaceDialog =
@@ -54,10 +57,20 @@ export interface PrWorkspace {
   addRepo: () => void;
   removeRepo: (slug: string) => void;
   openReview: (slug: string, pr: GhPullRequest) => void;
+  postInlineComment: (slug: string, pr: GhPullRequest) => void;
+  startMultiReview: (slug: string, pr: GhPullRequest) => void;
 }
 
 export function usePrWorkspace(deps: PrWorkspaceDeps): PrWorkspace {
-  const { tr, showToast, openDialog, startReviewChat } = deps;
+  const {
+    tr,
+    showToast,
+    openDialog,
+    startReviewChat,
+    reviewModelId = null,
+    postInlineComment = () => undefined,
+    startMultiReview = () => undefined,
+  } = deps;
 
   const [repos, setRepos] = useState<PrRepoState[]>(() =>
     loadPrRepos(localStorage).map((slug) => ({
@@ -204,7 +217,7 @@ export function usePrWorkspace(deps: PrWorkspaceDeps): PrWorkspace {
         showToast(tr("reviewPr.loading", { number: pr.number }));
         try {
           const full = await api.ghPrDiff({ repo: slug }, pr.number);
-          await startReviewChat(buildPrReviewPrompt(full));
+          await startReviewChat(buildPrReviewPrompt(full), reviewModelId);
           showToast(
             tr("reviewPr.ready", {
               number: full.number,
@@ -216,8 +229,17 @@ export function usePrWorkspace(deps: PrWorkspaceDeps): PrWorkspace {
         }
       })();
     },
-    [showToast, startReviewChat, tr],
+    [reviewModelId, showToast, startReviewChat, tr],
   );
 
-  return { repos, activePr, toggleRepo, addRepo, removeRepo, openReview };
+  return {
+    repos,
+    activePr,
+    toggleRepo,
+    addRepo,
+    removeRepo,
+    openReview,
+    postInlineComment,
+    startMultiReview,
+  };
 }

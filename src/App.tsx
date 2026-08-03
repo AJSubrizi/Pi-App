@@ -50,7 +50,6 @@ import {
   querySidebarEl,
   toClientDragPoint,
 } from "@/lib/dragZone";
-import { buildPrReviewPrompt, parsePullRequestRef } from "@/lib/ghReview";
 import {
   applyContextCompact,
   applyGeneratedImage,
@@ -58,24 +57,13 @@ import {
   applyToolEvent,
   applyTurnError,
   applyTurnMarker,
-  parseCompactContent,
-  parseToolStepContent,
   canSend,
   canStop,
   canType,
-  clearPriorTurnStreaming,
   isSessionBusy,
   isSessionLiveStreaming,
-  preferSessionMessages,
   presentErrorBanner,
   type ErrorBannerView,
-  buildSegmentsFromLegacy,
-  splitThoughtPhases,
-  truncateBeforeLastUser,
-  truncateThroughUserPrompt,
-  canRewindToUserPrompt,
-  userPromptIndexOf,
-  localRewindPoints,
   IDLE_SNAPSHOT,
   type AskUserPayload,
   type ChatMessage,
@@ -92,7 +80,7 @@ import {
   type ContextUsageState,
 } from "@/lib/contextUsage";
 import { ContextUsageChip } from "@/components/ContextUsageChip";
-import { PlanStatusBar } from "@/components/PlanStatusBar";
+import { PromptCostPreview } from "@/components/PromptCostPreview";
 import {
   closedSessionPlan,
   emptySessionPlan,
@@ -100,9 +88,15 @@ import {
   type SessionPlanState,
 } from "@/lib/planSession";
 import { AgentTasksPanel } from "@/components/AgentTasksPanel";
+import { ComparisonView, type ComparisonEntry } from "@/components/ComparisonView";
+import { RunningTasksDock } from "@/components/RunningTasksDock";
+import { ActivityCenter } from "@/components/ActivityCenter";
+import type { ActivityItem } from "@/lib/activity";
+import { useActivityCenter } from "@/hooks/useActivityCenter";
+import { useContentSearch } from "@/hooks/useContentSearch";
+import { useModelHealth } from "@/hooks/useModelHealth";
 import { PiExtensionWidgets } from "@/components/PiExtensionSurface";
 import * as api from "@/lib/api";
-import { shouldRestoreLastSession } from "@/lib/sessionRestore";
 import {
   EMPTY_PI_EXTENSION_UI,
   piExtensionWidgetsAt,
@@ -142,7 +136,6 @@ import { DoctorModal } from "@/components/DoctorModal";
 import {
   filterSessionSearch,
   mergeSessionSearchHits,
-  type SessionContentHit,
 } from "@/lib/sessionSearch";
 import {
   sessionExportFilename,
@@ -162,11 +155,9 @@ import { GlassModal } from "@/components/GlassModal";
 import { ChatFindBar } from "@/components/ChatFindBar";
 import {
   applyResolvedSessionMedia,
-  buildAgentPrompt,
   collectSessionRelativeMediaRefs,
   isImagePath,
   mergeAttachments,
-  mergeMessageAttachments,
   parseAttachmentsFromContent,
   type Attachment,
 } from "@/lib/attachments";
@@ -188,11 +179,8 @@ import {
   queuePreviewText,
   shouldEnqueueSend,
 } from "@/lib/sendQueue";
-import { buildHandoffDraft } from "@/lib/handoff";
-import {
-  useSendQueue,
-  type ExecuteSendFromQueue,
-} from "@/hooks/useSendQueue";
+import { useComposer, type FallbackTurn } from "@/hooks/useComposer";
+import { useInlineEdit } from "@/hooks/useInlineEdit";
 import { useLocalDictation } from "@/hooks/useLocalDictation";
 import { appendTranscript } from "@/lib/localDictation";
 import {
@@ -261,19 +249,15 @@ import {
   IconMic,
 } from "@/components/icons";
 import { AutomationsPage } from "@/components/AutomationsPage";
+import { DesignWorkspace } from "@/components/DesignWorkspace";
 import { OpenLocationButton } from "@/components/OpenLocationButton";
 import { ContextMenu, type ContextMenuItem } from "@/components/ContextMenu";
 import {
   aiCreateSeedPrompt,
-  computeNextRunAt,
-  isDue,
   parseScheduledUserContent,
-  type Automation,
 } from "@/lib/automations";
 import {
   extractAutomationPayload,
-  looksLikeScheduleIntent,
-  wrapAutomationSetupAgentText,
 } from "@/lib/automationSetup";
 import {
   ComposerApprovalsMenu,
@@ -285,7 +269,6 @@ import {
 } from "@/components/ResourceViewer";
 import {
   mergeSessionChange,
-  sessionChangesFromMessages,
   type SessionFileChange,
 } from "@/lib/sessionChanges";
 import { ConversationThread } from "@/components/lobe-chat";
@@ -298,7 +281,7 @@ import { UserMenu } from "@/components/UserMenu";
 import { WorkspaceSwitcher } from "@/components/WorkspaceSwitcher";
 import { PrTree } from "@/components/PrTree";
 import { CacheChip } from "@/components/CacheChip";
-import type { UsagePayload } from "@/lib/cacheUsage";
+import { cacheBreakCause, type UsagePayload } from "@/lib/cacheUsage";
 import {
   usePrWorkspace,
   type PrWorkspaceDeps,
@@ -308,31 +291,31 @@ import {
   useWorktreeDialogs,
   type WorktreeDialogsDeps,
 } from "@/hooks/useWorktreeDialogs";
-import {
-  buildPrSweepPrompt,
-  isPrAutomation,
-  loadSeenPrs,
-  markPullsSeen,
-  saveSeenPrs,
-  unseenPulls,
-} from "@/lib/prSweep";
+import { useAutomationRunner } from "@/hooks/useAutomationRunner";
+import { useRewindDialogs } from "@/hooks/useRewindDialogs";
+import { useSessionActions } from "@/hooks/useSessionActions";
+import { useSessionLifecycle } from "@/hooks/useSessionLifecycle";
+import { usePrActions } from "@/hooks/usePrActions";
 import {
   parseTaskBatch,
-  wrapTaskBatchAgentText,
   type ParallelTask,
 } from "@/lib/parallelTasks";
+import { isTransientFallbackError } from "@/lib/fallback";
 import {
   loadWorkspace,
   saveWorkspace,
   isComingSoon,
   loadWorkspaceSkins,
   saveWorkspaceSkins,
+  loadPrReviewModel,
+  savePrReviewModel,
   setWorkspaceSkin,
   workspaceSkin,
   type WorkspaceId,
   type WorkspaceSkins,
 } from "@/lib/workspace";
 import type { SettingsSectionId } from "@/components/SettingsPage";
+import { buildSettingsLabels } from "@/lib/settingsLabels";
 import { Tip } from "@/components/ui/tooltip";
 import {
   WindowControls,
@@ -361,6 +344,8 @@ interface Project {
   pinned?: boolean;
   /** Project-level permission tier (L10). Null/undefined → app default. */
   permissionPolicy?: string | null;
+  planModelId?: string | null;
+  reviewModelId?: string | null;
 }
 
 interface SessionRow {
@@ -368,11 +353,13 @@ interface SessionRow {
   title: string;
   projectId: string | null;
   updatedAt: string;
+  remoteCwd?: string | null;
   archived?: boolean;
   /** Pinned chats float to the top of the sidebar */
   pinned?: boolean;
   /** Shell scheduled-automation run */
   scheduled?: boolean;
+  modelId?: string | null;
 }
 
 type ContextMenuState =
@@ -476,9 +463,13 @@ export default function App() {
   const [goalMode, setGoalMode] = useState(false);
   /** Prevent overlapping executeSend / queue auto-flush races. */
   const sendInFlightRef = useRef(false);
-  const executeSendFromQueueRef = useRef<ExecuteSendFromQueue>(
-    async () => false,
-  );
+  const fallbackTurnRef = useRef<FallbackTurn | null>(null);
+  const fallbackRetryRef = useRef<
+    (turn: FallbackTurn, payload: TurnErrorPayload) => Promise<boolean>
+  >(async () => false);
+  const retryInterruptedTurnRef = useRef<
+    (message: ChatMessage) => Promise<void>
+  >(async () => {});
   const [slashQuery, setSlashQuery] = useState<{
     start: number;
     query: string;
@@ -519,19 +510,6 @@ export default function App() {
   const [showCompactModal, setShowCompactModal] = useState(false);
   const [compactNote, setCompactNote] = useState("");
   const compactNoteRef = useRef<HTMLInputElement>(null);
-  /** Rewind timeline picker (session menu / status). */
-  const [rewindTimeline, setRewindTimeline] = useState<{
-    sessionId: string;
-    points: Array<{ promptIndex: number; messageId?: string | null; preview: string }>;
-  } | null>(null);
-  const [rewindBusy, setRewindBusy] = useState(false);
-  /** Confirm rewind target + optional file restore (default off). */
-  const [rewindConfirm, setRewindConfirm] = useState<{
-    sessionId: string;
-    targetPromptIndex: number;
-    preview?: string;
-  } | null>(null);
-  const [rewindRestoreFiles, setRewindRestoreFiles] = useState(false);
   /** Last user message open in inline edit (not main composer). */
   const [editingUserMessageId, setEditingUserMessageId] = useState<
     string | null
@@ -541,8 +519,10 @@ export default function App() {
   const editingUserMessageIdRef = useRef<string | null>(null);
   editingUserMessageIdRef.current = editingUserMessageId;
   const [editSubmitting, setEditSubmitting] = useState(false);
+  const [rewindBusy, setRewindBusy] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
   const [sessions, setSessions] = useState<SessionRow[]>([]);
+  const [cacheStandings, setCacheStandings] = useState<Record<string, api.SessionCacheStanding>>({});
   const [activeProject, setActiveProject] = useState<Project | null>(null);
   /** Skills discovered by Pi for the active project, used by the slash palette. */
   const [skillInfos, setSkillInfos] = useState<SkillInfo[]>([]);
@@ -594,12 +574,8 @@ export default function App() {
   appDialogRef.current = appDialog;
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  /** Debounced journal content hits from `sessions_search`. */
-  const [contentSearchHits, setContentSearchHits] = useState<
-    SessionContentHit[]
-  >([]);
-  const [contentSearchLoading, setContentSearchLoading] = useState(false);
-  const contentSearchSeq = useRef(0);
+  const [searchModelFilter, setSearchModelFilter] = useState("");
+  const [searchProjectFilter, setSearchProjectFilter] = useState("");
   const [showComposerPlus, setShowComposerPlus] = useState(false);
   showComposerPlusRef.current = showComposerPlus;
   const composerPlusTriggerRef = useRef<HTMLButtonElement>(null);
@@ -626,6 +602,15 @@ export default function App() {
 
   /** Real token usage from the host; null until a turn has been billed. */
   const [sessionUsage, setSessionUsage] = useState<UsagePayload | null>(null);
+  const [cacheBreakHint, setCacheBreakHint] = useState<string | null>(null);
+  const previousUsageRef = useRef<UsagePayload | null>(null);
+  const compactWaiterRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    setSessionUsage(null);
+    setCacheBreakHint(null);
+    previousUsageRef.current = null;
+  }, [session.sessionId]);
 
   /** Each workspace wears its own colour skin (Settings → Appearance). */
   const [workspaceSkins, setWorkspaceSkins] = useState<WorkspaceSkins>(() =>
@@ -633,9 +618,6 @@ export default function App() {
   );
   const [settingsSection, setSettingsSection] =
     useState<SettingsSectionId>("general");
-  /** Prevent overlapping automation runs. */
-  const automationRunLock = useRef(false);
-  const firedAutomationIds = useRef<Set<string>>(new Set());
   /** Conversation is guiding the user to create a scheduled task. */
   const automationSetupDraftRef = useRef(false);
   /** Composer is drafting a parallel task batch (set by /parallel). */
@@ -705,49 +687,10 @@ export default function App() {
     return () => document.removeEventListener("keydown", onKey);
   }, [showSearch]);
 
-  // Debounced content search over App journals (title filter stays instant).
-  useEffect(() => {
-    if (!showSearch) {
-      setContentSearchHits([]);
-      setContentSearchLoading(false);
-      return;
-    }
-    const q = searchQuery.trim();
-    if (!q) {
-      setContentSearchHits([]);
-      setContentSearchLoading(false);
-      return;
-    }
-    setContentSearchLoading(true);
-    const seq = ++contentSearchSeq.current;
-    const t = window.setTimeout(() => {
-      void (async () => {
-        try {
-          const hits = await api.sessionsSearch(q, 20);
-          if (contentSearchSeq.current !== seq) return;
-          setContentSearchHits(
-            hits.map((h) => ({
-              id: h.id,
-              title: h.title,
-              projectId: h.projectId,
-              snippet: h.snippet,
-              matchCount: h.matchCount,
-              updatedAt: h.updatedAt,
-              archived: h.archived,
-            })),
-          );
-        } catch {
-          if (contentSearchSeq.current !== seq) return;
-          setContentSearchHits([]);
-        } finally {
-          if (contentSearchSeq.current === seq) {
-            setContentSearchLoading(false);
-          }
-        }
-      })();
-    }, 280);
-    return () => window.clearTimeout(t);
-  }, [searchQuery, showSearch]);
+  const { contentSearchHits, contentSearchLoading } = useContentSearch({
+    showSearch,
+    searchQuery,
+  });
 
   // Global shortcuts: search, find-in-chat, help, doctor, new chat, settings, voice.
   // Handlers go through refs so we don't re-bind every render.
@@ -755,6 +698,8 @@ export default function App() {
     newChat: () => {},
     openSettings: () => {},
     openChatFind: () => {},
+    openModelMenu: () => {},
+    switchPinned: (_index: number) => {},
   });
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -769,6 +714,16 @@ export default function App() {
         tag === "textarea" ||
         !!target?.isContentEditable;
       const key = e.key.toLowerCase();
+      if (key >= "1" && key <= "9" && !e.shiftKey && !typing) {
+        e.preventDefault();
+        shortcutHandlersRef.current.switchPinned(Number(key) - 1);
+        return;
+      }
+      if (key === "m" && e.shiftKey) {
+        e.preventDefault();
+        shortcutHandlersRef.current.openModelMenu();
+        return;
+      }
       // In-chat find — open even while typing in the composer.
       if (key === "f" && !e.shiftKey) {
         e.preventDefault();
@@ -845,19 +800,37 @@ export default function App() {
   const trRef = useRef(tr);
   trRef.current = tr;
   const [modelId, setModelId] = useState(DEFAULT_MODEL_ID);
+  const [prReviewModel, setPrReviewModel] = useState<string | null>(() =>
+    loadPrReviewModel(localStorage),
+  );
   const [effort, setEffort] = useState(DEFAULT_EFFORT);
   const [mode, setMode] = useState("agent");
   const modeRef = useRef(mode);
   modeRef.current = mode;
   const [policy, setPolicy] = useState("ask");
-  /** Live selectable models from Host (official CLI catalog only; not providers). */
+  /** Live selectable models from Host, including configured custom providers. */
   const [availableModels, setAvailableModels] =
     useState<ModelOption[]>(PI_FALLBACK_MODELS);
+  const modelHealth = useModelHealth(api.isTauri());
+  const [modelRoles, setModelRoles] = useState<Record<string, string>>({});
+  const [fallbackChains, setFallbackChains] = useState<Record<string, string[]>>({});
+  const [budgetMonthlyByTier, setBudgetMonthlyByTier] = useState<Record<string, number>>({});
+  const [budgetSessionByTier, setBudgetSessionByTier] = useState<Record<string, number>>({});
+  const [compactionThresholdPercent, setCompactionThresholdPercent] = useState(85);
+
   /** Where model/permission chips are remembered. */
   const [prefsScope, setPrefsScope] =
     useState<ComposerPrefsScope>("global");
   /** Files/folders attached for next send (@path to agent). */
   const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [comparisonOpen, setComparisonOpen] = useState(false);
+  /** Pair selected from the session menu for an ordinary, non-batch comparison. */
+  const [comparisonPair, setComparisonPair] = useState<[string, string] | null>(null);
+  const [comparisonSelection, setComparisonSelection] = useState<string | null>(null);
+  const sessionsRef = useRef<SessionRow[]>([]);
+  const projectsRef = useRef<Project[]>([]);
+  sessionsRef.current = sessions;
+  projectsRef.current = projects;
   /** Chat file/url card → open in right resource pane. */
   const [resourceOpenTarget, setResourceOpenTarget] =
     useState<ResourceOpenTarget | null>(null);
@@ -904,12 +877,37 @@ export default function App() {
     piPath: "pi",
     cwd: "~",
   });
+  /** The selected remote worktree for the viewed chat; never stored as a local project. */
+  const [remoteWorkspacePath, setRemoteWorkspacePath] = useState<string | null>(
+    null,
+  );
+  const remoteRuntimeKey = [
+    remoteRuntime.enabled ? "1" : "0",
+    remoteRuntime.transport,
+    remoteRuntime.host,
+    remoteRuntime.user,
+    String(remoteRuntime.port),
+    remoteRuntime.directUrl,
+    remoteRuntime.cwd,
+  ].join("|");
+  const remoteRuntimeKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!remoteRuntime.enabled) {
+      remoteRuntimeKeyRef.current = null;
+      setRemoteWorkspacePath(null);
+      return;
+    }
+    if (remoteRuntimeKeyRef.current === remoteRuntimeKey) return;
+    remoteRuntimeKeyRef.current = remoteRuntimeKey;
+    setRemoteWorkspacePath(remoteRuntime.cwd.trim() || null);
+  }, [remoteRuntime.cwd, remoteRuntime.enabled, remoteRuntimeKey]);
   const [maxConcurrentAgents, setMaxConcurrentAgents] = useState(3);
   const [agentIdleMinutes, setAgentIdleMinutes] = useState(30);
   const [streamStallSeconds, setStreamStallSeconds] = useState(120);
   /** 0 = omit `--max-turns` (CLI default). */
   const [maxAgentTurns, setMaxAgentTurns] = useState(0);
   const [storeApiKeysInKeychain, setStoreApiKeysInKeychain] = useState(false);
+  const [crashReportingEnabled, setCrashReportingEnabled] = useState(false);
   const [sandboxProfile, setSandboxProfile] = useState("off");
   /** Preferred CLI agent definition for spawn (`""` = CLI default). */
   const [preferredAgent, setPreferredAgent] = useState("");
@@ -917,13 +915,18 @@ export default function App() {
     Array<{ name: string; source: string }>
   >([]);
   const [experimentalMemory, setExperimentalMemory] = useState(false);
+  // The right resource pane speaks in workspace paths. In remote mode the
+  // project list may still contain local metadata, so never hand that local
+  // path to the remote filesystem/Git bridge.
+  const resourceProjectPath = remoteRuntime.enabled
+    ? remoteWorkspacePath?.trim() || remoteRuntime.cwd.trim() || null
+    : activeProject?.path ?? null;
   const [subagentsEnabled, setSubagentsEnabled] = useState(true);
   const [planEnabled, setPlanEnabled] = useState(true);
   const [disableWebSearch, setDisableWebSearch] = useState(false);
   const [useLeader, setUseLeader] = useState(false);
   const [reopenLastSession, setReopenLastSession] = useState(true);
   const [lastSessionId, setLastSessionId] = useState<string | null>(null);
-  const didRestoreLastRef = useRef(false);
   const [tasksPanelOpen, setTasksPanelOpen] = useState(false);
   const [gitWorktrees, setGitWorktrees] = useState<api.GitWorktreeEntry[]>([]);
   /** null = unknown/loading; true = git work tree; false = not a git repo. */
@@ -1107,11 +1110,16 @@ export default function App() {
           title: x.title,
           projectId: x.projectId,
           updatedAt: x.updatedAt,
+          remoteCwd: x.remoteCwd ?? null,
           archived: !!x.archived,
           pinned: !!x.pinned,
           scheduled: !!x.scheduled,
+          modelId: x.modelId ?? null,
         })),
       );
+      void api.sessionCacheStandings().then((rows) => {
+        setCacheStandings(Object.fromEntries(rows.map((row) => [row.sessionId, row])));
+      }).catch(() => {});
       void api.trayRefresh();
       setLocale(resolveLocale(settings.locale));
       setUserName(settings.userName?.trim() || "");
@@ -1132,12 +1140,18 @@ export default function App() {
                 id: m.id,
                 label: m.label || m.id,
                 source: m.source,
+                contextWindow: m.contextWindow,
                 isDefault: m.isDefault,
                 reasoningEfforts: efforts,
               };
             })
           : PI_FALLBACK_MODELS;
       setAvailableModels(catalog);
+      setModelRoles(settings.modelRoles ?? {});
+      setFallbackChains(settings.fallbackChains ?? {});
+      setBudgetMonthlyByTier(settings.budgetMonthlyByTier ?? {});
+      setBudgetSessionByTier(settings.budgetSessionByTier ?? {});
+      setCompactionThresholdPercent(settings.compactionThresholdPercent ?? 85);
       if (
         settings.composerPrefsScope &&
         isValidPrefsScope(settings.composerPrefsScope)
@@ -1229,6 +1243,7 @@ export default function App() {
         );
       }
       setStoreApiKeysInKeychain(!!settings.storeApiKeysInKeychain);
+      setCrashReportingEnabled(!!settings.crashReportingEnabled);
       {
         const sb = (settings.sandboxProfile || "off").trim().toLowerCase();
         const known = ["off", "workspace", "read-only", "strict", "devbox"];
@@ -1485,6 +1500,7 @@ export default function App() {
       const { tasks, cleanText } = parseTaskBatch(
         assistant.content || "",
         availableModels.map((m) => m.id),
+        modelRoles,
       );
       if (cleanText !== (assistant.content || "")) {
         const aid = assistant.id;
@@ -1497,7 +1513,7 @@ export default function App() {
       taskBatchDraftRef.current = false;
       runTaskBatchRef.current?.(tasks);
     },
-    [availableModels, patchSessionMessages],
+    [availableModels, modelRoles, patchSessionMessages],
   );
 
   const tryApplyAutomationFromSession = useCallback(
@@ -1668,6 +1684,13 @@ export default function App() {
               if (s.sessionId) {
                 void tryApplyAutomationFromSession(s.sessionId);
                 tryApplyTaskBatchFromSession(s.sessionId);
+                if (s.state === "ready" && s.sessionId !== viewingSessionIdRef.current) {
+                  showDesktopNotification({
+                    title: trRef.current("notify.backgroundDoneTitle"),
+                    body: `${s.modelId || trRef.current("batch.defaultModel")} · ${s.title || trRef.current("notify.turnDoneBody")}`,
+                    tag: `background-${s.sessionId}`,
+                  });
+                }
               }
             }
           }),
@@ -1677,6 +1700,9 @@ export default function App() {
             // Keep only the viewed session's figures; a background task's
             // usage would otherwise overwrite the chip you are looking at.
             if (payload.sessionId !== viewingSessionIdRef.current) return;
+            const cause = cacheBreakCause(previousUsageRef.current, payload);
+            setCacheBreakHint(cause ? trRef.current(`cache.break.${cause}`) : null);
+            previousUsageRef.current = payload;
             setSessionUsage(payload);
             // The provider just told us exactly how full the window was, so
             // the context chip can stop estimating from character counts.
@@ -1756,6 +1782,8 @@ export default function App() {
             if (!sid) return;
             patchSessionMessages(sid, (prev) => applyContextCompact(prev, p));
             if (sid === viewingSessionIdRef.current) {
+              compactWaiterRef.current?.();
+              compactWaiterRef.current = null;
               setContextUsage((prev) =>
                 reduceContextUsage(prev, {
                   type: "compact",
@@ -1972,6 +2000,15 @@ export default function App() {
             if (cancelled) return;
             if (p.sessionId === viewingSessionIdRef.current) {
               setRetryStatus(null);
+            }
+            const fallback = fallbackTurnRef.current;
+            if (
+              fallback &&
+              fallback.sessionId === p.sessionId &&
+              isTransientFallbackError(p.code, p.message || p.content || "")
+            ) {
+              fallbackTurnRef.current = null;
+              void fallbackRetryRef.current(fallback, p);
             }
             patchSessionMessages(p.sessionId, (prev) =>
               applyTurnError(prev, p, localeRef.current),
@@ -2388,350 +2425,6 @@ export default function App() {
   }, []);
 
   /**
-   * Open a stored session. Loads journal immediately; warms the ACP agent in
-   * the background so the first send skips cold process spawn when possible.
-   */
-  const openSession = async (s: SessionRow, project?: Project | null) => {
-    const proj =
-      project ||
-      projects.find((p) => p.id === s.projectId) ||
-      null;
-    setMainPane("chat");
-    setAppView("workbench");
-
-    // Snapshot the outgoing thread so a mid-turn switch does not lose the user bubble.
-    const leavingId = viewingSessionIdRef.current;
-    if (leavingId) {
-      messagesBySessionRef.current.set(leavingId, messagesRef.current);
-      // Plan progress is per-session — stash bar state before switching.
-      planBySessionRef.current.set(leavingId, planRef.current);
-    }
-
-    // Point viewing id immediately so late stream chunks land in the right cache.
-    openingSessionIdRef.current = s.id;
-    viewingSessionIdRef.current = s.id;
-    // Swap plan chrome to this session (or hide if none / not yet streamed).
-    setPlan(
-      planBySessionRef.current.get(s.id) ??
-        emptySessionPlan(trRef.current("plan.ready")),
-    );
-    setEditingUserMessageId(null);
-    setEditAttachments([]);
-
-    try {
-      const stored = await api.sessionMessages(s.id);
-      let mapped: ChatMessage[] = stored.map((m) => {
-        const parsed = parseAttachmentsFromContent(m.content);
-        const storedAtts: Attachment[] = (m.attachments ?? []).map((a) => ({
-          path: a.path,
-          name: a.name || a.path.split(/[/\\]/).pop() || a.path,
-          isDir: !!a.isDir,
-        }));
-        // @path lines (user) + persisted image_gen cards + absolute paths in text
-        const attachments = mergeMessageAttachments(
-          mergeAttachments(parsed.attachments, storedAtts),
-          m.content,
-        );
-        const rawContent =
-          parsed.text || (parsed.attachments.length ? "" : m.content);
-        // User turns: restore [[skill:]] chips from agent-form `/name` history.
-        const content =
-          m.role === "user" ? hydrateDisplayContent(rawContent) : rawContent;
-        const rawMarker = (m as { marker?: string }).marker || undefined;
-        const marker =
-          rawMarker ||
-          (m.role === "tool" && content.startsWith("context_compact")
-            ? "context_compact"
-            : m.role === "tool" && content.startsWith("tool_step|")
-              ? "tool_step"
-              : m.role === "tool" && content.startsWith("turn_cancelled")
-                ? "turn_cancelled"
-                : undefined);
-        const compactMeta =
-          marker === "context_compact"
-            ? parseCompactContent(content) || undefined
-            : undefined;
-        const toolParsed =
-          marker === "tool_step" ? parseToolStepContent(content) : null;
-        const role = m.role as "user" | "assistant" | "tool";
-        let displayContent = toolParsed?.title || content;
-        // Never show silent automation fence to the user on reload.
-        if (role === "assistant" && displayContent) {
-          displayContent = extractAutomationPayload(displayContent).cleanText;
-        }
-        const thoughtPhases = splitThoughtPhases(m.thought);
-        return {
-          id: m.id,
-          role,
-          content: displayContent,
-          thought: m.thought ?? undefined,
-          thoughtPhases,
-          // Reconstruct interleaved timeline for reload (first phase → body → rest).
-          segments:
-            role === "assistant"
-              ? buildSegmentsFromLegacy(
-                  displayContent,
-                  m.thought,
-                  thoughtPhases,
-                )
-              : undefined,
-          isError: m.isError || undefined,
-          attachments,
-          createdAt: m.createdAt || undefined,
-          marker,
-          compactMeta: compactMeta ?? undefined,
-          toolCallId: m.id.startsWith("tool-") ? m.id.slice(5) : undefined,
-          toolKind: toolParsed?.kind,
-          toolStatus: toolParsed?.status,
-          toolDetail: toolParsed?.detail,
-          toolPath: toolParsed?.path,
-          streaming: false,
-        };
-      });
-      // Short paths like `images/1.jpg` → agent session dir → image cards
-      if (api.isTauri()) {
-        const rels = collectSessionRelativeMediaRefs(mapped);
-        if (rels.length) {
-          try {
-            const list = await api.sessionResolveRelativeMedia(s.id, rels);
-            if (list.length) {
-              mapped = applyResolvedSessionMedia(
-                mapped,
-                list.map((a) => ({
-                  path: a.path,
-                  name:
-                    a.name || a.path.split(/[/\\]/).pop() || a.path,
-                  isDir: !!a.isDir,
-                })),
-              );
-            }
-          } catch {
-            /* ignore */
-          }
-        }
-      }
-      // Prefer in-memory cache (optimistic user msg + partial stream) over disk.
-      const chosen = preferSessionMessages(
-        messagesBySessionRef.current.get(s.id),
-        mapped,
-      );
-      if (viewingSessionIdRef.current !== s.id) {
-        // User switched again while we were loading — keep cache warm, skip UI write.
-        messagesBySessionRef.current.set(s.id, chosen);
-        if (openingSessionIdRef.current === s.id) {
-          openingSessionIdRef.current = null;
-        }
-        return;
-      }
-      // Cache raw journal (may include fences) so apply can read them.
-      messagesBySessionRef.current.set(s.id, chosen);
-      // Rebuild Changes list from tool_step history; preserve live before/after.
-      {
-        const fromHist = sessionChangesFromMessages(chosen);
-        setSessionChangesById((prev) => {
-          const existing = prev[s.id] ?? [];
-          let list = fromHist;
-          for (const e of existing) {
-            if (e.before != null || e.after != null) {
-              list = mergeSessionChange(list, {
-                toolCallId: e.toolCallId,
-                title: e.title,
-                kind: e.toolKind,
-                status: e.status,
-                path: e.path,
-                before: e.before,
-                after: e.after,
-                updatedAt: e.updatedAt,
-              });
-            }
-          }
-          return { ...prev, [s.id]: list };
-        });
-      }
-      const stripped = chosen.map((m) => {
-        if (m.role !== "assistant" || !m.content) return m;
-        const { cleanText } = extractAutomationPayload(m.content);
-        return cleanText === m.content ? m : { ...m, content: cleanText };
-      });
-      setMessages(stripped);
-      setContextUsage(
-        reduceContextUsage(INITIAL_CONTEXT_USAGE, {
-          type: "hydrate",
-          messages: stripped,
-        }),
-      );
-      // Backfill create if assistant still has a fence in journal (failed chat-create).
-      void tryApplyAutomationFromSession(s.id);
-      // Backfill scheduled flag from journal (older automation sessions).
-      if (
-        !s.scheduled &&
-        chosen.some(
-          (m) =>
-            m.role === "user" && !!parseScheduledUserContent(m.content || ""),
-        )
-      ) {
-        setSessions((list) =>
-          list.map((row) =>
-            row.id === s.id ? { ...row, scheduled: true } : row,
-          ),
-        );
-        if (api.isTauri()) {
-          void api.sessionSetScheduled(s.id, true).catch(() => {});
-        }
-      }
-      // Refine isDir via classify when possible
-      const allPaths = chosen.flatMap((m) => m.attachments?.map((a) => a.path) ?? []);
-      if (allPaths.length && api.isTauri()) {
-        void api.pathsClassify(allPaths).then((list) => {
-          if (viewingSessionIdRef.current !== s.id) return;
-          const byPath = new Map(list.map((c) => [c.path, c]));
-          setMessages((prev) =>
-            prev.map((msg) => {
-              if (!msg.attachments?.length) return msg;
-              return {
-                ...msg,
-                attachments: msg.attachments.map((a) => {
-                  const c = byPath.get(a.path);
-                  return c
-                    ? { path: c.path, name: c.name, isDir: c.isDir }
-                    : a;
-                }),
-              };
-            }),
-          );
-        });
-      }
-    } catch {
-      if (viewingSessionIdRef.current !== s.id) {
-        if (openingSessionIdRef.current === s.id) {
-          openingSessionIdRef.current = null;
-        }
-        return;
-      }
-      const cached = messagesBySessionRef.current.get(s.id);
-      setMessages(cached ?? []);
-      setContextUsage(
-        reduceContextUsage(INITIAL_CONTEXT_USAGE, {
-          type: "hydrate",
-          messages: cached ?? [],
-        }),
-      );
-    }
-    if (viewingSessionIdRef.current !== s.id) {
-      if (openingSessionIdRef.current === s.id) {
-        openingSessionIdRef.current = null;
-      }
-      return;
-    }
-    // Orphan sessions clear project context; project sessions select their folder.
-    setActiveProject(proj);
-    setAttachments([]);
-    // Reattach live host snapshot when reopening the session that is still running.
-    const live = liveHostRef.current;
-    if (live.sessionId === s.id) {
-      setSession({
-        ...live,
-        title: s.title || live.title || "Untitled",
-      });
-    } else {
-      setSession({
-        ...IDLE_SNAPSHOT,
-        sessionId: s.id,
-        title: s.title || "Untitled",
-        state: "idle",
-        backend: "pi_rpc",
-      });
-    }
-    if (openingSessionIdRef.current === s.id) {
-      openingSessionIdRef.current = null;
-    }
-    setLocalError(null);
-    // Permission / retry / ask-user chrome only apply to the live viewed session.
-    if (live.sessionId !== s.id) {
-      setPerm(null);
-      setAskUser(null);
-      setRetryStatus(null);
-    }
-
-    if (api.isTauri()) {
-      setLastSessionId(s.id);
-      void api
-        .settingsRememberLastSession(s.id, proj?.id ?? null)
-        .catch(() => {});
-    }
-
-    // Warm ACP: connect while the user reads history (trusted project or orphan).
-    // Host serializes connect; first send no-ops if already ready, or waits if
-    // still handshaking. Process is reused across sessions when cwd/effort match.
-    // Skip when project folder is missing (D05) — user must relocate first.
-    if (
-      api.isTauri() &&
-      (!proj || (proj.trusted && !isProjectPathMissing(proj.pathOk))) &&
-      !(live.sessionId === s.id && live.state === "ready")
-    ) {
-      const warmId = s.id;
-      void (async () => {
-        if (viewingSessionIdRef.current !== warmId) return;
-        try {
-          const snap = await api.sessionConnect({
-            projectPath: proj?.path,
-            sessionId: warmId,
-          });
-          if (viewingSessionIdRef.current !== warmId) return;
-          setLiveHost(snap);
-          liveHostRef.current = snap;
-          if (snap.sessionId === warmId) {
-            setSession((prev) => ({
-              ...snap,
-              title: prev.title || s.title || snap.title || "Untitled",
-            }));
-          }
-          if (snap.lastError && snap.state !== "ready") {
-            // Soft: keep chat readable; send will retry via ensureConnected.
-            console.warn(
-              "warm connect:",
-              snap.lastError.code,
-              snap.lastError.message,
-            );
-          }
-        } catch (e) {
-          console.warn("warm connect failed", e);
-        }
-      })();
-    }
-  };
-
-  const openSessionRef = useRef(openSession);
-  openSessionRef.current = openSession;
-
-  useEffect(() => {
-    if (appGate !== "ready") return;
-    if (didRestoreLastRef.current) return;
-    if (!api.isTauri()) {
-      didRestoreLastRef.current = true;
-      return;
-    }
-    const id = shouldRestoreLastSession({
-      enabled: reopenLastSession,
-      workbenchReady: true,
-      lastSessionId,
-      sessions,
-      currentSessionId: session.sessionId,
-    });
-    didRestoreLastRef.current = true;
-    if (!id) return;
-    const row = sessions.find((s) => s.id === id);
-    if (!row) return;
-    void openSessionRef.current(row);
-  }, [
-    appGate,
-    reopenLastSession,
-    lastSessionId,
-    sessions,
-    session.sessionId,
-  ]);
-
-  /**
    * Focus composer after React commit. Retries until the textarea is mounted
    * (e.g. switching from automations → chat) or attempts run out.
    * Must be called after any await so state updates have been scheduled.
@@ -2792,11 +2485,11 @@ export default function App() {
       setLocalError(tr("project.addSelectFirst"));
       return;
     }
-    if (proj && !proj.trusted) {
+    if (proj && !remoteRuntime.enabled && !proj.trusted) {
       setLocalError(tr("project.trustFirst", { name: proj.name }));
       return;
     }
-    if (proj && isProjectPathMissing(proj.pathOk)) {
+    if (proj && !remoteRuntime.enabled && isProjectPathMissing(proj.pathOk)) {
       setLocalError(tr("project.pathMissing", { name: proj.name }));
       return;
     }
@@ -2915,7 +2608,7 @@ export default function App() {
       ? liveHost.sessionId
       : null;
 
-  const refreshSessions = async () => {
+  const refreshSessions = useCallback(async () => {
     try {
       const list = await api.sessionsList();
       setSessions(
@@ -2933,289 +2626,7 @@ export default function App() {
     } catch {
       /* ignore */
     }
-  };
-
-  /**
-   * Run a scheduled automation now: open chat under its project (or orphan),
-   * connect, and send the stored prompt.
-   * @returns true if the prompt was handed to the agent (mark_run applied).
-   */
-  const runAutomation = useCallback(
-    async (
-      auto: Automation,
-      opts?: { fromScheduler?: boolean },
-    ): Promise<boolean> => {
-      if (automationRunLock.current) return false;
-      if (opts?.fromScheduler && (session.state === "streaming" || connecting)) {
-        return false;
-      }
-      automationRunLock.current = true;
-      let createdSessionId: string | null = null;
-      try {
-        const proj = auto.projectId
-          ? projects.find((p) => p.id === auto.projectId) ?? null
-          : null;
-        if (proj && !proj.trusted) {
-          setLocalError(tr("project.trustFirst", { name: proj.name }));
-          return false;
-        }
-        if (proj && isProjectPathMissing(proj.pathOk)) {
-          setLocalError(tr("project.pathMissing", { name: proj.name }));
-          return false;
-        }
-        setMainPane("chat");
-        setAppView("workbench");
-        setActiveProject(proj);
-        if (proj) {
-          setExpandedProjects((e) => ({ ...e, [proj.id]: true }));
-        } else {
-          setHistoryOpen(true);
-        }
-        openingSessionIdRef.current = null;
-        viewingSessionIdRef.current = null;
-        setMessages([]);
-        setAttachments([]);
-        setPerm(null);
-        setAskUser(null);
-        setRetryStatus(null);
-        setLocalError(null);
-        setDraft("");
-        if (api.isTauri()) {
-          try {
-            await api.sessionDisconnect();
-          } catch {
-            /* ignore */
-          }
-        }
-        setSession({
-          ...IDLE_SNAPSHOT,
-          sessionId: null,
-          title: auto.title || tr("session.new"),
-          state: "idle",
-          backend: "pi_rpc",
-        });
-        {
-          const idle = { ...IDLE_SNAPSHOT };
-          setLiveHost(idle);
-          liveHostRef.current = idle;
-        }
-
-        let sessionId: string | null = null;
-        if (api.isTauri()) {
-          const meta = (await api.sessionCreate(
-            proj?.id,
-            auto.title || tr("session.new"),
-            { scheduled: true },
-          )) as { id: string; title?: string; scheduled?: boolean };
-          sessionId = meta.id;
-          createdSessionId = meta.id;
-          viewingSessionIdRef.current = meta.id;
-          setSession((prev) => ({
-            ...prev,
-            sessionId: meta.id,
-            title: meta.title || auto.title,
-          }));
-          await refreshSessions();
-        }
-
-        // Persist model/effort for this session before connect when possible.
-        if (sessionId && api.isTauri() && (auto.modelId || auto.effort)) {
-          try {
-            await api.composerPrefsSet({
-              sessionId,
-              projectId: proj?.id ?? null,
-              modelId: auto.modelId,
-              effort: auto.effort,
-            });
-          } catch {
-            /* soft-fail */
-          }
-        }
-
-        const snap = await api.sessionConnect({
-          projectPath: proj?.path,
-          sessionId: sessionId ?? undefined,
-          mode: "agent",
-        });
-        setLiveHost(snap);
-        liveHostRef.current = snap;
-        if (snap.sessionId) {
-          viewingSessionIdRef.current = snap.sessionId;
-          sessionId = snap.sessionId;
-        }
-        setSession({
-          ...snap,
-          title: snap.title || auto.title || snap.title,
-        });
-        if (snap.lastError || snap.state !== "ready") {
-          const code = snap.lastError?.code ?? "AGENT_CRASHED";
-          const msg = snap.lastError?.message ?? "connect failed";
-          const detail = `${code}: ${msg}`;
-          setLocalError(
-            tr("automations.connectFailed", { detail }),
-          );
-          // Drop empty shell sessions so sidebar does not show empty draft ghosts.
-          if (createdSessionId && api.isTauri()) {
-            try {
-              await api.sessionDelete(createdSessionId);
-              await refreshSessions();
-            } catch {
-              /* ignore */
-            }
-            if (viewingSessionIdRef.current === createdSessionId) {
-              viewingSessionIdRef.current = null;
-              setMessages([]);
-              setSession({ ...IDLE_SNAPSHOT, state: "idle" });
-            }
-          }
-          return false;
-        }
-
-        if (sessionId && auto.modelId && api.isTauri()) {
-          try {
-            await api.sessionSetModel(auto.modelId, {
-              sessionId,
-              projectId: proj?.id ?? null,
-            });
-          } catch {
-            /* soft-fail */
-          }
-        }
-
-        const header = `[Scheduled: ${auto.title}]\n\n`;
-        let body = auto.prompt;
-        // A PR automation watches a repository: build its prompt from the pull
-        // requests it has not handled yet, and skip the run when there are none
-        // rather than waking the agent to say "nothing to do".
-        let sweptNumbers: number[] = [];
-        if (isPrAutomation(auto)) {
-          const repo = (auto.repo || "").trim();
-          const pulls = await api.ghPrList({ repo });
-          const seen = loadSeenPrs(localStorage);
-          const fresh = unseenPulls(pulls, seen, auto.id);
-          if (fresh.length === 0) {
-            showToast(tr("prAuto.nothingNew", { repo }));
-            return false;
-          }
-          sweptNumbers = fresh.map((p) => p.number);
-          body = buildPrSweepPrompt(repo, fresh, auto.prompt);
-        }
-        const promptBody = header + body;
-        const autoMsgs: ChatMessage[] = [
-          {
-            id: `u-auto-${Date.now()}`,
-            role: "user",
-            content: promptBody,
-            createdAt: new Date().toISOString(),
-          },
-        ];
-        if (sessionId) {
-          messagesBySessionRef.current.set(sessionId, autoMsgs);
-        }
-        setMessages(autoMsgs);
-        setSession((prev) => ({
-          ...prev,
-          state: "streaming",
-          lastError: null,
-          title: auto.title || prev.title,
-        }));
-
-        try {
-          await api.sessionSend(promptBody);
-          // Only after the send lands: a failed run must be retried next time,
-          // not silently marked as handled.
-          if (sweptNumbers.length > 0) {
-            saveSeenPrs(
-              localStorage,
-              markPullsSeen(loadSeenPrs(localStorage), auto.id, sweptNumbers),
-            );
-          }
-        } catch (sendErr) {
-          const errText = String(sendErr);
-          const failed: ChatMessage[] = [
-            ...autoMsgs,
-            {
-              id: `err-auto-${Date.now()}`,
-              role: "assistant",
-              content: errText,
-              isError: true,
-              createdAt: new Date().toISOString(),
-            },
-          ];
-          if (sessionId) {
-            messagesBySessionRef.current.set(sessionId, failed);
-          }
-          setMessages(failed);
-          setLocalError(errText);
-          setSession((prev) =>
-            prev.sessionId === sessionId
-              ? { ...prev, state: "ready" }
-              : prev,
-          );
-          return false;
-        }
-
-        const lastRunAt = new Date().toISOString();
-        const nextRunAt =
-          auto.frequency === "once"
-            ? null
-            : computeNextRunAt(
-                { ...auto, enabled: auto.frequency !== "once" },
-                new Date(Date.now() + 60_000),
-              );
-        await api.automationMarkRun(auto.id, lastRunAt, nextRunAt);
-        if (auto.frequency === "once") {
-          await api.automationSetEnabled(auto.id, false);
-        }
-        setToast(tr("automations.runningToast", { title: auto.title }));
-        window.setTimeout(() => setToast(null), 3200);
-        return true;
-      } catch (e) {
-        setLocalError(String(e));
-        return false;
-      } finally {
-        automationRunLock.current = false;
-      }
-    },
-    [projects, session.state, connecting, tr],
-  );
-
-  // Shell scheduler: poll enabled automations while app is open.
-  useEffect(() => {
-    if (!api.isTauri() && typeof window === "undefined") return;
-    const tick = async () => {
-      if (automationRunLock.current || connecting) return;
-      if (session.state === "streaming") return;
-      try {
-        const rows = await api.automationsList();
-        const due = rows.find(
-          (r) =>
-            r.enabled &&
-            isDue(r as Automation) &&
-            !firedAutomationIds.current.has(`${r.id}:${r.nextRunAt ?? ""}`),
-        );
-        if (!due) return;
-        const fireKey = `${due.id}:${due.nextRunAt ?? ""}`;
-        // Claim only after we know we will attempt; release on failure so due tasks retry.
-        firedAutomationIds.current.add(fireKey);
-        const ok = await runAutomation(due as Automation, {
-          fromScheduler: true,
-        });
-        if (!ok) {
-          firedAutomationIds.current.delete(fireKey);
-        }
-      } catch {
-        /* ignore tick errors */
-      }
-    };
-    const id = window.setInterval(() => void tick(), 30_000);
-    // First check shortly after mount.
-    const boot = window.setTimeout(() => void tick(), 8_000);
-    return () => {
-      window.clearInterval(id);
-      window.clearTimeout(boot);
-    };
-  }, [runAutomation, connecting, session.state]);
+  }, []);
 
   const refreshProjects = async () => {
     try {
@@ -3247,6 +2658,52 @@ export default function App() {
     },
     [],
   );
+
+  const { openSession, ensureConnected } = useSessionLifecycle({
+    projects,
+    sessions,
+    activeProject,
+    session,
+    connecting,
+    mode,
+    remoteRuntime,
+    resourceProjectPath,
+    appGate,
+    reopenLastSession,
+    lastSessionId,
+    tr,
+    refreshSessions,
+    tryApplyAutomationFromSession,
+    messagesBySessionRef,
+    messagesRef,
+    viewingSessionIdRef,
+    openingSessionIdRef,
+    planBySessionRef,
+    planRef,
+    liveHostRef,
+    setMainPane,
+    setAppView,
+    setMessages,
+    setContextUsage,
+    setSessionChangesById,
+    setPlan,
+    setEditingUserMessageId,
+    setEditAttachments,
+    setSessions,
+    setActiveProject,
+    setRemoteWorkspacePath,
+    setAttachments,
+    setSession,
+    setLiveHost,
+    setLocalError,
+    setPerm,
+    setAskUser,
+    setRetryStatus,
+    setLastSessionId,
+    setConnecting,
+    setExpandedProjects,
+    setHistoryOpen,
+  });
 
   const renameProject = (proj: Project) => {
     setCtxMenu(null);
@@ -3638,6 +3095,99 @@ export default function App() {
       ),
     [searchQuery, searchHits.matchedSessions, contentSearchHits],
   );
+  const filteredSessionHits = useMemo(
+    () => mergedSessionHits.filter((hit) => {
+      const row = sessions.find((item) => item.id === hit.id);
+      return (!searchModelFilter || row?.modelId === searchModelFilter) &&
+        (!searchProjectFilter || (row?.projectId ?? hit.projectId) === searchProjectFilter);
+    }),
+    [mergedSessionHits, searchModelFilter, searchProjectFilter, sessions],
+  );
+
+  const paletteCommands = useMemo(() => {
+    const commands = [
+      {
+        id: "settings",
+        label: tr("palette.openSettings"),
+        run: () => {
+          setShowSearch(false);
+          setAppView("settings");
+          setSettingsSection("general");
+          window.location.hash = "#/settings/general";
+        },
+      },
+      {
+        id: "automations",
+        label: tr("palette.openAutomations"),
+        run: () => {
+          setShowSearch(false);
+          setMainPane("automations");
+          setAppView("workbench");
+          window.location.hash = "#/automations";
+        },
+      },
+      {
+        id: "new-chat",
+        label: tr("search.newChat"),
+        run: () => {
+          setShowSearch(false);
+          void newChat(activeProject);
+        },
+      },
+      {
+        id: "start-batch",
+        label: tr("palette.startBatch"),
+        run: () => {
+          setShowSearch(false);
+          taskBatchDraftRef.current = true;
+          setDraft("/parallel ");
+          requestComposerFocus();
+        },
+      },
+      ...sessions.filter((item) => item.pinned).slice(0, 9).map((row) => ({
+        id: `session:${row.id}`,
+        label: `${tr("palette.switchSession")} · ${row.title || tr("session.untitled")}`,
+        run: () => {
+          setShowSearch(false);
+          void openSession(row, projects.find((project) => project.id === row.projectId));
+        },
+      })),
+      ...projects.map((project) => ({
+        id: `project:${project.id}`,
+        label: `${tr("palette.switchProject")} · ${project.name}`,
+        run: () => {
+          setShowSearch(false);
+          void newChat(project);
+        },
+      })),
+      ...(["code", "pr", "design"] as const).map((id) => ({
+        id: `workspace:${id}`,
+        label: `${tr("palette.switchWorkspace")} · ${tr(`workspace.${id}`)}`,
+        run: () => {
+          setShowSearch(false);
+          setWorkspace(id);
+          saveWorkspace(localStorage, id);
+        },
+      })),
+      ...availableModels.map((model) => ({
+        id: `model:${model.id}`,
+        label: `${tr("palette.switchModel")} · ${model.label || model.id}`,
+        run: () => {
+          setShowSearch(false);
+          setModelId(model.id);
+          void api.composerPrefsSet({
+            projectId: activeProject?.id ?? null,
+            sessionId: session.sessionId ?? null,
+            modelId: model.id,
+          });
+        },
+      })),
+    ];
+    const query = searchQuery.trim().replace(/^>/, "").trim().toLowerCase();
+    return query
+      ? commands.filter((command) => command.label.toLowerCase().includes(query))
+      : commands;
+  }, [activeProject, availableModels, newChat, openSession, projects, requestComposerFocus, searchQuery, session.sessionId, sessions, tr]);
 
   /** Session row currently open in the workbench (drives the top-bar ⋯ menu). */
   const activeSessionRow = useMemo(
@@ -3662,148 +3212,6 @@ export default function App() {
   );
 
   /**
-   * Ensure app session row + silent CLI connect.
-   * Creates store session only on first send (draft → real).
-   * Reconnects when disconnected / crashed. Pass force to tear down a "ready"
-   * session that may be wedged (e.g. after a timeout).
-   * Returns the live session id when ready, else null.
-   *
-   * Prefer `opts.sessionId` (e.g. queue flush target) over the render-time
-   * `session` closure so connect never binds the wrong chat after a switch.
-   *
-   * Does not yank the UI if the user already switched to another session while
-   * connect is in flight; still updates liveHost so the sidebar spinner tracks work.
-   */
-  const ensureConnected = async (
-    forceOrOpts:
-      | boolean
-      | { force?: boolean; sessionId?: string | null } = false,
-  ): Promise<string | null> => {
-    const opts =
-      typeof forceOrOpts === "boolean"
-        ? { force: forceOrOpts, sessionId: undefined as string | null | undefined }
-        : forceOrOpts;
-    const force = !!opts.force;
-    // Explicit target wins; else the session this render is bound to.
-    const preferredId =
-      opts.sessionId !== undefined ? opts.sessionId : session.sessionId;
-
-    // Project-less (orphan) sessions are allowed: cwd falls back on Host.
-    if (activeProject && !activeProject.trusted) {
-      setLocalError(tr("project.trustFirst", { name: activeProject.name }));
-      return null;
-    }
-    if (activeProject && isProjectPathMissing(activeProject.pathOk)) {
-      setLocalError(
-        tr("project.pathMissing", { name: activeProject.name }),
-      );
-      return null;
-    }
-    // Fast path: already ready on the *preferred* session (not merely "any" ready).
-    if (
-      !force &&
-      preferredId &&
-      session.sessionId === preferredId &&
-      session.state === "ready" &&
-      !session.lastError
-    ) {
-      return preferredId;
-    }
-    // Live host may already be on the target even if viewed session differs.
-    if (!force && preferredId) {
-      const live = liveHostRef.current;
-      if (
-        live.sessionId === preferredId &&
-        live.state === "ready" &&
-        !live.lastError
-      ) {
-        return preferredId;
-      }
-    }
-    if (connecting) return null;
-    setConnecting(true);
-    // Capture draft identity before awaits (may still be null).
-    const viewedBefore = viewingSessionIdRef.current;
-    try {
-      let sessionId = preferredId ?? null;
-      // First send: materialize draft into a real session (project or orphan).
-      if (!sessionId && api.isTauri()) {
-        const meta = (await api.sessionCreate(
-          activeProject?.id,
-          tr("session.new"),
-        )) as { id: string; title?: string };
-        sessionId = meta.id;
-        // Bind draft messages cache to the new id (was under null / unkeyed).
-        const draftMsgs = messagesBySessionRef.current.get("__draft__");
-        if (draftMsgs?.length) {
-          messagesBySessionRef.current.set(meta.id, draftMsgs);
-          messagesBySessionRef.current.delete("__draft__");
-        }
-        // Only take over the workbench if still on this draft / same session.
-        if (
-          viewingSessionIdRef.current === viewedBefore ||
-          viewingSessionIdRef.current === null ||
-          viewingSessionIdRef.current === meta.id
-        ) {
-          viewingSessionIdRef.current = meta.id;
-          setSession((prev) => ({
-            ...prev,
-            sessionId: meta.id,
-            title: meta.title || tr("session.new"),
-          }));
-        }
-        if (activeProject) {
-          setExpandedProjects((e) => ({ ...e, [activeProject.id]: true }));
-        } else {
-          setHistoryOpen(true);
-        }
-        await refreshSessions();
-      }
-      const snap = await api.sessionConnect({
-        projectPath: activeProject?.path,
-        sessionId: sessionId ?? undefined,
-        mode,
-      });
-      setLiveHost(snap);
-      liveHostRef.current = snap;
-      // Only rebind viewed session when the user is still on it (or its draft).
-      if (
-        snap.sessionId &&
-        (viewingSessionIdRef.current === snap.sessionId ||
-          viewingSessionIdRef.current === viewedBefore ||
-          (viewedBefore === null &&
-            viewingSessionIdRef.current === snap.sessionId))
-      ) {
-        viewingSessionIdRef.current = snap.sessionId;
-        setSession(snap);
-      }
-      if (snap.lastError || snap.state !== "ready") {
-        const code = snap.lastError?.code ?? "AGENT_CRASHED";
-        const msg = snap.lastError?.message ?? "connect failed";
-        if (viewingSessionIdRef.current === (snap.sessionId || sessionId)) {
-          setLocalError(`${code}: ${msg}`);
-        }
-        return null;
-      }
-      if (viewingSessionIdRef.current === (snap.sessionId || sessionId)) {
-        setLocalError(null);
-      }
-      return snap.sessionId || sessionId || null;
-    } catch (e) {
-      if (
-        viewingSessionIdRef.current === viewedBefore ||
-        viewingSessionIdRef.current === preferredId ||
-        viewingSessionIdRef.current === session.sessionId
-      ) {
-        setLocalError(String(e));
-      }
-      return null;
-    } finally {
-      setConnecting(false);
-    }
-  };
-
-  /**
    * `/compact [note]` — in-app prompt for optional keep-note (CLI supports a
    * context note of what to retain). Empty → `/compact`; non-empty → `/compact {note}`.
    * Never uses window.prompt (unreliable in Tauri WebView).
@@ -3823,7 +3231,7 @@ export default function App() {
           try {
             const sid = await ensureConnected();
             if (!sid) return;
-            await api.sessionSend(cmd);
+            await api.sessionSend(cmd, null, null, sid);
           } catch (err) {
             setLocalError(String(err));
           }
@@ -3865,293 +3273,6 @@ export default function App() {
     !connecting &&
     !editSubmitting &&
     !rewindBusy;
-
-  /**
-   * Dispatch one user turn (optimistic UI + connect + session_send).
-   * @param targetSessionId When set (queue flush), bind optimistic UI to this id.
-   * @param fromQueue Drop user+assistant on failure so requeue does not duplicate.
-   */
-  const executeSend = async (opts: {
-    storedDisplay: string;
-    att: Attachment[];
-    goalMode: boolean;
-    fromQueue?: boolean;
-    targetSessionId?: string | null;
-  }): Promise<boolean> => {
-    if (sendInFlightRef.current) return false;
-    sendInFlightRef.current = true;
-    const { storedDisplay, att, goalMode: useGoal, fromQueue } = opts;
-    const segments = parseStoredContent(storedDisplay);
-    if (isDraftEmpty(segments) && !att.length) {
-      sendInFlightRef.current = false;
-      return false;
-    }
-    const sendTargetId =
-      opts.targetSessionId !== undefined
-        ? opts.targetSessionId
-        : session.sessionId;
-    const cacheKey = sendTargetId ?? "__draft__";
-    const viewingTarget = () =>
-      viewingSessionIdRef.current === sendTargetId ||
-      (sendTargetId == null && viewingSessionIdRef.current == null);
-
-    const agentBody = serializeForAgent(segments, { goalMode: useGoal });
-    let agentText = buildAgentPrompt(agentBody, att);
-    const scheduleIntent = looksLikeScheduleIntent(agentText);
-    const inAutomationSetup =
-      automationSetupDraftRef.current ||
-      scheduleIntent ||
-      (!!sendTargetId &&
-        automationSetupSessionsRef.current.has(sendTargetId));
-    if (inAutomationSetup) {
-      agentText = wrapAutomationSetupAgentText(agentText);
-    } else if (taskBatchDraftRef.current) {
-      agentText = wrapTaskBatchAgentText(agentText);
-    }
-    const titleSeed =
-      serializeForAgent(segments).replace(/\n/g, " ").trim() ||
-      att.map((a) => a.name).join(", ");
-    const shouldAutoTitle =
-      isPlaceholderTitle(session.title) || !sendTargetId;
-    const ts = Date.now();
-    const userMessageId = `u-${ts}`;
-    const pendingAssistantId = `a-pending-${ts}`;
-    const dropIds = fromQueue
-      ? new Set([userMessageId, pendingAssistantId])
-      : new Set([pendingAssistantId]);
-    const stripOptimistic = (m: ChatMessage[]) =>
-      m.filter((x) => !dropIds.has(x.id));
-
-    if (editingUserMessageId) {
-      setEditingUserMessageId(null);
-      setEditAttachments([]);
-    }
-
-    if (viewingTarget()) setRetryStatus(null);
-    const nowIso = new Date().toISOString();
-    const appendOptimistic = (m: ChatMessage[]): ChatMessage[] => {
-      const cleaned = clearPriorTurnStreaming(m);
-      return [
-        ...cleaned,
-        {
-          id: userMessageId,
-          role: "user",
-          content: storedDisplay,
-          attachments: att.length ? att : undefined,
-          createdAt: nowIso,
-        },
-        {
-          id: pendingAssistantId,
-          role: "assistant",
-          content: "",
-          streaming: true,
-        },
-      ];
-    };
-    if (sendTargetId) {
-      patchSessionMessages(sendTargetId, appendOptimistic);
-    } else if (viewingTarget()) {
-      setMessages((m) => {
-        const next = appendOptimistic(m);
-        messagesBySessionRef.current.set(cacheKey, next);
-        return next;
-      });
-    } else {
-      const prev = messagesBySessionRef.current.get(cacheKey) ?? [];
-      messagesBySessionRef.current.set(cacheKey, appendOptimistic(prev));
-    }
-    if (viewingTarget()) {
-      setSession((prev) =>
-        prev.state === "streaming" || prev.state === "awaiting_permission"
-          ? prev
-          : { ...prev, state: "streaming", lastError: null },
-      );
-      setTurnStartedAt(Date.now());
-    }
-    setLiveHost((prev) => {
-      if (sendTargetId && prev.sessionId && prev.sessionId !== sendTargetId) {
-        return prev;
-      }
-      const next = {
-        ...prev,
-        sessionId: sendTargetId ?? prev.sessionId,
-        state: "streaming" as const,
-        lastError: null,
-      };
-      liveHostRef.current = next;
-      return next;
-    });
-
-    const failStrip = () => {
-      if (sendTargetId) {
-        patchSessionMessages(sendTargetId, stripOptimistic);
-      } else {
-        const draftMsgs = messagesBySessionRef.current.get("__draft__");
-        if (draftMsgs) {
-          messagesBySessionRef.current.set(
-            "__draft__",
-            stripOptimistic(draftMsgs),
-          );
-        }
-        if (viewingTarget()) setMessages((m) => stripOptimistic(m));
-      }
-      if (viewingTarget()) {
-        setSession((prev) =>
-          prev.state === "streaming"
-            ? { ...prev, state: prev.sessionId ? "ready" : prev.state }
-            : prev,
-        );
-      }
-      // Symmetric rollback of optimistic liveHost streaming — otherwise
-      // useSendQueue.flush sees streaming forever and auto-flush starves.
-      setLiveHost((prev) => {
-        if (
-          sendTargetId &&
-          prev.sessionId &&
-          prev.sessionId !== sendTargetId
-        ) {
-          return prev;
-        }
-        if (prev.state !== "streaming") return prev;
-        const next = {
-          ...prev,
-          state: (prev.sessionId ? "ready" : "idle") as SessionSnapshot["state"],
-        };
-        liveHostRef.current = next;
-        return next;
-      });
-    };
-
-    try {
-      let sessionId: string | null = null;
-      const live = liveHostRef.current;
-      if (
-        sendTargetId &&
-        live.sessionId === sendTargetId &&
-        live.state === "ready" &&
-        !live.lastError
-      ) {
-        sessionId = sendTargetId;
-      } else if (
-        fromQueue &&
-        sendTargetId &&
-        viewingSessionIdRef.current !== sendTargetId
-      ) {
-        failStrip();
-        return false;
-      } else {
-        sessionId = await ensureConnected({ sessionId: sendTargetId });
-      }
-      if (!sessionId) {
-        failStrip();
-        return false;
-      }
-      if (fromQueue && sendTargetId && sessionId !== sendTargetId) {
-        failStrip();
-        return false;
-      }
-      // Bind draft message cache to the real id early (Host already materialized).
-      // Queue migrate waits until sessionSend succeeds so a failed flush can
-      // requeue under the original claim key (`__draft__`) without splitting.
-      if (!sendTargetId) {
-        const draftMsgs = messagesBySessionRef.current.get("__draft__");
-        if (draftMsgs?.length) {
-          messagesBySessionRef.current.set(sessionId, draftMsgs);
-          messagesBySessionRef.current.delete("__draft__");
-        }
-      }
-      if (automationSetupDraftRef.current || inAutomationSetup) {
-        automationSetupSessionsRef.current.add(sessionId);
-        automationSetupDraftRef.current = false;
-      }
-      if (
-        fromQueue &&
-        sendTargetId &&
-        liveHostRef.current.sessionId &&
-        liveHostRef.current.sessionId !== sendTargetId
-      ) {
-        failStrip();
-        return false;
-      }
-      await api.sessionSend(agentText, storedDisplay, att);
-      // Only after a successful send: move remaining draft follow-ups onto the
-      // real session. If this threw, claim requeues under `__draft__` intact.
-      if (!sendTargetId) {
-        sendQueue.migrateDraft(sessionId);
-      }
-      if (shouldAutoTitle && api.isTauri()) {
-        void api
-          .sessionAutoTitle(sessionId, titleSeed)
-          .then((meta) => {
-            if (meta?.title) applySessionTitle(sessionId, meta.title);
-          })
-          .catch(() => {
-            /* ignore */
-          });
-      }
-      return true;
-    } catch (e) {
-      failStrip();
-      if (viewingTarget()) setLocalError(String(e));
-      return false;
-    } finally {
-      sendInFlightRef.current = false;
-    }
-  };
-
-  const clearComposerAfterSubmit = () => {
-    setDraft("");
-    promptHistoryIndexRef.current = null;
-    setPromptHistoryIndex(null);
-    setSlashQuery(null);
-    setAttachments([]);
-    requestAnimationFrame(() => {
-      const el = document.querySelector<HTMLElement>(".composer__input");
-      if (el) el.style.height = "auto";
-    });
-  };
-
-  /** Enqueue when agent is busy; otherwise send immediately. */
-  const send = async () => {
-    const segments = parseStoredContent(draft);
-    const storedDisplay = draft;
-    const att = attachments;
-    if (isDraftEmpty(segments) && !att.length) return;
-    if (session.state === "awaiting_permission") {
-      showToast(tr("composer.queueBlockedPermission"), 2800);
-      return;
-    }
-    // #52: orphan chats without a folder often stop after planning text —
-    // tools can't land in a workspace until a project is bound.
-    if (
-      !activeProject &&
-      (mode === "agent" || goalMode) &&
-      !shouldEnqueueSend(session.state, connecting)
-    ) {
-      showToast(tr("composer.noProjectWriteHint"), 4500);
-    }
-    sendQueue.releaseFlushHold();
-
-    if (shouldEnqueueSend(session.state, connecting)) {
-      sendQueue.enqueue({
-        storedDisplay,
-        attachments: att,
-        goalMode,
-      });
-      clearComposerAfterSubmit();
-      return;
-    }
-
-    clearComposerAfterSubmit();
-    await executeSend({
-      storedDisplay,
-      att,
-      goalMode,
-      targetSessionId: session.sessionId,
-    });
-  };
-
-  executeSendFromQueueRef.current = (opts) => executeSend(opts);
 
   const queuePreviewLabels = useMemo(
     () => ({
@@ -4682,7 +3803,7 @@ export default function App() {
 
   /** Files of the active project for the `@` picker (root listing). */
   useEffect(() => {
-    if (!atMenuOpen || !activeProject?.path || !api.isTauri()) {
+    if (!atMenuOpen || !resourceProjectPath || !api.isTauri()) {
       setAtFiles([]);
       setAtLoading(false);
       return;
@@ -4690,7 +3811,7 @@ export default function App() {
     let alive = true;
     setAtLoading(true);
     api
-      .fsListDir(activeProject.path, "")
+      .fsListDir(resourceProjectPath, "")
       .then((list) => {
         if (!alive) return;
         setAtFiles(list ?? []);
@@ -4704,7 +3825,7 @@ export default function App() {
     return () => {
       alive = false;
     };
-  }, [atMenuOpen, activeProject?.path]);
+  }, [atMenuOpen, resourceProjectPath]);
 
   /** Navigable `@` rows: attach-file, attach-folder, then project files. */
   const atItems = useMemo<AtItem[]>(() => {
@@ -4968,6 +4089,90 @@ export default function App() {
     }, ms);
   }, []);
 
+  const runAutomation = useAutomationRunner({
+    projects,
+    sessionState: session.state,
+    connecting,
+    tr,
+    showToast,
+    setToast,
+    setLocalError,
+    setMainPane,
+    setAppView,
+    setActiveProject,
+    setExpandedProjects,
+    setHistoryOpen,
+    setMessages,
+    setAttachments,
+    setPerm,
+    setAskUser,
+    setRetryStatus,
+    setDraft,
+    setSession,
+    setLiveHost,
+    refreshSessions,
+    messagesBySessionRef,
+    viewingSessionIdRef,
+    openingSessionIdRef,
+    liveHostRef,
+  });
+
+  const {
+    rewindTimeline,
+    setRewindTimeline,
+    rewindConfirm,
+    setRewindConfirm,
+    rewindRestoreFiles,
+    setRewindRestoreFiles,
+    runRewindToPrompt,
+    confirmRewindToPrompt,
+    openRewindTimeline,
+    onRewindToUserMessage,
+  } = useRewindDialogs({
+    canRewindSession,
+    activeSessionId: session.sessionId,
+    sessionState: session.state,
+    messages,
+    rewindBusy,
+    setRewindBusy,
+    messagesRef,
+    viewingSessionIdRef,
+    messagesBySessionRef,
+    ensureConnected,
+    refreshSessions,
+    setMessages,
+    setCtxMenu: () => setCtxMenu(null),
+    showToast,
+    tr,
+  });
+
+  const {
+    confirmForkSession,
+    openHandoffDialog,
+    onForkFromUserMessage,
+  } = useSessionActions({
+    projects,
+    sessions,
+    activeProjectId: activeProject?.id ?? null,
+    activeSessionId: session.sessionId,
+    sessionTitle: session.title || "",
+    canRewindSession,
+    messages,
+    messagesRef,
+    messagesBySessionRef,
+    viewingSessionIdRef,
+    refreshSessions,
+    openSession,
+    requestComposerFocus,
+    setDraft,
+    setCtxMenu: () => setCtxMenu(null),
+    setExpandedProjects,
+    setHistoryOpen,
+    openDialog: (dialog) => setAppDialog(dialog as AppDialog),
+    showToast,
+    tr,
+  });
+
   const onDictationTranscript = useCallback(
     (text: string) => {
       setDraft((current) => appendTranscript(current, text));
@@ -5062,7 +4267,7 @@ export default function App() {
   }, [plan.rpcId, showToast, tr, writePlanForViewing]);
 
   /**
-   * User closes plan chrome (top bar / resource panel).
+   * User closes plan chrome from the resource panel.
    * Flow: confirm → abandon pending review RPC if any → hard-close session plan
    * so reopen stays empty until a new plan cycle (plan mode / new tool / new rpcId).
    */
@@ -5099,536 +4304,88 @@ export default function App() {
     });
   }, [tr, writePlanForViewing]);
 
-  /** Open resource pane Plan review (replaces the scroll-to-card details link). */
-  const openPlanInResource = useCallback(() => {
-    setLayout((l) => {
-      if (!l.asideCollapsed) return l;
-      const n = openWorkbenchPane(
-        l,
-        "aside",
-        window.matchMedia(NARROW_WORKBENCH_QUERY).matches,
-      );
-      saveLayout(localStorage, n);
-      return n;
-    });
-    setPlanFocusKey((k) => k + 1);
-  }, []);
+ // ── Parallel task batches ────────────────────────────────────────────────
 
-  const sendQueueLabels = useMemo(
-    () => ({
-      queued: tr("composer.queued"),
-      sendFailed: tr("composer.queueSendFailed"),
-      droppedOldest: (n: number, max: number) =>
-        tr("composer.queueDroppedOldest", {
-          n: String(n),
-          max: String(max),
-        }),
-    }),
-    [tr],
+  const batchProject = useMemo(
+    () =>
+      remoteRuntime.enabled && activeProject
+        ? { ...activeProject, path: resourceProjectPath || activeProject.path }
+        : activeProject,
+    [activeProject, remoteRuntime.enabled, resourceProjectPath],
   );
-  const sendQueue = useSendQueue({
-    sessionId: session.sessionId,
-    sessionState: session.state,
-    connecting,
-    liveHostRef,
-    viewingSessionIdRef,
-    sendInFlightRef,
-    executeSendRef: executeSendFromQueueRef,
-    showToast,
-    labels: sendQueueLabels,
-  });
-
-  /**
-   * Fork a session (full history or through a user-prompt index) and open it.
-   */
-  const runForkSession = useCallback(
-    async (
-      source: SessionRow,
-      opts?: { throughUserPromptIndex?: number | null },
-    ) => {
-      if (!api.isTauri()) {
-        showToast(tr("error.needTauri"));
-        return;
-      }
-      try {
-        const base = (source.title || tr("session.untitled")).trim();
-        // Avoid double-prefix when forking a fork.
-        const title = /^fork of\s*/i.test(base)
-          ? base
-          : tr("session.forkTitleOf", { name: base || "chat" });
-        const meta = await api.sessionFork(source.id, {
-          throughUserPromptIndex: opts?.throughUserPromptIndex ?? null,
-          title,
-        });
-        await refreshSessions();
-        const row: SessionRow = {
-          id: meta.id,
-          title: meta.title || title,
-          projectId: meta.projectId ?? source.projectId,
-          updatedAt: meta.updatedAt || new Date().toISOString(),
-          archived: meta.archived,
-          pinned: !!(meta as SessionRow).pinned,
-          scheduled: meta.scheduled,
-        };
-        const proj = row.projectId
-          ? projects.find((p) => p.id === row.projectId) ?? null
-          : null;
-        if (row.projectId) {
-          setExpandedProjects((e) => ({ ...e, [row.projectId!]: true }));
-        } else {
-          setHistoryOpen(true);
-        }
-        await openSession(row, proj);
-        showToast(tr("session.forkOk"), 2800);
-      } catch (e) {
-        showToast(tr("session.forkFailed") + ": " + String(e), 4500);
-      }
-    },
-    // openSession / refreshSessions via closure
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [projects, showToast, tr],
-  );
-
-  /**
-   * Create a focused child session while preserving the complete inherited
-   * journal. The editable draft carries the next objective and a compact map
-   * of recent context, so this works in Pi RPC without terminal-only UI.
-   */
-  const runHandoffSession = useCallback(
-    async (source: SessionRow, goal: string) => {
-      const objective = goal.trim();
-      if (!objective || !api.isTauri()) return;
-      const sourceMessages =
-        messagesBySessionRef.current.get(source.id) ??
-        (viewingSessionIdRef.current === source.id
-          ? messagesRef.current
-          : []);
-      const proj = source.projectId
-        ? projects.find((p) => p.id === source.projectId) ?? null
-        : null;
-      const draft = buildHandoffDraft({
-        goal: objective,
-        sourceTitle: source.title || tr("session.untitled"),
-        projectPath: proj?.path ?? null,
-        messages: sourceMessages,
-        labels: {
-          heading: tr("handoff.draft.heading"),
-          goal: tr("handoff.draft.goal"),
-          source: tr("handoff.draft.source"),
-          project: tr("handoff.draft.project"),
-          files: tr("handoff.draft.files"),
-          recent: tr("handoff.draft.recent"),
-          user: tr("handoff.draft.user"),
-          assistant: tr("handoff.draft.assistant"),
-          instruction: tr("handoff.draft.instruction"),
-        },
-      });
-
-      try {
-        const meta = await api.sessionFork(source.id, {
-          title: tr("session.handoffTitleOf", {
-            name: source.title || tr("session.untitled"),
-          }),
-        });
-        await refreshSessions();
-        const row: SessionRow = {
-          id: meta.id,
-          title:
-            meta.title ||
-            tr("session.handoffTitleOf", {
-              name: source.title || tr("session.untitled"),
-            }),
-          projectId: meta.projectId ?? source.projectId,
-          updatedAt: meta.updatedAt || new Date().toISOString(),
-          archived: meta.archived,
-          pinned: !!(meta as SessionRow).pinned,
-          scheduled: meta.scheduled,
-        };
-        if (row.projectId) {
-          setExpandedProjects((expanded) => ({
-            ...expanded,
-            [row.projectId!]: true,
-          }));
-        } else {
-          setHistoryOpen(true);
-        }
-        await openSession(row, proj);
-        setDraft(draft);
-        requestComposerFocus();
-        showToast(tr("session.handoffReady"), 3200);
-      } catch (error) {
-        showToast(
-          `${tr("session.handoffFailed")}: ${String(error)}`,
-          4500,
-        );
-      }
-    },
-    // openSession / refreshSessions intentionally use the latest closure state.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [projects, requestComposerFocus, showToast, tr],
-  );
-
-  /**
-   * `/review-pr` — pull a PR diff through `gh` and open a chat seeded with it.
-   *
-   * The shell only composes primitives here: `gh` owns auth and the API, Pi
-   * owns the reviewing. Nothing is written to the remote.
-   */
-  const openReviewPrDialog = useCallback(() => {
-    const projectPath = activeProject?.path?.trim();
-    if (!projectPath) {
-      showToast(tr("reviewPr.noProject"));
-      return;
-    }
-    setAppDialog({
-      kind: "prompt",
-      title: tr("reviewPr.title"),
-      message: tr("reviewPr.message"),
-      initial: "",
-      placeholder: tr("reviewPr.placeholder"),
-      submitLabel: tr("reviewPr.submit"),
-      onSubmit: async (raw) => {
-        const ref = parsePullRequestRef(raw);
-        if (!ref) {
-          showToast(tr("reviewPr.badRef"));
-          return;
-        }
-        const gh = await api.ghAvailable(projectPath);
-        if (!gh.installed) {
-          showToast(tr("reviewPr.ghMissing"), 6000);
-          return;
-        }
-        if (!gh.authenticated) {
-          showToast(tr("reviewPr.ghUnauthenticated"), 6000);
-          return;
-        }
-        showToast(tr("reviewPr.loading", { number: ref.number }));
-        try {
-          const pr = await api.ghPrDiff({ projectPath }, ref.number);
-          await newChat(activeProject, {
-            seedDraft: buildPrReviewPrompt(pr),
-            switchToChat: true,
-          });
-          showToast(
-            tr("reviewPr.ready", {
-              number: pr.number,
-              files: pr.changedFiles,
-            }),
-          );
-        } catch (e) {
-          showToast(tr("reviewPr.failed", { reason: String(e) }), 6000);
-        }
-      },
-    });
-  }, [activeProject, showToast, tr]);
-
-
-
-  // ── Parallel task batches ────────────────────────────────────────────────
-
   const batch = useTaskBatch({
     tr: tr as TaskBatchDeps["tr"],
     showToast: (m, ms) => showToast(m, ms),
-    project: activeProject,
+    project: batchProject,
     onStarted: refreshSessions,
   });
+
+  const comparisonEntries = useMemo<ComparisonEntry[]>(() => {
+    if (!comparisonPair) return batch.entries;
+    return comparisonPair.map((id) => {
+      const row = sessions.find((item) => item.id === id);
+      return {
+        title: row?.title || tr("session.untitled"),
+        modelId: row?.modelId ?? null,
+        sessionId: id,
+      };
+    });
+  }, [batch.entries, comparisonPair, sessions, tr]);
+
+  const loadComparisonMessages = useCallback(async (sessionId: string): Promise<ChatMessage[]> => {
+    const stored = await api.sessionMessages(sessionId);
+    return stored.map((message) => ({
+      id: message.id,
+      role:
+        message.role === "user" || message.role === "assistant"
+          ? message.role
+          : "tool",
+      content: message.content || "",
+      modelId: message.modelId ?? null,
+      effort: message.effort ?? null,
+      createdAt: message.createdAt,
+      isError: !!message.isError,
+      marker: message.marker ?? undefined,
+    }));
+  }, []);
 
   runTaskBatchRef.current = (tasks: ParallelTask[]) => void batch.run(tasks);
 
   // ── PR workspace ─────────────────────────────────────────────────────────
 
+  const {
+    openReviewPrDialog,
+    postPrComment,
+    startMultiReview,
+  } = usePrActions({
+    // The PR helper invokes the host `gh` CLI. Do not pass a local checkout
+    // while the agent is attached to a remote runtime; repo-scoped PR actions
+    // remain available through the existing PR workspace path.
+    activeProjectPath: remoteRuntime.enabled ? null : activeProject?.path,
+    reviewModelId: prReviewModel,
+    reviewRoleModelId: modelRoles.review,
+    availableModels,
+    runBatch: (tasks) => batch.run(tasks),
+    openDialog: (dialog) => setAppDialog(dialog as AppDialog),
+    startReviewChat: (seedDraft) =>
+      newChat(activeProject, { seedDraft, switchToChat: true }),
+    setComparisonOpen,
+    showToast,
+    tr,
+  });
+
   const pr = usePrWorkspace({
     tr: tr as PrWorkspaceDeps["tr"],
     showToast: (m, ms) => showToast(m, ms),
     openDialog: (d) => setAppDialog(d as AppDialog),
-    startReviewChat: async (seedDraft) => {
+    startReviewChat: async (seedDraft, selectedModel) => {
+      if (selectedModel) setModelId(selectedModel);
       await newChat(null, { seedDraft, switchToChat: true });
     },
+    reviewModelId: prReviewModel,
+    postInlineComment: postPrComment,
+    startMultiReview,
   });
-
-  const openHandoffDialog = useCallback(
-    (source?: SessionRow) => {
-      setCtxMenu(null);
-      const sid = source?.id ?? session.sessionId ?? viewingSessionIdRef.current;
-      if (!sid || !canRewindSession) {
-        showToast(tr("session.handoffBusy"));
-        return;
-      }
-      const row =
-        source ??
-        sessions.find((candidate) => candidate.id === sid) ??
-        ({
-          id: sid,
-          title: session.title || tr("session.untitled"),
-          projectId: activeProject?.id ?? null,
-          updatedAt: new Date().toISOString(),
-        } satisfies SessionRow);
-      if (viewingSessionIdRef.current !== row.id && session.sessionId !== row.id) {
-        showToast(tr("session.handoffOpenFirst"));
-        return;
-      }
-      setAppDialog({
-        kind: "prompt",
-        title: tr("session.handoff"),
-        message: tr("session.handoffPrompt"),
-        initial: "",
-        placeholder: tr("session.handoffPlaceholder"),
-        submitLabel: tr("session.handoffCreate"),
-        onSubmit: (value) => {
-          if (!value.trim()) return;
-          void runHandoffSession(row, value);
-        },
-      });
-    },
-    [
-      activeProject?.id,
-      canRewindSession,
-      runHandoffSession,
-      session.sessionId,
-      session.title,
-      sessions,
-      showToast,
-      tr,
-    ],
-  );
-
-  const confirmForkSession = useCallback(
-    (source: SessionRow, throughUserPromptIndex?: number | null) => {
-      setCtxMenu(null);
-      const partial =
-        throughUserPromptIndex != null && throughUserPromptIndex !== undefined;
-      setAppDialog({
-        kind: "confirm",
-        title: tr("session.forkTitle"),
-        message: partial
-          ? tr("session.forkConfirmPartial")
-          : tr("session.forkConfirm"),
-        confirmLabel: tr("session.fork"),
-        onConfirm: () => {
-          void runForkSession(source, {
-            throughUserPromptIndex: throughUserPromptIndex ?? null,
-          });
-        },
-      });
-    },
-    [runForkSession, tr],
-  );
-
-  /**
-   * Apply rewind: truncate local journal (+ agent when live), refresh messages UI.
-   * `restoreFiles` is opt-in (safe default off) — reverts workspace files when agent supports it.
-   */
-  const runRewindToPrompt = useCallback(
-    async (
-      sessionId: string,
-      targetPromptIndex: number,
-      restoreFiles = false,
-    ) => {
-      if (!api.isTauri()) {
-        showToast(tr("error.needTauri"));
-        return;
-      }
-      if (!canRewindSession) {
-        showToast(tr("session.rewindBusy"));
-        return;
-      }
-      setRewindBusy(true);
-      try {
-        // Prefer live connect so agent rewind can run; local truncate still works if not.
-        if (
-          (session.sessionId === sessionId ||
-            viewingSessionIdRef.current === sessionId) &&
-          session.state !== "ready"
-        ) {
-          try {
-            await ensureConnected();
-          } catch {
-            /* local-only path */
-          }
-        }
-
-        const result = await api.sessionRewindExecute(targetPromptIndex, {
-          sessionId,
-          restoreFiles,
-        });
-
-        // Refresh UI from truncated journal.
-        if (viewingSessionIdRef.current === sessionId) {
-          const stored = await api.sessionMessages(sessionId);
-          const mapped: ChatMessage[] = stored.map((m) => ({
-            id: m.id,
-            role: m.role as "user" | "assistant" | "tool",
-            content: m.content,
-            thought: m.thought ?? undefined,
-            thoughtPhases: splitThoughtPhases(m.thought),
-            isError: m.isError || undefined,
-            marker: m.marker || undefined,
-            createdAt: m.createdAt || undefined,
-            attachments: (m.attachments ?? []).map((a) => ({
-              path: a.path,
-              name: a.name || a.path.split(/[/\\]/).pop() || a.path,
-              isDir: !!a.isDir,
-            })),
-            streaming: false,
-          }));
-          const kept = truncateThroughUserPrompt(mapped, targetPromptIndex);
-          const finalMsgs =
-            kept.length || mapped.length <= result.keptCount
-              ? kept.length
-                ? kept
-                : mapped
-              : mapped.slice(0, result.keptCount);
-          messagesBySessionRef.current.set(sessionId, finalMsgs);
-          setMessages(finalMsgs);
-        } else {
-          messagesBySessionRef.current.delete(sessionId);
-        }
-
-        setRewindTimeline(null);
-        setRewindConfirm(null);
-        setRewindRestoreFiles(false);
-        if (result.agentOk) {
-          showToast(tr("session.rewindOk"), 2600);
-        } else {
-          showToast(tr("session.rewindLocalOnly"), 4200);
-        }
-        await refreshSessions();
-      } catch (e) {
-        showToast(tr("session.rewindFailed") + ": " + String(e), 4500);
-      } finally {
-        setRewindBusy(false);
-      }
-    },
-    // ensureConnected / refreshSessions via closure
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [canRewindSession, session.sessionId, session.state, showToast, tr],
-  );
-
-  const confirmRewindToPrompt = useCallback(
-    (sessionId: string, targetPromptIndex: number, preview?: string) => {
-      setCtxMenu(null);
-      // GlassModal with restore-files checkbox (default off) — not bare setAppDialog.
-      setRewindRestoreFiles(false);
-      setRewindConfirm({
-        sessionId,
-        targetPromptIndex,
-        preview: preview?.trim() || undefined,
-      });
-    },
-    [],
-  );
-
-  const openRewindTimeline = useCallback(
-    async (sessionId: string) => {
-      setCtxMenu(null);
-      if (!api.isTauri()) {
-        showToast(tr("error.needTauri"));
-        return;
-      }
-      if (!canRewindSession) {
-        showToast(tr("session.rewindBusy"));
-        return;
-      }
-      try {
-        let points = await api.sessionRewindPoints(sessionId);
-        if (!points.length) {
-          if (viewingSessionIdRef.current === sessionId) {
-            points = localRewindPoints(messagesRef.current).map((p) => ({
-              promptIndex: p.promptIndex,
-              messageId: p.messageId,
-              preview: p.preview,
-            }));
-          }
-        }
-        if (!points.length) {
-          showToast(tr("session.rewindEmpty"));
-          return;
-        }
-        setRewindTimeline({ sessionId, points });
-      } catch (e) {
-        if (viewingSessionIdRef.current === sessionId) {
-          const points = localRewindPoints(messagesRef.current);
-          if (points.length) {
-            setRewindTimeline({
-              sessionId,
-              points: points.map((p) => ({
-                promptIndex: p.promptIndex,
-                messageId: p.messageId,
-                preview: p.preview,
-              })),
-            });
-            return;
-          }
-        }
-        showToast(tr("session.rewindFailed") + ": " + String(e), 4500);
-      }
-    },
-    [canRewindSession, showToast, tr],
-  );
-
-  const onRewindToUserMessage = useCallback(
-    (msg: ChatMessage) => {
-      const sid = session.sessionId ?? viewingSessionIdRef.current;
-      if (!sid) {
-        showToast(tr("session.rewindFailed"));
-        return;
-      }
-      if (!canRewindSession) {
-        showToast(tr("session.rewindBusy"));
-        return;
-      }
-      const idx = userPromptIndexOf(messages, msg.id);
-      if (idx < 0) return;
-      if (!canRewindToUserPrompt(messages, idx)) {
-        showToast(tr("session.rewindNoop"));
-        return;
-      }
-      const preview = (msg.content || "")
-        .replace(/\s+/g, " ")
-        .trim()
-        .slice(0, 80);
-      confirmRewindToPrompt(sid, idx, preview);
-    },
-    [
-      canRewindSession,
-      confirmRewindToPrompt,
-      messages,
-      session.sessionId,
-      showToast,
-      tr,
-    ],
-  );
-
-  const onForkFromUserMessage = useCallback(
-    (msg: ChatMessage) => {
-      const sid = session.sessionId ?? viewingSessionIdRef.current;
-      if (!sid) {
-        showToast(tr("session.forkFailed"));
-        return;
-      }
-      const row =
-        sessions.find((s) => s.id === sid) ??
-        ({
-          id: sid,
-          title: session.title || tr("session.untitled"),
-          projectId: activeProject?.id ?? null,
-          updatedAt: new Date().toISOString(),
-        } satisfies SessionRow);
-      const idx = userPromptIndexOf(messages, msg.id);
-      if (idx < 0) return;
-      confirmForkSession(row, idx);
-    },
-    [
-      activeProject?.id,
-      confirmForkSession,
-      messages,
-      session.sessionId,
-      session.title,
-      sessions,
-      showToast,
-      tr,
-    ],
-  );
 
   /**
    * Apply permission policy (incl. YOLO). Never use window.confirm in Tauri —
@@ -5840,9 +4597,98 @@ export default function App() {
 
   /** Context usage chip label/state from compact events + message estimate. */
   const contextUsageDisplay = useMemo(
-    () => resolveContextUsageDisplay(contextUsage, messages),
-    [contextUsage, messages],
+    () =>
+      resolveContextUsageDisplay(
+        contextUsage,
+        messages,
+        findModel(modelId, availableModels)?.contextWindow ?? 128_000,
+      ),
+    [availableModels, contextUsage, messages, modelId],
   );
+
+  const composer = useComposer({
+    session,
+    modelId,
+    availableModels,
+    modelRoles,
+    fallbackChains,
+    contextWindowPercent: contextUsageDisplay.windowPercent ?? null,
+    compactionThresholdPercent,
+    draft,
+    attachments,
+    goalMode,
+    mode,
+    hasActiveProject: !!activeProject,
+    connecting,
+    editingUserMessageId,
+    tr,
+    showToast,
+    setAppDialog: (dialog) => setAppDialog(dialog as AppDialog),
+    setDraft,
+    setAttachments,
+    setPromptHistoryIndex,
+    promptHistoryIndexRef,
+    setSlashQuery,
+    setEditingUserMessageId,
+    setEditAttachments,
+    setRetryStatus,
+    setTurnStartedAt,
+    setSession,
+    setLiveHost,
+    setMessages,
+    setModelId,
+    setLocalError,
+    sendInFlightRef,
+    compactWaiterRef,
+    fallbackTurnRef,
+    fallbackRetryRef,
+    liveHostRef,
+    viewingSessionIdRef,
+    messagesBySessionRef,
+    automationSetupDraftRef,
+    automationSetupSessionsRef,
+    taskBatchDraftRef,
+    ensureConnected,
+    patchSessionMessages,
+    applySessionTitle,
+    isPlaceholderTitle,
+  });
+  const { sendQueue, send, retryInterruptedTurn } = composer;
+  retryInterruptedTurnRef.current = retryInterruptedTurn;
+
+  const retryActivity = async (item: ActivityItem) => {
+    const row = sessionsRef.current.find(
+      (sessionRow) => sessionRow.id === item.sessionId,
+    );
+    if (row) {
+      await openSession(
+        row,
+        projectsRef.current.find(
+          (project) => project.id === row.projectId,
+        ) ?? null,
+      );
+    } else {
+      trayHandlersRef.current.openSessionById(item.sessionId);
+    }
+    const history =
+      messagesBySessionRef.current.get(item.sessionId) ?? messagesRef.current;
+    const markerIndex = [...history]
+      .map((message, index) => ({ message, index }))
+      .reverse()
+      .find(({ message }) => message.marker === "turn_cancelled")?.index;
+    if (markerIndex === undefined) {
+      showToast(tr("activity.retryUnavailable"), 3600);
+      return;
+    }
+    for (let index = markerIndex - 1; index >= 0; index -= 1) {
+      const message = history[index];
+      if (message?.role === "user") {
+        await retryInterruptedTurnRef.current(message);
+        return;
+      }
+    }
+    showToast(tr("activity.retryUnavailable"), 3600);
+  };
 
   const sessionTasks = useMemo(
     () => collectSessionTasks(messages),
@@ -5851,6 +4697,28 @@ export default function App() {
   const runningTaskCount = useMemo(
     () => countRunningTasks(sessionTasks),
     [sessionTasks],
+  );
+  const activityTranslate = useCallback(
+    (key: string, vars?: Record<string, string | number>) =>
+      tr(key as MessageKey, vars),
+    [tr],
+  );
+  const {
+    activityItems,
+    activityOpen,
+    runningSessions,
+    setActivityOpen,
+    markRead: markActivityReadState,
+    togglePin: toggleActivityPinState,
+    dismiss: dismissActivityState,
+  } = useActivityCenter({
+    sessionsRef,
+    projectsRef,
+    translate: activityTranslate,
+  });
+  const comparisonMessages = useCallback(
+    (sessionId: string) => messagesBySessionRef.current.get(sessionId) ?? [],
+    [],
   );
 
   /**
@@ -6054,11 +4922,11 @@ export default function App() {
         }
         return;
       }
-      if (proj && !proj.trusted) {
+      if (proj && !remoteRuntime.enabled && !proj.trusted) {
         setLocalError(tr("project.trustFirst", { name: proj.name }));
         return;
       }
-      if (proj && isProjectPathMissing(proj.pathOk)) {
+      if (proj && !remoteRuntime.enabled && isProjectPathMissing(proj.pathOk)) {
         setLocalError(tr("project.pathMissing", { name: proj.name }));
         return;
       }
@@ -6101,13 +4969,53 @@ export default function App() {
         showToast(String(e), 4500);
       }
     },
-    [session.sessionId, showToast, tr],
+    [remoteRuntime.enabled, session.sessionId, showToast, tr],
+  );
+
+  /**
+   * Move the current chat to a remote workspace/worktree. Remote paths stay
+   * session-scoped; they must never be registered as local projects because
+   * the desktop cannot validate or browse them directly.
+   */
+  const selectRemoteWorkspacePath = useCallback(
+    async (nextPath: string) => {
+      const path = nextPath.trim();
+      if (!path || !remoteRuntime.enabled) return false;
+      const sid = session.sessionId;
+      try {
+        if (sid && api.isTauri()) {
+          await api.sessionSetRemoteCwd(sid, path);
+        }
+        setRemoteWorkspacePath(path);
+        if (sid) {
+          setSession((prev) =>
+            prev.sessionId === sid
+              ? {
+                  ...IDLE_SNAPSHOT,
+                  sessionId: sid,
+                  title: prev.title,
+                  state: "idle",
+                  backend: prev.backend || "pi_rpc",
+                }
+              : prev,
+          );
+          setLiveHost((prev) =>
+            prev.sessionId === sid ? { ...IDLE_SNAPSHOT } : prev,
+          );
+        }
+        return true;
+      } catch (error) {
+        showToast(String(error), 4500);
+        return false;
+      }
+    },
+    [remoteRuntime.enabled, session.sessionId, showToast],
   );
 
   const gitWorktreesReqRef = useRef(0);
   const gitWorktreesPathRef = useRef<string | null>(null);
   const refreshGitWorktrees = useCallback(async () => {
-    const path = activeProject?.path?.trim() || null;
+    const path = resourceProjectPath?.trim() || null;
     if (!path || !api.isTauri()) {
       gitWorktreesReqRef.current += 1;
       gitWorktreesPathRef.current = null;
@@ -6149,7 +5057,7 @@ export default function App() {
         setGitWorktreesLoading(false);
       }
     }
-  }, [activeProject?.path]);
+  }, [resourceProjectPath]);
 
   useEffect(() => {
     void refreshGitWorktrees();
@@ -6210,12 +5118,27 @@ export default function App() {
    * the dialog's; the hook hands the finished worktree back through onCreated.
    */
   const wt = useWorktreeDialogs({
-    projectPath: activeProject?.path,
+    projectPath: resourceProjectPath,
     worktrees: gitWorktrees,
     tr: tr as WorktreeDialogsDeps["tr"],
     showToast: (m, ms) => showToast(m, ms),
     refreshWorktrees: refreshGitWorktrees,
     onCreated: async ({ path, name, branch, startChat }) => {
+      if (remoteRuntime.enabled) {
+        const selected = await selectRemoteWorkspacePath(path);
+        if (selected) {
+          if (startChat) {
+            await newChat(activeProject ?? null, { switchToChat: true });
+          }
+          showToast(
+            startChat
+              ? tr("composer.worktreeCreatedChat", { name, branch })
+              : tr("composer.worktreeCreated", { name, branch }),
+            2800,
+          );
+        }
+        return;
+      }
       const trust = !!activeProject?.trusted;
       const existing = projects.find((pr) => pathsEqual(pr.path, path));
       let target: Project | null = existing ?? null;
@@ -6249,6 +5172,18 @@ export default function App() {
       if (!api.isTauri()) return;
       const path = wt.path?.trim();
       if (!path) return;
+      if (remoteRuntime.enabled) {
+        if (await selectRemoteWorkspacePath(path)) {
+          showToast(
+            tr("composer.worktreeSwitched", {
+              name: path.split(/[\\/]/).filter(Boolean).pop() || path,
+              branch: wt.branch || tr("composer.worktreeDetached"),
+            }),
+            2500,
+          );
+        }
+        return;
+      }
       try {
         const existing = projects.find((p) => pathsEqual(p.path, path));
         if (existing) {
@@ -6288,6 +5223,9 @@ export default function App() {
       bindSessionProject,
       finalizeAddedProject,
       projects,
+      remoteRuntime.enabled,
+      newChat,
+      selectRemoteWorkspacePath,
       showToast,
       tr,
     ],
@@ -6357,6 +5295,15 @@ export default function App() {
     },
     openChatFind: () => {
       openChatFind();
+    },
+    openModelMenu: () => {
+      setShowSearch(true);
+      setSearchQuery("> model");
+    },
+    switchPinned: (index: number) => {
+      const pinned = sessions.filter((item) => item.pinned).slice(0, 9);
+      const row = pinned[index];
+      if (row) void openSession(row, projects.find((project) => project.id === row.projectId));
     },
   };
   trayHandlersRef.current = {
@@ -6654,388 +5601,34 @@ export default function App() {
     [session.sessionId, showToast, tr],
   );
 
-  const beginEditLastUser = useCallback(
-    (msg: ChatMessage) => {
-      if (msg.role !== "user") return;
-      if (msg.id !== lastUserMessageId) {
-        showToast(tr("message.editOnlyLast"));
-        return;
-      }
-      if (!canEditLastUser) {
-        showToast(tr("message.editBusy"));
-        return;
-      }
-      // Inline only — do not move content into the main composer.
-      // Reload original attachments into editable chips.
-      setEditAttachments(
-        (msg.attachments ?? []).map((a) => ({
-          path: a.path,
-          name: a.name,
-          isDir: a.isDir,
-        })),
-      );
-      setEditingUserMessageId(msg.id);
-    },
-    [lastUserMessageId, canEditLastUser, showToast, tr],
-  );
-
-  const cancelEditUser = useCallback(() => {
-    if (editSubmitting) return;
-    setEditingUserMessageId(null);
-    setEditAttachments([]);
-  }, [editSubmitting]);
-
-  /**
-   * Edit last user turn: commit UI immediately (edited bubble + thinking),
-   * then connect / rewind / send while the thinking row is already visible.
-   */
-  const submitEditLastUser = useCallback(
-    async (msg: ChatMessage, storedDisplay: string) => {
-      if (msg.role !== "user" || msg.id !== lastUserMessageId) {
-        showToast(tr("message.editOnlyLast"));
-        return;
-      }
-      if (!canEditLastUser || editSubmitting) {
-        showToast(tr("message.editBusy"));
-        return;
-      }
-      const segments = parseStoredContent(storedDisplay);
-      // Live editable set is the source of truth (may have added/removed files).
-      const att: Attachment[] = editAttachments.map((a) => ({
-        path: a.path,
-        name: a.name,
-        isDir: a.isDir,
-      }));
-      if (isDraftEmpty(segments) && !att.length) return;
-
-      const agentBody = serializeForAgent(segments, { goalMode });
-      const agentText = buildAgentPrompt(agentBody, att);
-      const titleSeed =
-        serializeForAgent(segments).replace(/\n/g, " ").trim() ||
-        att.map((a) => a.name).join(", ");
-      const shouldAutoTitle =
-        isPlaceholderTitle(session.title) || !session.sessionId;
-      const pendingAssistantId = `a-pending-${Date.now()}`;
-      // May still be a draft id; ensureConnected materializes it later.
-      let sendTargetId = session.sessionId;
-      let cacheKey = sendTargetId ?? "__draft__";
-      const nowIso = new Date().toISOString();
-
-      setEditSubmitting(true);
-
-      // 1) Instant UI commit — same as normal send: user bubble + thinking.
-      //    Connect/rewind wait happens under this thinking row, not the edit form.
-      setMessages((m) => {
-        const kept = truncateBeforeLastUser(m);
-        const next: ChatMessage[] = [
-          ...kept,
-          {
-            id: `u-${Date.now()}`,
-            role: "user",
-            content: storedDisplay,
-            attachments: att.length ? att : undefined,
-            createdAt: nowIso,
-          },
-          {
-            id: pendingAssistantId,
-            role: "assistant",
-            content: "",
-            streaming: true,
-          },
-        ];
-        messagesBySessionRef.current.set(cacheKey, next);
-        return next;
-      });
-      setEditingUserMessageId(null);
-      setEditAttachments([]);
-      setRetryStatus(null);
-      setSession((prev) =>
-        prev.state === "streaming" || prev.state === "awaiting_permission"
-          ? prev
-          : { ...prev, state: "streaming", lastError: null },
-      );
-      setLiveHost((prev) => {
-        if (sendTargetId && prev.sessionId && prev.sessionId !== sendTargetId) {
-          return prev;
-        }
-        const next = {
-          ...prev,
-          sessionId: sendTargetId ?? prev.sessionId,
-          state: "streaming" as const,
-          lastError: null,
-        };
-        liveHostRef.current = next;
-        return next;
-      });
-
-      const failPending = (errText?: string) => {
-        const errTarget = sendTargetId ?? viewingSessionIdRef.current;
-        patchSessionMessages(errTarget, (m) =>
-          applyTurnError(
-            m,
-            {
-              messageId: pendingAssistantId,
-              content: errText || tr("message.editConnectFailed"),
-            },
-            localeRef.current,
-          ),
-        );
-        if (
-          viewingSessionIdRef.current === sendTargetId ||
-          viewingSessionIdRef.current === errTarget ||
-          (!sendTargetId && viewingSessionIdRef.current === null)
-        ) {
-          setSession((prev) =>
-            prev.state === "streaming"
-              ? { ...prev, state: prev.sessionId ? "ready" : prev.state }
-              : prev,
-          );
-        }
-      };
-
-      // 2) Background: connect → rewind journal → send (thinking already shown).
-      try {
-        const sessionId = await ensureConnected();
-        if (!sessionId) {
-          failPending(tr("message.editConnectFailed"));
-          return;
-        }
-        // Draft / id migrate after materialize.
-        if (sessionId !== cacheKey) {
-          const prevCache = messagesBySessionRef.current.get(cacheKey);
-          if (prevCache?.length) {
-            messagesBySessionRef.current.set(sessionId, prevCache);
-            messagesBySessionRef.current.delete(cacheKey);
-          }
-          sendTargetId = sessionId;
-          cacheKey = sessionId;
-        }
-
-        if (api.isTauri()) {
-          try {
-            await api.sessionRewindDropLastUser();
-          } catch (e) {
-            console.warn("session rewind before edit failed", e);
-            // Continue: UI already replaced the turn; resend still proceeds.
-          }
-        }
-
-        await api.sessionSend(agentText, storedDisplay, att);
-        if (shouldAutoTitle && api.isTauri()) {
-          void api
-            .sessionAutoTitle(sessionId, titleSeed)
-            .then((meta) => {
-              if (meta?.title) applySessionTitle(sessionId, meta.title);
-            })
-            .catch(() => {
-              /* ignore */
-            });
-        }
-      } catch (e) {
-        failPending(String(e));
-        if (
-          viewingSessionIdRef.current === sendTargetId ||
-          viewingSessionIdRef.current === null
-        ) {
-          setLocalError(String(e));
-        }
-      } finally {
-        setEditSubmitting(false);
-      }
-    },
-    [
-      lastUserMessageId,
-      canEditLastUser,
-      editSubmitting,
-      editAttachments,
-      showToast,
-      tr,
-      goalMode,
-      session.title,
-      session.sessionId,
-      // ensureConnected / patchSessionMessages / applySessionTitle via closure
-    ],
-  );
-
-  const settingsLabels = useMemo(() => {
-    const keys = [
-      "settings.backToApp",
-      "settings.searchPlaceholder",
-      "settings.group.personal",
-      "settings.group.system",
-      "settings.nav.general",
-      "settings.nav.appearance",
-      "settings.nav.archived",
-      "settings.nav.providersModels",
-      "settings.nav.extensions",
-      "settings.nav.runtime",
-      "settings.nav.shortcuts",
-      "settings.nav.about",
-      "settings.shortcuts.title",
-      "settings.shortcuts.desc",
-      "settings.archived.desc",
-      "settings.archived.empty",
-      "settings.archived.restore",
-      "settings.archived.delete",
-      "settings.archived.orphan",
-      "settings.archived.selectAll",
-      "settings.archived.deselectAll",
-      "settings.archived.selectedCount",
-      "settings.archived.totalCount",
-      "providersModels.modelsTitle",
-      "providersModels.modelsDescription",
-      "providersModels.modelsEmpty",
-      "providersModels.modelCount",
-      "providersModels.defaultModel",
-      "providersModels.packagesTitle",
-      "providersModels.packagesDescription",
-      "providersModels.openExtensions",
-      "session.untitled",
-      "settings.section.permissions",
-      "settings.section.composer",
-      "settings.section.general",
-      "settings.language",
-      "settings.languageDesc",
-      "settings.sessionDataMode",
-      "settings.sessionDataModeDesc",
-      "settings.cliPath",
-      "settings.cliPathDesc",
-      "settings.cliNotFound",
-      "settings.permissionDeep",
-      "settings.permissionDeepDesc",
-      "settings.preferredAgent",
-      "settings.preferredAgentDesc",
-      "settings.preferredAgent.default",
-      "settings.preferredAgent.source.builtin",
-      "settings.preferredAgent.source.bundled",
-      "settings.preferredAgent.source.user",
-      "settings.preferredAgent.source.project",
-      "settings.prefsScope",
-      "settings.prefsScopeDesc",
-      "settings.prefsScope.global",
-      "settings.prefsScope.project",
-      "settings.prefsScope.session",
-      "settings.availableModels",
-      "settings.availableModelsDesc",
-      "settings.availableModelsEmpty",
-      "settings.theme",
-      "settings.themeDesc",
-      "settings.themeLight",
-      "settings.themeDark",
-      "settings.doctorDesc",
-      "settings.runDoctor",
-      "settings.aboutApp",
-      "composer.permissionTitle",
-      "policy.ask",
-      "policy.accept_edits",
-      "policy.allow_for_session",
-      "policy.dont_ask",
-      "policy.always_approve",
-      "settings.modeIndependent",
-      "settings.modeShared",
-      "settings.tabOfficial",
-      "settings.tabProviders",
-      "settings.tabOfficialHint",
-      "settings.tabProvidersHint",
-      "settings.openTarget",
-      "settings.openTargetDesc",
-      "settings.openFinder",
-      "settings.sharedConfirm",
-      "doctor.title",
-      "doctor.close",
-      "doctor.rerun",
-      "doctor.copy",
-      "doctor.copied",
-      "doctor.loading",
-      "doctor.error",
-      "doctor.empty",
-      "doctor.summary",
-      "doctor.generatedAt",
-      "doctor.level.ok",
-      "doctor.level.warn",
-      "doctor.level.fail",
-      "doctor.check.cli",
-      "doctor.check.auth",
-      "doctor.check.workspace",
-      "doctor.check.backend",
-      "doctor.check.logs",
-      "common.local",
-      "common.close",
-      "common.cancel",
-      "account.section.profile",
-      "account.section.runtime",
-      "account.signedIn",
-      "account.signedOut",
-      "account.loginOauth",
-      "account.loginDevice",
-      "account.loginBusy",
-      "account.loginCancel",
-      "account.logout",
-      "account.refresh",
-      "account.refreshing",
-      "account.manageUsage",
-      "account.subscribe",
-      "account.channel",
-      "account.channel.oauth",
-      "account.channel.key",
-      "account.channel.relay",
-      "account.channel.none",
-      "account.subscription",
-      "account.weeklyTitle",
-      "account.quota",
-      "account.quotaRemaining",
-      "account.quotaUsed",
-      "account.quotaUnknown",
-      "account.period",
-      "account.prepaid",
-      "account.onDemand",
-      "account.resetsAt",
-      "account.fetchedAt",
-      "account.products",
-      "account.heatmap",
-      "account.heatmapHint",
-      "account.heatmap.less",
-      "account.heatmap.more",
-      "account.heatmap.noData",
-      "account.heatmap.aria",
-      "account.heatmap.requests",
-      "account.heatmap.tokens",
-      "account.callLogs",
-      "account.callLogsEmpty",
-      "account.col.session",
-      "account.col.model",
-      "account.col.turns",
-      "account.col.tokens",
-      "account.col.duration",
-      "account.col.when",
-      "account.expired",
-      "account.team",
-      "account.billingUnavailable",
-      "account.cliAuthOk",
-      "account.cliAuthMissing",
-      "account.loginHelpTitle",
-      "account.loginHelpBody",
-      "account.loginTryDevice",
-      "account.profiles",
-      "account.profilesHint",
-      "account.profilesEmpty",
-      "account.profileSave",
-      "account.profileSwitch",
-      "account.profileRemove",
-      "account.profileActive",
-      "account.manageAccounts",
-      "account.addAccount",
-      "account.profileSwitch",
-      "account.profileRemove",
-      "account.profileActive",
-      "account.importChat",
-      "account.importChatHint",
-      "account.importChatBtn",
-    ] as const;
-    const out: Record<string, string> = {};
-    for (const k of keys) out[k] = tr(k);
-    return out;
-  }, [tr]);
+  const inlineEdit = useInlineEdit({
+    lastUserMessageId,
+    canEditLastUser,
+    editSubmitting,
+    editAttachments,
+    goalMode,
+    session,
+    localeRef,
+    tr,
+    showToast,
+    isPlaceholderTitle,
+    setEditingUserMessageId,
+    setEditAttachments,
+    setEditSubmitting,
+    setMessages,
+    setRetryStatus,
+    setSession,
+    setLiveHost,
+    setLocalError,
+    liveHostRef,
+    viewingSessionIdRef,
+    messagesBySessionRef,
+    patchSessionMessages,
+    ensureConnected,
+    applySessionTitle,
+  });
+  const { beginEditLastUser, cancelEditUser, submitEditLastUser } = inlineEdit;
+  const settingsLabels = useMemo(() => buildSettingsLabels(tr), [tr]);
 
   const activePiExtensionUi =
     (session.sessionId && piExtensionUiBySession[session.sessionId]) ||
@@ -7167,6 +5760,8 @@ export default function App() {
             </div>
           }
         >
+          {/* Settings commands run on the desktop host. A remote POSIX path
+              must never be handed to them as if it were local. */}
           <SettingsPage
           section={settingsSection}
           onSection={(id) => {
@@ -7243,6 +5838,40 @@ export default function App() {
               .catch(() => {});
           }}
           availableModels={availableModels}
+          modelRoles={modelRoles}
+          onModelRoles={(next) => {
+            setModelRoles(next);
+            void api.settingsGet().then((settings) =>
+              api.settingsSet({ ...settings, modelRoles: next }),
+            );
+          }}
+          fallbackChains={fallbackChains}
+          onFallbackChains={(next) => {
+            setFallbackChains(next);
+            void api.settingsGet().then((settings) =>
+              api.settingsSet({ ...settings, fallbackChains: next }),
+            );
+          }}
+          budgetMonthlyByTier={budgetMonthlyByTier}
+          budgetSessionByTier={budgetSessionByTier}
+          compactionThresholdPercent={compactionThresholdPercent}
+          onBudgetChange={(monthly, sessionBudget) => {
+            setBudgetMonthlyByTier(monthly);
+            setBudgetSessionByTier(sessionBudget);
+            void api.settingsGet().then((settings) =>
+              api.settingsSet({
+                ...settings,
+                budgetMonthlyByTier: monthly,
+                budgetSessionByTier: sessionBudget,
+              }),
+            );
+          }}
+          onCompactionThresholdPercent={(value) => {
+            setCompactionThresholdPercent(value);
+            void api.settingsGet().then((settings) =>
+              api.settingsSet({ ...settings, compactionThresholdPercent: value }),
+            );
+          }}
           manualCliPath={manualCliPath}
           onManualCliPath={setManualCliPath}
           onCliBlur={(v) => {
@@ -7316,6 +5945,13 @@ export default function App() {
             );
           }}
           storeApiKeysInKeychain={storeApiKeysInKeychain}
+          crashReportingEnabled={crashReportingEnabled}
+          onCrashReportingEnabled={(value) => {
+            setCrashReportingEnabled(value);
+            void api.settingsGet().then((settings) =>
+              api.settingsSet({ ...settings, crashReportingEnabled: value }),
+            );
+          }}
           onStoreApiKeysInKeychain={(v) => {
             const prev = storeApiKeysInKeychain;
             setStoreApiKeysInKeychain(v);
@@ -7410,7 +6046,7 @@ export default function App() {
               .filter((s): s is SessionRow => !!s);
             deleteSessionsConfirm(rows);
           }}
-          projectPath={activeProject?.path ?? null}
+          projectPath={remoteRuntime.enabled ? null : activeProject?.path ?? null}
           onSkillsPrefsChanged={() => {
             void refreshSkills();
           }}
@@ -7533,11 +6169,26 @@ export default function App() {
                   noPulls: tr("pr.noPulls"),
                   loading: tr("pr.loading"),
                   draft: tr("pr.draft"),
+                  reviewModel: tr("pr.reviewModel"),
+                  defaultModel: tr("batch.defaultModel"),
+                  comment: tr("pr.comment"),
+                  multiReview: tr("pr.multiReview"),
                 }}
                 onToggle={pr.toggleRepo}
                 onAddRepo={pr.addRepo}
                 onRemoveRepo={pr.removeRepo}
                 onOpenPr={pr.openReview}
+                onPostComment={pr.postInlineComment}
+                reviewModelId={prReviewModel}
+                availableModels={availableModels.map((model) => ({
+                  id: model.id,
+                  label: model.label,
+                }))}
+                onReviewModel={(next) => {
+                  setPrReviewModel(next);
+                  savePrReviewModel(localStorage, next);
+                }}
+                onMultiReview={pr.startMultiReview}
               />
             ) : (
               <>
@@ -7749,6 +6400,14 @@ export default function App() {
                                     <span className="tree-l3__name">
                                       {s.title || "Untitled"}
                                     </span>
+                                    {cacheStandings[s.id] ? (
+                                      <span
+                                        className="tree-l3__cache"
+                                        title={tr("sidebar.cacheStanding", { n: Math.round(cacheStandings[s.id]!.hitRate * 100) })}
+                                      >
+                                        {Math.round(cacheStandings[s.id]!.hitRate * 100)}%
+                                      </span>
+                                    ) : null}
                                   </span>
                                   {working ? (
                                     <Tip label={tr("sidebar.sessionWorking")}>
@@ -7912,6 +6571,14 @@ export default function App() {
                         <span className="tree-l3__name">
                           {s.title || "Untitled"}
                         </span>
+                        {cacheStandings[s.id] ? (
+                          <span
+                            className="tree-l3__cache"
+                            title={tr("sidebar.cacheStanding", { n: Math.round(cacheStandings[s.id]!.hitRate * 100) })}
+                          >
+                            {Math.round(cacheStandings[s.id]!.hitRate * 100)}%
+                          </span>
+                        ) : null}
                       </span>
                       {working ? (
                         <Tip label={tr("sidebar.sessionWorking")}>
@@ -8290,6 +6957,30 @@ export default function App() {
                   </button>
                 </Tip>
               ) : null}
+              {mainPane === "chat" ? (
+                <ActivityCenter
+                  items={activityItems}
+                  open={activityOpen}
+                  onToggle={() => setActivityOpen((value) => !value)}
+                  onOpenSession={(item) => {
+                    markActivityReadState(item.id);
+                    setActivityOpen(false);
+                    trayHandlersRef.current.openSessionById(item.sessionId);
+                  }}
+                  onStopSession={(item) => {
+                    void api.sessionStop(item.sessionId).catch((error) =>
+                      showToast(String(error), 4000),
+                    );
+                  }}
+                  onRetry={(item) => {
+                    void retryActivity(item);
+                  }}
+                  onMarkRead={markActivityReadState}
+                  onTogglePin={toggleActivityPinState}
+                  onDismiss={dismissActivityState}
+                  t={(key, vars) => tr(key as MessageKey, vars)}
+                />
+              ) : null}
               {mainPane === "chat" && activeSessionRow ? (
                 <Tip label={tr("session.menu")}>
                   <button
@@ -8305,11 +6996,9 @@ export default function App() {
               ) : null}
               <Tip
                 label={
-                  remoteRuntime.enabled
-                    ? tr("remoteRuntime.localToolsUnavailable")
-                    : layout.asideCollapsed
-                      ? tr("main.rightPaneShow")
-                      : tr("main.rightPaneHide")
+                  layout.asideCollapsed
+                    ? tr("main.rightPaneShow")
+                    : tr("main.rightPaneHide")
                 }
               >
                 <button
@@ -8318,13 +7007,10 @@ export default function App() {
                     "chrome-btn main__pane-toggle" +
                     (!layout.asideCollapsed ? " is-on" : "")
                   }
-                  disabled={remoteRuntime.enabled}
                   aria-label={
-                    remoteRuntime.enabled
-                      ? tr("remoteRuntime.localToolsUnavailable")
-                      : layout.asideCollapsed
-                        ? tr("main.rightPaneShow")
-                        : tr("main.rightPaneHide")
+                    layout.asideCollapsed
+                      ? tr("main.rightPaneShow")
+                      : tr("main.rightPaneHide")
                   }
                   onClick={() =>
                     setLayout((l) => {
@@ -8366,7 +7052,30 @@ export default function App() {
             </div>
           ) : null}
 
-          {isComingSoon(workspace) ? (
+          <RunningTasksDock
+            rows={runningSessions}
+            cap={maxConcurrentAgents}
+            queued={batch.entries.filter((entry) => entry.status === "pending" || entry.status === "starting").length}
+            t={(key, vars) => tr(key as MessageKey, vars)}
+            onOpen={(sessionId) => trayHandlersRef.current.openSessionById(sessionId)}
+            onStop={(sessionId) => {
+              void api.sessionStop(sessionId).catch((error) =>
+                showToast(String(error), 4000),
+              );
+            }}
+            onRaiseCap={() => {
+              const next = Math.min(8, maxConcurrentAgents + 1);
+              setMaxConcurrentAgents(next);
+              void api.settingsGet().then((settings) => api.settingsSet({ ...settings, maxConcurrentAgents: next }));
+            }}
+          />
+
+          {workspace === "design" ? (
+            <DesignWorkspace
+              locale={locale}
+              t={(key, vars) => tr(key as MessageKey, vars)}
+            />
+          ) : isComingSoon(workspace) ? (
             <div className="ws-soon">
               <h2 className="ws-soon__title">{tr("workspace.soonTitle")}</h2>
               <p className="ws-soon__body">{tr("workspace.soonBody")}</p>
@@ -8402,12 +7111,12 @@ export default function App() {
                     remoteRuntime.transport === "direct"
                       ? remoteRuntime.directUrl
                       : `${remoteRuntime.user}@${remoteRuntime.host}`,
-                  cwd: remoteRuntime.cwd,
+                  cwd: resourceProjectPath || remoteRuntime.cwd,
                 })}
               </span>
             </div>
           )}
-          {activeProject && isProjectPathMissing(activeProject.pathOk) && (
+          {activeProject && !remoteRuntime.enabled && isProjectPathMissing(activeProject.pathOk) && (
             <div className="conn-bar">
               <span style={{ fontSize: 12, opacity: 0.9, marginRight: 8 }}>
                 {tr("project.pathMissingShort")}
@@ -8423,6 +7132,7 @@ export default function App() {
             </div>
           )}
           {activeProject &&
+            !remoteRuntime.enabled &&
             !isProjectPathMissing(activeProject.pathOk) &&
             !activeProject.trusted && (
             <div className="conn-bar">
@@ -8475,39 +7185,6 @@ export default function App() {
             </div>
           )}
 
-          {mainPane === "chat" && (!plan.barDismissed || goalMode || mode === "plan") && (
-            <PlanStatusBar
-              goalMode={goalMode}
-              mode={mode}
-              planVisible={plan.visible}
-              planWaiting={plan.waiting}
-              planRpcId={plan.rpcId}
-              entries={plan.entries}
-              labels={{
-                goal: tr("planBar.goal"),
-                planMode: tr("planBar.planMode"),
-                progress: tr("planBar.progress"),
-                review: tr("planBar.review"),
-                done: tr("planBar.done"),
-                fraction: tr("planBar.fraction"),
-                current: tr("planBar.current"),
-                approve: tr("plan.approve"),
-                changes: tr("plan.changes"),
-                dismiss: tr("plan.dismiss"),
-                expand: tr("planBar.expand"),
-                clearGoal: tr("planBar.clearGoal"),
-                exitPlanMode: tr("planBar.exitPlanMode"),
-                aria: tr("planBar.aria"),
-              }}
-              onApprove={() => void approvePlan()}
-              onRequestChanges={() => void requestPlanChanges()}
-              onDismiss={() => void dismissPlan()}
-              onClearGoal={() => setGoalMode(false)}
-              onExitPlanMode={exitPlanMode}
-              onOpenDetails={() => openPlanInResource()}
-            />
-          )}
-
           {mainPane === "chat" && showChatFind && (
             <ChatFindBar
               key={chatFindFocusKey}
@@ -8532,6 +7209,90 @@ export default function App() {
               onClose={() => setShowChatFind(false)}
             />
           )}
+          {comparisonOpen && comparisonEntries.length > 0 ? (
+            <ComparisonView
+              entries={comparisonEntries}
+              getMessages={comparisonMessages}
+              loadMessages={comparisonPair ? loadComparisonMessages : undefined}
+              projectPath={resourceProjectPath}
+              t={(key, vars) => tr(key as MessageKey, vars)}
+              onClose={() => {
+                setComparisonOpen(false);
+                setComparisonPair(null);
+              }}
+              onAdopt={(entry, answer) => {
+                if (entry.worktreePath && resourceProjectPath) {
+                  const cleanupPaths = comparisonEntries
+                    .map((candidate) => candidate.worktreePath)
+                    .filter((path): path is string => !!path);
+                  setAppDialog({
+                    kind: "confirm",
+                    title: tr("comparison.adoptWorktreeTitle"),
+                    message: tr("comparison.adoptWorktreeMessage", {
+                      model: entry.modelId || tr("batch.defaultModel"),
+                    }),
+                    confirmLabel: tr("comparison.adopt"),
+                    onConfirm: () => {
+                      void api
+                        .gitWorktreeAdopt(resourceProjectPath, entry.worktreePath!, cleanupPaths)
+                        .then(() => {
+                          if (session.sessionId) {
+                            return api.sessionAdoptAnswer(
+                              session.sessionId,
+                              answer.content,
+                              entry.modelId,
+                            );
+                          }
+                          return undefined;
+                        })
+                        .then(() => {
+                          setMessages((current) => [
+                            ...current,
+                            {
+                              id: `adopted-${Date.now()}`,
+                              role: "assistant",
+                              content: answer.content,
+                              modelId: entry.modelId,
+                              createdAt: new Date().toISOString(),
+                            },
+                          ]);
+                          showToast(tr("comparison.adopted", {
+                            model: entry.modelId || tr("batch.defaultModel"),
+                          }), 3200);
+                        })
+                        .catch((error) => showToast(String(error), 6000));
+                    },
+                  });
+                  return;
+                }
+                if (session.sessionId) {
+                  void api
+                    .sessionAdoptAnswer(
+                      session.sessionId,
+                      answer.content,
+                      entry.modelId,
+                    )
+                    .catch((error) => showToast(String(error), 4000));
+                }
+                setMessages((current) => [
+                  ...current,
+                  {
+                    id: `adopted-${Date.now()}`,
+                    role: "assistant",
+                    content: answer.content,
+                    modelId: entry.modelId,
+                    createdAt: new Date().toISOString(),
+                  },
+                ]);
+                showToast(
+                  tr("comparison.adopted", {
+                    model: entry.modelId || tr("batch.defaultModel"),
+                  }),
+                  3200,
+                );
+              }}
+            />
+          ) : null}
           {mainPane === "chat" && tasksPanelOpen && session.sessionId ? (
             <AgentTasksPanel
               messages={messages}
@@ -8636,7 +7397,7 @@ export default function App() {
             messages={messages}
             sessionState={session.state}
             sessionKey={session.sessionId ?? `draft-${session.title ?? "new"}`}
-            projectPath={activeProject?.path ?? null}
+            projectPath={resourceProjectPath}
             suppressEmptyCopy={welcomeSession}
             canEditLastUser={canEditLastUser}
             lastUserMessageId={lastUserMessageId}
@@ -8656,6 +7417,7 @@ export default function App() {
             canRewindSession={canRewindSession && !!session.sessionId}
             onRewindToUserMessage={onRewindToUserMessage}
             onForkFromUserMessage={onForkFromUserMessage}
+            onRetryInterrupted={retryInterruptedTurn}
             turnStartedAt={turnStartedAt}
             onOpenResource={(target) => {
               setLayout((l) => {
@@ -8797,6 +7559,7 @@ export default function App() {
                     worktreeGc: tr("composer.worktreeGc"),
                   }}
                   worktrees={gitWorktrees}
+                  currentWorkspacePath={resourceProjectPath}
                   worktreesAvailable={gitWorktreesAvailable}
                   worktreesLoading={gitWorktreesLoading}
                   worktreesReason={gitWorktreesReason}
@@ -8958,7 +7721,7 @@ export default function App() {
                     locale={locale}
                     items={atItems}
                     query={liveAt.query}
-                    projectPath={activeProject?.path ?? null}
+                    projectPath={resourceProjectPath}
                     loading={atLoading}
                     activeIndex={atActiveIndex}
                     onActiveIndexChange={setAtActiveIndex}
@@ -9229,12 +7992,20 @@ export default function App() {
                   modelId={modelId}
                   effort={effort}
                   models={availableModels}
+                  modelHealth={modelHealth}
                   labels={{
                     model: tr("composer.model"),
                     effort: tr("composer.effort"),
                     effortHigh: tr("effort.high"),
                     effortMedium: tr("effort.medium"),
                     effortLow: tr("effort.low"),
+                    compare: tr("composer.compare"),
+                    compareHint: tr("composer.compareHint"),
+                    compareRun: tr("composer.compareRun"),
+                    compareWorktrees: tr("composer.compareWorktrees"),
+                    customProvider: tr("composer.customProvider"),
+                    healthLatency: tr("composer.healthLatency"),
+                    healthFailure: tr("composer.healthFailure"),
                   }}
                   onModel={(v) => {
                     if (!isValidModelId(v, availableModels)) return;
@@ -9266,6 +8037,50 @@ export default function App() {
                       })
                       .catch((e) => showToast(String(e), 4000));
                   }}
+                  onCompare={(ids) => {
+                    const prompt = draft.trim();
+                    if (!prompt) {
+                      showToast(tr("composer.compareEmpty"), 3500);
+                      return;
+                    }
+                    setComparisonPair(null);
+                    void batch.run(
+                      ids.slice(0, 4).map((id) => ({
+                        title: `${tr("composer.compareTitle")} · ${findModel(id, availableModels)?.label ?? id}`,
+                        prompt,
+                        modelId: id,
+                      })),
+                    );
+                    setComparisonOpen(true);
+                  }}
+                  onCompareWorktrees={(ids) => {
+                    const prompt = draft.trim();
+                    if (!prompt) {
+                      showToast(tr("composer.compareEmpty"), 3500);
+                      return;
+                    }
+                    if (!activeProject?.path) {
+                      showToast(tr("batch.worktreeNeedsProject"), 4500);
+                      return;
+                    }
+                    setComparisonPair(null);
+                    void batch.run(
+                      ids.slice(0, 4).map((id) => ({
+                        title: `${tr("composer.compareTitle")} · ${findModel(id, availableModels)?.label ?? id}`,
+                        prompt,
+                        modelId: id,
+                        worktree: true,
+                      })),
+                      { worktree: true },
+                    );
+                    setComparisonOpen(true);
+                  }}
+                />
+                <PromptCostPreview
+                  modelId={modelId}
+                  text={serializeForAgent(parseStoredContent(draft))}
+                  attachmentRefs={attachments.map((attachment) => attachment.path)}
+                  t={(key, vars) => tr(key as MessageKey, vars)}
                 />
                 <CacheChip
                   usage={sessionUsage}
@@ -9280,6 +8095,7 @@ export default function App() {
                     output: tr("cache.output"),
                     cost: tr("cache.cost"),
                   }}
+                  breakHint={cacheBreakHint ?? undefined}
                 />
                 <ContextUsageChip
                   display={contextUsageDisplay}
@@ -9306,7 +8122,10 @@ export default function App() {
                     breakdownEstimatedNote: tr(
                       "context.breakdownEstimatedNote",
                     ),
+                    threshold: tr("context.threshold"),
+                    thresholdReached: tr("context.thresholdReached"),
                   }}
+                  thresholdPercent={compactionThresholdPercent}
                   onCompact={openCompactWithNote}
                 />
                 <span className="composer__spacer" />
@@ -9441,8 +8260,9 @@ export default function App() {
             <ResourceViewer
               projectId={activeProject?.id ?? null}
               sessionId={session.sessionId ?? null}
-              projectPath={activeProject?.path ?? null}
-              projectName={activeProject?.name ?? null}
+              projectPath={resourceProjectPath}
+              projectName={activeProject?.name ?? (remoteRuntime.enabled ? remoteRuntime.cwd : null)}
+              remoteRuntime={remoteRuntime.enabled}
               locale={locale}
               paneActive={!layout.asideCollapsed}
               openRequest={resourceOpenTarget}
@@ -9755,7 +8575,7 @@ export default function App() {
         effort={effort}
         mode={mode}
         policy={policy}
-        projectPath={activeProject?.path}
+        projectPath={resourceProjectPath}
         messageCount={messages.length}
         onClose={() => setShowStatusModal(false)}
       />
@@ -9937,7 +8757,7 @@ export default function App() {
                 try {
                   const sid = await ensureConnected();
                   if (!sid) return;
-                  await api.sessionSend(cmd);
+                  await api.sessionSend(cmd, null, null, sid);
                 } catch (err) {
                   setLocalError(String(err));
                 }
@@ -10023,6 +8843,40 @@ export default function App() {
                 <IconClose size={16} />
               </button>
             </div>
+            {!searchQuery.trim().startsWith(">") ? (
+              <div className="search-panel__filters">
+                <select value={searchModelFilter} onChange={(event) => setSearchModelFilter(event.target.value)} aria-label={tr("search.filterModel")}>
+                  <option value="">{tr("search.allModels")}</option>
+                  {availableModels.map((model) => <option key={model.id} value={model.id}>{model.label || model.id}</option>)}
+                </select>
+                <select value={searchProjectFilter} onChange={(event) => setSearchProjectFilter(event.target.value)} aria-label={tr("search.filterProject")}>
+                  <option value="">{tr("search.allProjects")}</option>
+                  {projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
+                </select>
+              </div>
+            ) : null}
+            {searchQuery.trim().startsWith(">") ? (
+              <>
+                <div className="search-panel__section">{tr("palette.title")}</div>
+                {paletteCommands.map((command) => (
+                  <button
+                    type="button"
+                    className="search-panel__row"
+                    key={command.id}
+                    onClick={command.run}
+                  >
+                    <IconSearch size={15} />
+                    <span className="search-panel__title">{command.label}</span>
+                  </button>
+                ))}
+                {paletteCommands.length === 0 ? (
+                  <div className="sidebar-empty" style={{ padding: 12 }}>
+                    {tr("search.noMatches")}
+                  </div>
+                ) : null}
+              </>
+            ) : (
+            <>
             {searchHits.matchedProjects.length > 0 && (
               <>
                 <div className="search-panel__section">
@@ -10053,12 +8907,12 @@ export default function App() {
                 ? ` · ${tr("search.searchingContent")}`
                 : null}
             </div>
-            {mergedSessionHits.length === 0 && !contentSearchLoading && (
+            {filteredSessionHits.length === 0 && !contentSearchLoading && (
               <div className="sidebar-empty" style={{ padding: 12 }}>
                 {tr("search.noMatches")}
               </div>
             )}
-            {mergedSessionHits.map((hit, i) => {
+            {filteredSessionHits.map((hit, i) => {
               const s = sessions.find((x) => x.id === hit.id);
               // Content-only hits may lack a live row if the list is stale; still open by id.
               const row: SessionRow = s ?? {
@@ -10133,6 +8987,8 @@ export default function App() {
                 </span>
               </button>
             </div>
+            </>
+            )}
           </div>
         </div>
       )}
@@ -10398,6 +9254,35 @@ export default function App() {
                 label: tr("session.fork"),
                 icon: <IconFork size={16} />,
                 onClick: () => confirmForkSession(s),
+              },
+              {
+                id: "compare",
+                label:
+                  comparisonSelection === s.id
+                    ? tr("session.compareSelectionClear")
+                    : comparisonSelection
+                      ? tr("session.compareWithSelected")
+                      : tr("session.compareSelect"),
+                icon: <IconPanel size={16} />,
+                onClick: () => {
+                  if (comparisonSelection === s.id) {
+                    setComparisonSelection(null);
+                    return;
+                  }
+                  if (comparisonSelection) {
+                    setComparisonPair([comparisonSelection, s.id]);
+                    setComparisonSelection(null);
+                    setComparisonOpen(true);
+                    return;
+                  }
+                  setComparisonSelection(s.id);
+                  showToast(
+                    tr("session.compareSelected", {
+                      name: s.title || tr("session.untitled"),
+                    }),
+                    3600,
+                  );
+                },
               },
               {
                 id: "rewind",

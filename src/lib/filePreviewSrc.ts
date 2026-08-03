@@ -118,7 +118,13 @@ export async function resolvePreviewSrc(
 export async function fetchPreviewArrayBuffer(
   absolutePath: string,
   kind?: string,
+  base64?: string | null,
 ): Promise<ArrayBuffer> {
+  if (base64) {
+    const raw = atob(base64);
+    const bytes = Uint8Array.from(raw, (char) => char.charCodeAt(0));
+    return bytes.buffer;
+  }
   const url = await pathToPreviewUrl(absolutePath, kind);
   if (!url) {
     throw new Error("cannot resolve local file URL");

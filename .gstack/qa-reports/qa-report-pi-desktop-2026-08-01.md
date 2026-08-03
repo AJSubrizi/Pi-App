@@ -25,7 +25,7 @@ The application bundle launches and the distributable mounts correctly. Full cli
 | Architecture | PASS | DMG app executable is `arm64` |
 | Installed launch | PASS | `/Applications/Pi.app` process remained alive after restart |
 | Code signature integrity | PASS | `codesign --verify --deep --strict` valid on disk |
-| Product reference scan | PASS | no `grok-app` references found outside build/dependency output |
+| Product reference scan | PASS | no unrelated product references found in source |
 
 Screenshot evidence: `screenshots/initial.png`.
 

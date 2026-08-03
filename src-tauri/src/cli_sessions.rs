@@ -327,6 +327,8 @@ pub fn import_cli_session(
             role,
             content,
             thought: None,
+            model_id: None,
+            effort: None,
             created_at: now + chrono::Duration::milliseconds(i as i64),
             is_error: false,
             attachments: None,

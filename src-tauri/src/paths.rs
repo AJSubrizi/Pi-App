@@ -108,6 +108,37 @@ pub fn settings_file() -> PathBuf {
     app_data_root().join("settings.json")
 }
 
+/// Append-only measured usage rows, one JSON object per completed turn.
+pub fn usage_ledger_file() -> PathBuf {
+    app_data_root().join("usage-ledger.jsonl")
+}
+
+/// Local-only crash/error records. Never uploaded by the app.
+pub fn crash_reports_file() -> PathBuf {
+    app_data_root().join("crash-reports.jsonl")
+}
+
+/// Loopback endpoint and bearer token used by the optional external MCP bridge.
+/// The file is short-lived and is replaced on every desktop start.
+pub fn mcp_endpoint_file() -> PathBuf {
+    app_data_root().join("mcp-endpoint.json")
+}
+
+/// Runtime revocation marker for the currently active local MCP token.
+pub fn mcp_revocation_file() -> PathBuf {
+    app_data_root().join("mcp-revoked.json")
+}
+
+/// Redacted, append-only audit trail for external MCP actions.
+pub fn mcp_audit_file() -> PathBuf {
+    app_data_root().join("mcp-audit.jsonl")
+}
+
+/// Durable request-id journal for external MCP task starts.
+pub fn mcp_requests_file() -> PathBuf {
+    app_data_root().join("mcp-requests.json")
+}
+
 /// On-disk secrets metadata (+ API-key fallback when OS keychain is unavailable).
 /// Sensitive keys prefer the OS keychain; see [`crate::secrets`].
 pub fn secrets_file() -> PathBuf {
@@ -121,6 +152,26 @@ pub fn session_dir(session_id: &str) -> PathBuf {
 /// Host-side scheduled automations (shell list; execution via agent sessions).
 pub fn automations_file() -> PathBuf {
     app_data_root().join("automations.json")
+}
+
+/// Append-only lifecycle ledger for scheduled automation runs.
+pub fn automation_runs_file() -> PathBuf {
+    app_data_root().join("automation-runs.jsonl")
+}
+
+/// Cross-process claim target used by the desktop scheduler and the optional
+/// headless automation service. The id is reduced to a filename-safe token so
+/// an automation can never influence the lock path.
+pub fn automation_claim_file(automation_id: &str) -> PathBuf {
+    let safe = automation_id
+        .chars()
+        .filter(|value| value.is_ascii_alphanumeric() || matches!(value, '-' | '_'))
+        .take(96)
+        .collect::<String>();
+    let name = if safe.is_empty() { "unknown" } else { &safe };
+    app_data_root()
+        .join("logs")
+        .join(format!("automation-{name}.claim"))
 }
 
 /// App MCP/Skills enable prefs (`extensions.json`).

@@ -18,6 +18,7 @@ export type BatchEntry = ParallelTask & {
   sessionId: string | null;
   status: "pending" | "starting" | "running" | "failed";
   error: string | null;
+  worktreePath: string | null;
 };
 
 export interface TaskBatchDeps {
@@ -31,7 +32,7 @@ export interface TaskBatchDeps {
 
 export interface TaskBatchState {
   entries: BatchEntry[];
-  run: (tasks: ParallelTask[]) => Promise<void>;
+  run: (tasks: ParallelTask[], options?: { worktree?: boolean }) => Promise<void>;
 }
 
 export function useTaskBatch(deps: TaskBatchDeps): TaskBatchState {
@@ -39,8 +40,12 @@ export function useTaskBatch(deps: TaskBatchDeps): TaskBatchState {
   const [entries, setEntries] = useState<BatchEntry[]>([]);
 
   const run = useCallback(
-    async (tasks: ParallelTask[]) => {
+    async (tasks: ParallelTask[], options: { worktree?: boolean } = {}) => {
       if (tasks.length === 0) return;
+      if (options.worktree && !project?.path) {
+        showToast(tr("batch.worktreeNeedsProject"), 4500);
+        return;
+      }
       const settings = await api.settingsGet().catch(() => null);
       const cap = Math.max(1, settings?.maxConcurrentAgents ?? 3);
 
@@ -50,6 +55,8 @@ export function useTaskBatch(deps: TaskBatchDeps): TaskBatchState {
           sessionId: null,
           status: "pending" as const,
           error: null,
+          worktreePath: null,
+          worktree: options.worktree,
         })),
       );
 
@@ -63,9 +70,14 @@ export function useTaskBatch(deps: TaskBatchDeps): TaskBatchState {
             modelId,
           });
         },
-        connect: async (sessionId) => {
+        connect: async (sessionId, taskProjectPath) => {
+          const remote = !!settings?.remoteRuntime?.enabled;
+          if (remote && taskProjectPath) {
+            await api.sessionSetRemoteCwd(sessionId, taskProjectPath);
+          }
           const snap = await api.sessionConnect({
-            projectPath: project?.path,
+            projectPath: remote ? undefined : taskProjectPath ?? project?.path,
+            remotePath: remote ? taskProjectPath ?? project?.path : undefined,
             sessionId,
             mode: "agent",
           });
@@ -74,8 +86,17 @@ export function useTaskBatch(deps: TaskBatchDeps): TaskBatchState {
             error: snap.lastError?.message,
           };
         },
-        send: async (prompt) => {
-          await api.sessionSend(prompt);
+        send: async (prompt, sessionId) => {
+          await api.sessionSend(prompt, null, null, sessionId);
+        },
+        createWorktree: async (name) => {
+          if (!project?.path) throw new Error("worktree project missing");
+          const safe = name
+            .toLowerCase()
+            .replace(/[^a-z0-9._-]+/g, "-")
+            .replace(/^-+|-+$/g, "")
+            .slice(0, 48) || "pi-best-of-n";
+          return api.gitWorktreeAdd(project.path, safe);
         },
       };
 
@@ -88,6 +109,7 @@ export function useTaskBatch(deps: TaskBatchDeps): TaskBatchState {
                   sessionId: o.sessionId,
                   status: o.status,
                   error: o.error,
+                  worktreePath: o.worktreePath ?? null,
                   // Show what was applied, not what was asked for.
                   modelId: o.appliedModel,
                 }

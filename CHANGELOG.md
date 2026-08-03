@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-03
+
+### Added
+
+- **Multi-model workspace** - addressed sessions, model roles, fallback routing, usage attribution, comparisons, adoption and isolated worktree runs.
+- **Daily-driver controls** - running-task dock, activity center, cross-session search, command palette, recovery markers and pre-send cost/context feedback.
+- **Remote and external control** - full SSH workspace bridge, local authenticated MCP control and an optional headless automation daemon.
+
+### Security
+
+- External MCP remains loopback-only, token-authenticated, trusted-project scoped and revocable.
+- Session stop, rewind and send operations verify their target session to prevent focus races.
+
+### Changed
+
+- Settings label inventory and session orchestration are kept in test-backed modules without changing the existing UI language or layout.
+
 ## [0.2.12] - 2026-07-30
 
 ### Added

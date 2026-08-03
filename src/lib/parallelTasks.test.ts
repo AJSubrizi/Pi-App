@@ -44,6 +44,12 @@ describe("resolveTaskModel", () => {
   it("returns null against an empty catalog rather than echoing the input", () => {
     expect(resolveTaskModel("grok-4.5", [])).toBeNull();
   });
+
+  it("resolves a named role before fuzzy model matching", () => {
+    expect(
+      resolveTaskModel("review", MODELS, { review: "grok-4.5" }),
+    ).toBe("grok-4.5");
+  });
 });
 
 describe("parseTaskBatch", () => {
@@ -191,8 +197,8 @@ describe("runTaskBatchWith", () => {
         calls.push(`connect:${id}`);
         return { ready: true };
       },
-      send: async (prompt) => {
-        calls.push(`send:${prompt}`);
+      send: async (prompt, id) => {
+        calls.push(`send:${id}:${prompt}`);
       },
       ...over,
     };
@@ -213,7 +219,7 @@ describe("runTaskBatchWith", () => {
       "create:a",
       "model:s1=grok-4.5",
       "connect:s1",
-      "send:do a",
+      "send:s1:do a",
     ]);
     expect(out).toEqual([
       {
@@ -252,7 +258,7 @@ describe("runTaskBatchWith", () => {
     const out = await runTaskBatchWith(deps, [task("a", "grok-4.5")], 3);
     expect(out[0]!.status).toBe("running");
     expect(out[0]!.appliedModel).toBeNull();
-    expect(calls).toContain("send:do a");
+    expect(calls).toContain("send:s1:do a");
   });
 
   it("reports a connect that never became ready", async () => {
@@ -306,5 +312,25 @@ describe("runTaskBatchWith", () => {
     const { deps, calls } = fakeDeps();
     expect(await runTaskBatchWith(deps, [], 3)).toEqual([]);
     expect(calls).toEqual([]);
+  });
+
+  it("creates an isolated worktree and connects the task to it", async () => {
+    const { deps, calls } = fakeDeps({
+      createWorktree: async (name) => {
+        calls.push(`worktree:${name}`);
+        return { path: "/repo-candidate", branch: "pi/candidate" };
+      },
+      connect: async (id, projectPath) => {
+        calls.push(`connect:${id}:${projectPath}`);
+        return { ready: true };
+      },
+    });
+    const out = await runTaskBatchWith(
+      deps,
+      [{ ...task("review", "grok-4.5"), worktree: true }],
+      2,
+    );
+    expect(out[0]?.worktreePath).toBe("/repo-candidate");
+    expect(calls).toContain("connect:s1:/repo-candidate");
   });
 });

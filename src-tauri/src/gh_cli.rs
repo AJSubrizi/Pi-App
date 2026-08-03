@@ -71,6 +71,16 @@ pub struct GhOpResult {
     pub reason: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GhPrComment {
+    pub number: u64,
+    pub path: String,
+    pub line: u32,
+    pub side: String,
+    pub body: String,
+}
+
 /// What a `gh` call is aimed at.
 ///
 /// The PR workspace has no checkout to run inside, so it addresses repositories
@@ -430,6 +440,133 @@ pub async fn gh_pr_create(
                 output.chars().take(400).collect()
             })
         },
+    })
+}
+
+/// Publish one line-anchored review comment after an explicit UI confirmation.
+///
+/// The GitHub API requires the head commit SHA for a review comment. Resolve it
+/// through `gh pr view`, then use `gh api` with separate argv values so neither
+/// the path nor body is interpreted by a shell.
+#[tauri::command]
+pub async fn gh_pr_comment(
+    project_path: Option<String>,
+    repo: Option<String>,
+    number: u64,
+    path: String,
+    line: u32,
+    side: Option<String>,
+    body: String,
+) -> Result<GhPrComment, String> {
+    let target = GhTarget::resolve(project_path, repo)?;
+    let path = path.trim();
+    let body = body.trim();
+    let side = side
+        .unwrap_or_else(|| "RIGHT".into())
+        .trim()
+        .to_ascii_uppercase();
+    if path.is_empty() || path.starts_with('/') || path.contains('\\') || path.contains("..") {
+        return Err("comment path must be a repository-relative file path".into());
+    }
+    if line == 0 {
+        return Err("comment line must be greater than zero".into());
+    }
+    if body.is_empty() {
+        return Err("comment body is required".into());
+    }
+    if body.len() > 20_000 {
+        return Err("comment body is too long".into());
+    }
+    if side != "RIGHT" && side != "LEFT" {
+        return Err("comment side must be RIGHT or LEFT".into());
+    }
+
+    let number_arg = number.to_string();
+    let (meta_ok, meta_raw, meta_err) = run_gh_target(
+        &target,
+        &[
+            "pr",
+            "view",
+            &number_arg,
+            "--json",
+            "headRefOid,headRepositoryOwner,headRepository",
+        ],
+    )?;
+    if !meta_ok {
+        return Err(meta_err);
+    }
+    let meta: serde_json::Value = serde_json::from_str(&meta_raw).map_err(|e| e.to_string())?;
+    let commit_id = meta
+        .get("headRefOid")
+        .and_then(|v| v.as_str())
+        .filter(|v| !v.is_empty())
+        .ok_or_else(|| "pull request head commit is unavailable".to_string())?;
+    let repo_slug = match &target {
+        GhTarget::Repo(slug) => slug.clone(),
+        GhTarget::Project(project) => {
+            let (ok, stdout, stderr) =
+                run_gh(project, &["repo", "view", "--json", "nameWithOwner"])?;
+            if !ok {
+                return Err(stderr);
+            }
+            serde_json::from_str::<serde_json::Value>(&stdout)
+                .ok()
+                .and_then(|v| {
+                    v.get("nameWithOwner")
+                        .and_then(|v| v.as_str())
+                        .map(str::to_string)
+                })
+                .ok_or_else(|| "could not resolve repository name".to_string())?
+        }
+    };
+
+    let endpoint = format!("repos/{repo_slug}/pulls/{number}/comments");
+    let line_arg = line.to_string();
+    let (ok, stdout, stderr) = run_gh_target(
+        &target,
+        &[
+            "api",
+            &endpoint,
+            "-f",
+            "body",
+            body,
+            "-f",
+            "commit_id",
+            commit_id,
+            "-f",
+            "path",
+            path,
+            "-F",
+            "line",
+            &line_arg,
+            "-f",
+            "side",
+            &side,
+        ],
+    )?;
+    if !ok {
+        return Err(stderr);
+    }
+    // GitHub echoes the stored comment back. Prefer its body over the one we
+    // sent, so the confirmation the user sees is what was actually recorded —
+    // GitHub normalises whitespace and can reject or alter markup. Falling back
+    // to our own text keeps a successful post from looking like a failure when
+    // the response is not the JSON we expected.
+    let stored_body = serde_json::from_str::<serde_json::Value>(&stdout)
+        .ok()
+        .and_then(|value| {
+            value
+                .get("body")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+                .map(str::to_string)
+        });
+    Ok(GhPrComment {
+        number,
+        path: path.to_string(),
+        line,
+        side,
+        body: stored_body.unwrap_or_else(|| body.to_string()),
     })
 }
 

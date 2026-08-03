@@ -19,17 +19,20 @@ export type CacheChipLabels = {
   cached: string;
   output: string;
   cost: string;
+  breakHint?: string;
 };
 
 export function CacheChip({
   usage,
   viewedSessionId,
   labels,
+  breakHint,
 }: {
   usage: UsagePayload | null;
   /** Figures from another chat are not shown. */
   viewedSessionId: string | null;
   labels: CacheChipLabels;
+  breakHint?: string;
 }) {
   const view = cacheChipView(usage, viewedSessionId);
   // Nothing measured yet: no chip, rather than a 0% that reads as failure.
@@ -47,6 +50,7 @@ export function CacheChip({
     `${labels.cached}: ${view.cachedTokens}`,
     `${labels.output}: ${view.outputTokens}`,
     view.costLabel ? `${labels.cost}: ${view.costLabel}` : null,
+    breakHint || null,
   ]
     .filter(Boolean)
     .join(" · ");

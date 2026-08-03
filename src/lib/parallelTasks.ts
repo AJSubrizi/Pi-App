@@ -24,6 +24,8 @@ export type ParallelTask = {
    * `null` means "use the current default".
    */
   modelId: string | null;
+  /** Run the task in an isolated git worktree for best-of-N code comparison. */
+  worktree?: boolean;
 };
 
 export type TaskBatch = {
@@ -72,9 +74,15 @@ export function wrapTaskBatchAgentText(userVisibleText: string): string {
 export function resolveTaskModel(
   raw: string | null | undefined,
   available: string[],
+  roles: Record<string, string> = {},
 ): string | null {
   const want = (raw || "").trim();
   if (!want) return null;
+
+  const role = Object.entries(roles).find(
+    ([name]) => name.toLowerCase() === want.toLowerCase(),
+  )?.[1];
+  if (role) return resolveTaskModel(role, available, {});
 
   const exact = available.find((id) => id === want);
   if (exact) return exact;
@@ -103,6 +111,7 @@ export function resolveTaskModel(
 export function parseTaskBatch(
   text: string,
   available: string[] = [],
+  roles: Record<string, string> = {},
 ): TaskBatch {
   if (!text) return { tasks: [], cleanText: text };
 
@@ -138,6 +147,7 @@ export function parseTaskBatch(
         modelId: resolveTaskModel(
           typeof o.model === "string" ? o.model : null,
           available,
+          roles,
         ),
       });
     }
@@ -201,8 +211,9 @@ export interface TaskRunnerDeps {
   createSession(title: string): Promise<{ id: string }>;
   /** Soft: a failure here costs the model choice, not the task. */
   setModel(sessionId: string, modelId: string): Promise<void>;
-  connect(sessionId: string): Promise<{ ready: boolean; error?: string }>;
-  send(prompt: string): Promise<void>;
+  connect(sessionId: string, projectPath?: string): Promise<{ ready: boolean; error?: string }>;
+  send(prompt: string, sessionId: string): Promise<void>;
+  createWorktree?(name: string): Promise<{ path: string; branch?: string | null }>;
 }
 
 export type TaskOutcome = {
@@ -212,6 +223,7 @@ export type TaskOutcome = {
   /** Model actually applied; null when none was asked for or it failed. */
   appliedModel: string | null;
   error: string | null;
+  worktreePath?: string | null;
 };
 
 /**
@@ -242,6 +254,14 @@ export async function runTaskBatchWith(
         const { id } = await deps.createSession(task.title);
         outcome.sessionId = id;
 
+        let taskProjectPath: string | undefined;
+        if (task.worktree) {
+          if (!deps.createWorktree) throw new Error("worktree runner unavailable");
+          const created = await deps.createWorktree(`${task.title}-${id.slice(0, 6)}`);
+          outcome.worktreePath = created.path;
+          taskProjectPath = created.path;
+        }
+
         if (task.modelId) {
           try {
             await deps.setModel(id, task.modelId);
@@ -251,10 +271,10 @@ export async function runTaskBatchWith(
           }
         }
 
-        const conn = await deps.connect(id);
+        const conn = await deps.connect(id, taskProjectPath);
         if (!conn.ready) throw new Error(conn.error || "connect failed");
 
-        await deps.send(task.prompt);
+        await deps.send(task.prompt, id);
         outcome.status = "running";
       } catch (e) {
         outcome.error = e instanceof Error ? e.message : String(e);

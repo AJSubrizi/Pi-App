@@ -27,6 +27,14 @@ const MAX_PATCH_BYTES: usize = 20 * 1024 * 1024;
 
 static GIT_CAPTURE_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
+/// Checkpoints are Git objects owned by the host process. A remote Pi session
+/// may still carry a local project id for its chat binding, but its working
+/// tree lives on the SSH target. Never let that metadata route a remote turn
+/// into a snapshot of the similarly named local repository.
+fn remote_runtime_active() -> bool {
+    crate::store::load_settings().remote_runtime.enabled
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum CheckpointStatus {
@@ -494,6 +502,9 @@ pub(crate) fn capture_before_auto(
     session_id: &str,
     turn_id: &str,
 ) -> Result<Option<TurnCheckpoint>, String> {
+    if remote_runtime_active() {
+        return Ok(None);
+    }
     let project_id = clean_id(project_id, "projectId")?;
     let session_id = clean_id(session_id, "sessionId")?;
     let turn_id = clean_id(turn_id, "turnId")?;
@@ -580,6 +591,9 @@ pub(crate) fn capture_before_auto(
 }
 
 pub(crate) fn capture_after_auto(checkpoint_id: &str) -> Result<TurnCheckpoint, String> {
+    if remote_runtime_active() {
+        return Err("REMOTE_CHECKPOINTS_UNSUPPORTED".into());
+    }
     let checkpoint_id = clean_id(checkpoint_id, "checkpointId")?;
     let checkpoint = checkpoint_by_id(&store_path(), &checkpoint_id)?;
     if checkpoint.status == CheckpointStatus::Ready {
@@ -715,6 +729,9 @@ pub fn checkpoints_list(
     session_id: Option<String>,
     limit: Option<usize>,
 ) -> Result<Vec<TurnCheckpoint>, String> {
+    if remote_runtime_active() {
+        return Ok(Vec::new());
+    }
     let project_id = project_id
         .map(|value| clean_id(&value, "projectId"))
         .transpose()?;
@@ -737,6 +754,9 @@ pub fn checkpoints_list(
 
 #[tauri::command]
 pub fn checkpoint_revert_preview(checkpoint_id: String) -> Result<CheckpointRevertPreview, String> {
+    if remote_runtime_active() {
+        return Err("REMOTE_CHECKPOINTS_UNSUPPORTED".into());
+    }
     let checkpoint_id = clean_id(&checkpoint_id, "checkpointId")?;
     preview_revert(&checkpoint_by_id(&store_path(), &checkpoint_id)?)
 }
@@ -747,6 +767,9 @@ pub fn checkpoint_revert_apply(
     expected_worktree_digest: String,
     operation_id: String,
 ) -> Result<CheckpointRevertResult, String> {
+    if remote_runtime_active() {
+        return Err("REMOTE_CHECKPOINTS_UNSUPPORTED".into());
+    }
     let checkpoint_id = clean_id(&checkpoint_id, "checkpointId")?;
     let operation_id = clean_id(&operation_id, "operationId")?;
     let expected_worktree_digest = expected_worktree_digest.trim().to_string();
@@ -883,6 +906,9 @@ pub fn checkpoints_gc(
     max_age_days: Option<u32>,
     max_records: Option<usize>,
 ) -> Result<CheckpointGcResult, String> {
+    if remote_runtime_active() {
+        return Err("REMOTE_CHECKPOINTS_UNSUPPORTED".into());
+    }
     let max_age_days = max_age_days.unwrap_or(30).clamp(1, 365);
     let max_records = max_records.unwrap_or(1_000).clamp(50, 5_000);
     let cutoff = Utc::now() - chrono::Duration::days(i64::from(max_age_days));

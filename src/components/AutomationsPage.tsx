@@ -125,6 +125,30 @@ export function AutomationsPage({
     void refresh();
   }, [refresh]);
 
+  // The host scheduler can finish while this page is already open. Reuse the
+  // existing list refresh so success/failure metadata never waits for a
+  // navigation or a manual reload.
+  useEffect(() => {
+    if (!api.isTauri()) return;
+    let cancelled = false;
+    let unlisten: Array<() => void> = [];
+    void Promise.all([
+      api.listen("automation://ran", () => void refresh()),
+      api.listen("automation://failed", () => void refresh()),
+      api.listen("automation://run-updated", () => void refresh()),
+    ]).then((cleanups) => {
+      if (cancelled) {
+        cleanups.forEach((cleanup) => cleanup());
+      } else {
+        unlisten = cleanups;
+      }
+    });
+    return () => {
+      cancelled = true;
+      unlisten.forEach((cleanup) => cleanup());
+    };
+  }, [refresh]);
+
   // Refresh relative "next run" labels once a minute.
   useEffect(() => {
     const id = window.setInterval(() => setTick((n) => n + 1), 60_000);
@@ -541,6 +565,8 @@ export function AutomationsPage({
                       {auto.enabled
                         ? formatNextRunRelative(next, new Date(), relativeLabels)
                         : t("automations.filter.paused")}
+                      {auto.lastRunLate ? ` · ${t("automations.ranLate")}` : ""}
+                      {auto.lastRunError ? ` · ${t("automations.lastFailed")}` : ""}
                       {projectName ? ` · ${projectName}` : ""}
                     </span>
                   </button>

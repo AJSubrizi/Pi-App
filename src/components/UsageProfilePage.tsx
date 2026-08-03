@@ -25,6 +25,15 @@ function compactNumber(value: number): string {
   }).format(value);
 }
 
+function cost(value: number | null | undefined): string {
+  if (value == null) return "-";
+  return new Intl.NumberFormat("en", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 4,
+  }).format(value);
+}
+
 function duration(value: number): string {
   const hours = Math.floor(value / 3600);
   const minutes = Math.floor((value % 3600) / 60);
@@ -71,8 +80,8 @@ export function UsageProfilePage({
     return timeline.map((day) => ({
         date: day.date,
         requests: day.activities,
-        tokens: day.estimatedTokens,
-        costUsd: 0,
+        tokens: day.estimatedTokens ?? day.tokens ?? 0,
+        costUsd: day.costTotal ?? 0,
       }));
   }, [profile, timelineView]);
 
@@ -84,12 +93,16 @@ export function UsageProfilePage({
 
   const stats = [
     {
-      value: compactNumber(profile?.totalEstimatedTokens ?? 0),
+      value: compactNumber(profile?.measuredTokens ?? 0),
       label: t("usage.totalTokens"),
     },
     {
-      value: compactNumber(profile?.maxSessionTokens ?? 0),
+      value: compactNumber(profile?.maxMeasuredSessionTokens ?? 0),
       label: t("usage.maxSession"),
+    },
+    {
+      value: cost(profile?.measuredCostTotal),
+      label: t("usage.measuredSpend"),
     },
     {
       value: duration(profile?.longestActivitySecs ?? 0),
@@ -179,7 +192,7 @@ export function UsageProfilePage({
             noData: loading ? t("common.loading") : t("usage.noActivity"),
             aria: t("usage.heatmapAria"),
             requests: t("usage.turns"),
-            tokens: t("usage.estimatedTokens"),
+            tokens: t("usage.measuredTokens"),
           }}
         />
         <p className="usage-profile__scroll-hint">
@@ -228,6 +241,60 @@ export function UsageProfilePage({
           ) : (
             <p className="usage-profile__empty">{t("usage.noTools")}</p>
           )}
+        </section>
+
+        <section className="usage-profile__models">
+          <h2>{t("usage.byModel")}</h2>
+          {profile?.models.length ? (
+            <ul>
+              {profile.models.slice(0, 6).map((model) => (
+                <li key={model.modelId}>
+                  <span>{model.modelId}</span>
+                  <strong>{cost(model.costTotal)}</strong>
+                  <small>{compactNumber(model.tokens)} {t("usage.tokensShort")}</small>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="usage-profile__empty">{t("usage.noMeasuredUsage")}</p>
+          )}
+        </section>
+
+        <section className="usage-profile__models">
+          <h2>{t("usage.byProject")}</h2>
+          {profile?.projects.length ? (
+            <ul>
+              {profile.projects.slice(0, 6).map((project) => (
+                <li key={project.projectId}>
+                  <span>{project.projectId === "orphan" ? t("common.local") : project.projectId}</span>
+                  <strong>{cost(project.costTotal)}</strong>
+                  <small>{compactNumber(project.tokens)} {t("usage.tokensShort")}</small>
+                </li>
+              ))}
+            </ul>
+          ) : <p className="usage-profile__empty">{t("usage.noMeasuredUsage")}</p>}
+        </section>
+
+        <section>
+          <h2>{t("usage.mostExpensive")}</h2>
+          {profile?.mostExpensiveTurn ? (
+            <p className="usage-profile__expensive">
+              <strong>{cost(profile.mostExpensiveTurn.costTotal)}</strong>
+              <span>{profile.mostExpensiveTurn.modelId || t("common.local")}</span>
+              <small>{compactNumber(profile.mostExpensiveTurn.totalTokens)} {t("usage.tokensShort")}</small>
+            </p>
+          ) : <p className="usage-profile__empty">{t("usage.noMeasuredUsage")}</p>}
+        </section>
+
+        <section>
+          <h2>{t("usage.adoptions")}</h2>
+          {profile?.adoptions.length ? (
+            <ol className="usage-profile__tools">
+              {profile.adoptions.slice(0, 6).map((row) => (
+                <li key={row.modelId}><code>{row.modelId}</code><span>{t("usage.adoptedCount", { n: row.count })}</span></li>
+              ))}
+            </ol>
+          ) : <p className="usage-profile__empty">{t("usage.noAdoptions")}</p>}
         </section>
       </div>
 

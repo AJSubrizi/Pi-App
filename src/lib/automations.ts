@@ -1,6 +1,7 @@
 /**
  * Scheduled automations (Codex-style "Scheduled").
- * Host stores metadata; shell fires when the app is open.
+ * Host stores metadata; the Tauri scheduler fires due rows independently of
+ * the webview and catches them up on the next launch.
  */
 
 export type AutomationFrequency = "daily" | "weekly" | "weekdays" | "once";
@@ -29,6 +30,9 @@ export interface Automation {
   updatedAt: string;
   lastRunAt?: string | null;
   nextRunAt?: string | null;
+  lastRunLate?: boolean;
+  lastRunError?: string | null;
+  lastRunErrorAt?: string | null;
 }
 
 export interface AutomationInput {
@@ -36,6 +40,7 @@ export interface AutomationInput {
   prompt: string;
   enabled?: boolean;
   projectId?: string | null;
+  repo?: string | null;
   modelId?: string | null;
   effort?: string | null;
   frequency?: string;
@@ -43,6 +48,7 @@ export interface AutomationInput {
   weekdays?: number[];
   notify?: string;
   nextRunAt?: string | null;
+  ranLate?: boolean;
 }
 
 const LS_KEY = "pi-app.automations";

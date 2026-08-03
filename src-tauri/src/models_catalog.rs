@@ -23,8 +23,12 @@ pub struct ReasoningEffort {
 pub struct AvailableModel {
     pub id: String,
     pub label: String,
-    /// Always "official" for catalog entries (providers are not models).
+    /// Catalog source, usually a Pi provider id or "custom" for app-configured providers.
     pub source: String,
+    /// Context window in tokens. Pi CLI does not expose this consistently, so
+    /// the host fills a small conservative table for known families.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context_window: Option<u64>,
     #[serde(default)]
     pub is_default: bool,
     /// Per-model reasoning efforts from CLI `info.reasoning_efforts` (may be empty).
@@ -43,9 +47,9 @@ pub struct AvailableModelsResult {
 
 /// Models the user can select in the composer.
 ///
-/// **Only** official Pi CLI catalog IDs from `models_cache.json`.
-/// Custom providers (`[model.*]` in config.toml) are channels — switch them under
-/// Settings → Account → Providers, not here.
+/// Official Pi CLI ids plus configured custom provider ids. Custom entries are
+/// deliberately marked as `custom` so a per-session choice cannot be mistaken
+/// for an official catalog model.
 pub fn list_available_models() -> AvailableModelsResult {
     let settings = store::load_settings();
     let mut by_id: BTreeMap<String, AvailableModel> = BTreeMap::new();
@@ -55,6 +59,7 @@ pub fn list_available_models() -> AvailableModelsResult {
             id: "auto".into(),
             label: "Pi default".into(),
             source: "pi".into(),
+            context_window: Some(context_window_for("auto")),
             is_default: true,
             reasoning_efforts: pi_thinking_efforts(),
         },
@@ -83,9 +88,10 @@ pub fn list_available_models() -> AvailableModelsResult {
                     by_id.insert(
                         id.clone(),
                         AvailableModel {
-                            id,
+                            id: id.clone(),
                             label: model.to_string(),
                             source: provider.to_string(),
+                            context_window: Some(context_window_for(&id)),
                             is_default: false,
                             reasoning_efforts: if reasoning {
                                 pi_thinking_efforts()
@@ -117,12 +123,46 @@ pub fn list_available_models() -> AvailableModelsResult {
         m.is_default = m.id == preferred;
     }
 
+    if let Ok(custom) = crate::providers::list_custom_providers() {
+        for provider in custom.providers {
+            if models.iter().any(|model| model.id == provider.id) {
+                continue;
+            }
+            models.push(AvailableModel {
+                id: provider.id.clone(),
+                label: format!("{} · {}", provider.name, provider.model),
+                source: "custom".into(),
+                context_window: Some(context_window_for(&provider.id)),
+                is_default: provider.is_default,
+                reasoning_efforts: pi_thinking_efforts(),
+            });
+        }
+        models.sort_by(|a, b| a.source.cmp(&b.source).then_with(|| a.id.cmp(&b.id)));
+    }
+
     AvailableModelsResult {
         models,
         default_model_id: preferred,
         origin: Some("pi --list-models".into()),
         fetched_at: None,
     }
+}
+
+fn context_window_for(id: &str) -> u64 {
+    let lower = id.to_ascii_lowercase();
+    if lower.contains("claude") {
+        return 200_000;
+    }
+    if lower.contains("gpt-5") {
+        return 400_000;
+    }
+    if lower.contains("grok") {
+        return 131_072;
+    }
+    if lower.contains("gemini") {
+        return 1_000_000;
+    }
+    128_000
 }
 
 fn pi_thinking_efforts() -> Vec<ReasoningEffort> {

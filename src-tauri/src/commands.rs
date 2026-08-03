@@ -17,14 +17,23 @@ pub async fn session_get_state(
 }
 
 #[tauri::command]
+pub async fn sessions_running(
+    mgr: State<'_, Arc<SessionManager>>,
+) -> Result<Vec<crate::session_manager::RunningSessionSnapshot>, String> {
+    Ok(mgr.running_sessions())
+}
+
+#[tauri::command]
 pub async fn session_connect(
     app: tauri::AppHandle,
     mgr: State<'_, Arc<SessionManager>>,
     project_path: Option<String>,
+    remote_path: Option<String>,
     session_id: Option<String>,
     mode: Option<String>,
 ) -> Result<SessionSnapshot, String> {
-    mgr.connect(app, project_path, session_id, mode).await
+    mgr.connect(app, project_path, remote_path, session_id, mode)
+        .await
 }
 
 /// Send a turn. `text` goes to the agent; optional `display_text` is stored in the journal
@@ -36,17 +45,21 @@ pub async fn session_send(
     text: String,
     display_text: Option<String>,
     attachments: Option<Vec<crate::store::MessageAttachmentStored>>,
+    session_id: Option<String>,
 ) -> Result<SessionSnapshot, String> {
-    mgr.send_message(app, text, display_text, attachments).await
+    mgr.send_message(app, text, display_text, attachments, session_id)
+        .await
 }
 
 /// Drop last user turn on agent + local journal (edit & resend).
+/// When supplied, `session_id` must match the active host session.
 #[tauri::command]
 pub async fn session_rewind_drop_last_user(
     app: tauri::AppHandle,
     mgr: State<'_, Arc<SessionManager>>,
+    session_id: Option<String>,
 ) -> Result<SessionSnapshot, String> {
-    mgr.rewind_drop_last_user_turn(app).await
+    mgr.rewind_drop_last_user_turn(app, session_id).await
 }
 
 /// List rewind points (one per user prompt) for a session journal.
@@ -88,12 +101,53 @@ pub fn session_fork(
     store::fork_session(&source_id, through_user_prompt_index, title)
 }
 
+/// Persist an answer selected from a model comparison into the main session.
+#[tauri::command]
+pub fn session_adopt_answer(
+    session_id: String,
+    content: String,
+    model_id: Option<String>,
+) -> Result<store::ChatMessageStored, String> {
+    let body = content.trim().to_string();
+    if body.is_empty() {
+        return Err("cannot adopt an empty answer".into());
+    }
+    let message = store::ChatMessageStored {
+        id: uuid::Uuid::new_v4().to_string(),
+        role: "assistant".into(),
+        content: body,
+        thought: None,
+        model_id: model_id.clone(),
+        effort: None,
+        created_at: chrono::Utc::now(),
+        is_error: false,
+        attachments: None,
+        marker: model_id
+            .filter(|value| !value.trim().is_empty())
+            .map(|value| format!("adopted_from:{value}")),
+    };
+    store::append_message(&session_id, message.clone())?;
+    Ok(message)
+}
+
 #[tauri::command]
 pub async fn session_stop(
     app: tauri::AppHandle,
     mgr: State<'_, Arc<SessionManager>>,
+    session_id: Option<String>,
 ) -> Result<SessionSnapshot, String> {
-    mgr.stop(app).await
+    if let Some(target) = session_id.as_deref() {
+        let focused = mgr
+            .snapshot()
+            .session_id
+            .as_deref()
+            .is_some_and(|id| id == target);
+        if !focused {
+            mgr.connect(app.clone(), None, None, Some(target.to_string()), None)
+                .await?;
+        }
+    }
+    mgr.stop(app, session_id).await
 }
 
 /// Approve / revise / abandon pending plan (`_x.ai/exit_plan_mode`).
@@ -449,6 +503,24 @@ pub async fn session_set_project(
     Ok(meta)
 }
 
+/// Bind a chat to a remote SSH workspace/worktree without creating a local
+/// project entry. The live agent is disconnected so the next send reconnects
+/// with the selected remote cwd.
+#[tauri::command]
+pub async fn session_set_remote_cwd(
+    app: tauri::AppHandle,
+    mgr: State<'_, Arc<SessionManager>>,
+    id: String,
+    remote_cwd: Option<String>,
+) -> Result<SessionMeta, String> {
+    let meta = store::set_session_remote_cwd(&id, remote_cwd)?;
+    let snap = mgr.snapshot();
+    if snap.session_id.as_deref() == Some(meta.id.as_str()) {
+        let _ = mgr.disconnect(app).await;
+    }
+    Ok(meta)
+}
+
 #[tauri::command]
 pub async fn session_messages(id: String) -> Result<Vec<store::ChatMessageStored>, String> {
     Ok(store::load_messages(&id))
@@ -573,6 +645,7 @@ pub async fn automation_mark_run(
     id: String,
     last_run_at: String,
     next_run_at: Option<String>,
+    ran_late: Option<bool>,
 ) -> Result<store::Automation, String> {
     let last = chrono::DateTime::parse_from_rfc3339(&last_run_at)
         .map(|d| d.with_timezone(&chrono::Utc))
@@ -585,7 +658,82 @@ pub async fn automation_mark_run(
         ),
         _ => None,
     };
-    store::mark_automation_run(&id, last, next)
+    store::mark_automation_run(&id, last, next, ran_late.unwrap_or(false))
+}
+
+#[tauri::command]
+pub async fn automation_run_start(
+    automation_id: String,
+    session_id: String,
+    trigger: Option<String>,
+    retry_of: Option<String>,
+    scheduled_at: Option<String>,
+    ran_late: Option<bool>,
+) -> Result<crate::automation_ledger::AutomationRun, String> {
+    let automation = store::load_automations()
+        .into_iter()
+        .find(|row| row.id == automation_id)
+        .ok_or_else(|| "automation not found".to_string())?;
+    let scheduled_at = match scheduled_at {
+        Some(value) if !value.trim().is_empty() => Some(
+            chrono::DateTime::parse_from_rfc3339(value.trim())
+                .map(|date| date.with_timezone(&chrono::Utc))
+                .map_err(|error| error.to_string())?,
+        ),
+        _ => None,
+    };
+    let run = crate::automation_ledger::start(
+        &automation.id,
+        Some(&session_id),
+        trigger.as_deref().unwrap_or("manual"),
+        retry_of.as_deref(),
+        scheduled_at,
+        ran_late.unwrap_or(false),
+        automation.model_id.as_deref(),
+        automation.effort.as_deref(),
+    )?;
+    if let Err(error) = store::attach_automation_run(&session_id, &automation.id, &run.id) {
+        let _ = crate::automation_ledger::finish(&run.id, "failed", None, Some(&error));
+        return Err(error);
+    }
+    Ok(run)
+}
+
+#[tauri::command]
+pub async fn automation_run_finish(
+    run_id: String,
+    status: String,
+    duration_ms: Option<u64>,
+    error: Option<String>,
+) -> Result<crate::automation_ledger::AutomationRun, String> {
+    let row = crate::automation_ledger::finish(&run_id, &status, duration_ms, error.as_deref())?;
+    store::mark_automation_run_outcome(
+        &row.automation_id,
+        row.started_at,
+        &row.status,
+        row.error.as_deref(),
+    )?;
+    Ok(row)
+}
+
+#[tauri::command]
+pub async fn automation_runs_list(
+    automation_id: Option<String>,
+    limit: Option<u32>,
+) -> Result<Vec<crate::automation_ledger::AutomationRun>, String> {
+    Ok(crate::automation_ledger::list(
+        automation_id.as_deref(),
+        limit.unwrap_or(50).min(500) as usize,
+    ))
+}
+
+#[tauri::command]
+pub async fn automation_run_triage(
+    run_id: String,
+    triage: String,
+    note: Option<String>,
+) -> Result<crate::automation_ledger::AutomationRun, String> {
+    crate::automation_ledger::set_triage(&run_id, &triage, note.as_deref())
 }
 
 #[tauri::command]
@@ -794,11 +942,26 @@ pub async fn session_set_model(
     Ok(prefs)
 }
 
+fn configured_remote_workspace() -> Option<store::RemoteRuntimeSettings> {
+    let settings = store::load_settings().remote_runtime;
+    settings.enabled.then_some(settings)
+}
+
 #[tauri::command]
 pub async fn fs_list_dir(
     project_path: String,
     relative: Option<String>,
 ) -> Result<Vec<crate::fs_browser::FsEntry>, String> {
+    if let Some(settings) = configured_remote_workspace() {
+        let rows = crate::remote_workspace::fs_list_dir(
+            &settings,
+            &project_path,
+            relative.as_deref().unwrap_or(""),
+        )
+        .await?;
+        return serde_json::from_value(serde_json::Value::Array(rows))
+            .map_err(|error| format!("REMOTE_WORKSPACE_RESPONSE_INVALID: {error}"));
+    }
     crate::fs_browser::list_dir(&project_path, relative.as_deref().unwrap_or(""))
 }
 
@@ -807,6 +970,12 @@ pub async fn fs_read_file(
     project_path: String,
     relative: String,
 ) -> Result<crate::fs_browser::FsReadResult, String> {
+    if let Some(settings) = configured_remote_workspace() {
+        let row =
+            crate::remote_workspace::fs_read_file(&settings, &project_path, &relative).await?;
+        return serde_json::from_value(row)
+            .map_err(|error| format!("REMOTE_WORKSPACE_RESPONSE_INVALID: {error}"));
+    }
     crate::fs_browser::read_file(&project_path, &relative)
 }
 
@@ -819,6 +988,18 @@ pub async fn fs_write_file(
     content: String,
     expected_mtime_ms: Option<u64>,
 ) -> Result<crate::fs_browser::FsWriteResult, String> {
+    if let Some(settings) = configured_remote_workspace() {
+        let row = crate::remote_workspace::fs_write_file(
+            &settings,
+            &project_path,
+            &relative,
+            &content,
+            expected_mtime_ms,
+        )
+        .await?;
+        return serde_json::from_value(row)
+            .map_err(|error| format!("REMOTE_WORKSPACE_RESPONSE_INVALID: {error}"));
+    }
     crate::fs_browser::write_text_file(&project_path, &relative, &content, expected_mtime_ms)
 }
 
@@ -829,12 +1010,28 @@ pub async fn fs_write_absolute(
     content: String,
     expected_mtime_ms: Option<u64>,
 ) -> Result<crate::fs_browser::FsWriteResult, String> {
+    if let Some(settings) = configured_remote_workspace() {
+        let row = crate::remote_workspace::fs_write_absolute(
+            &settings,
+            &path,
+            &content,
+            expected_mtime_ms,
+        )
+        .await?;
+        return serde_json::from_value(row)
+            .map_err(|error| format!("REMOTE_WORKSPACE_RESPONSE_INVALID: {error}"));
+    }
     crate::fs_browser::write_text_absolute(&path, &content, expected_mtime_ms)
 }
 
 /// Read an absolute path for resource-pane preview (chat file cards, agent outputs).
 #[tauri::command]
 pub async fn fs_read_absolute(path: String) -> Result<crate::fs_browser::FsReadResult, String> {
+    if let Some(settings) = configured_remote_workspace() {
+        let row = crate::remote_workspace::fs_read_absolute(&settings, &path).await?;
+        return serde_json::from_value(row)
+            .map_err(|error| format!("REMOTE_WORKSPACE_RESPONSE_INVALID: {error}"));
+    }
     crate::fs_browser::read_absolute_file(&path)
 }
 
@@ -844,6 +1041,12 @@ pub async fn fs_open_path(
     path: String,
     project_path: Option<String>,
 ) -> Result<crate::fs_browser::FsReadResult, String> {
+    if let Some(settings) = configured_remote_workspace() {
+        let project = project_path.unwrap_or_else(|| settings.cwd.clone());
+        let row = crate::remote_workspace::fs_open_path(&settings, &project, &path).await?;
+        return serde_json::from_value(row)
+            .map_err(|error| format!("REMOTE_WORKSPACE_RESPONSE_INVALID: {error}"));
+    }
     crate::fs_browser::open_path_smart(project_path.as_deref(), &path)
 }
 
@@ -3267,6 +3470,11 @@ pub async fn git_file_diff(
     project_path: String,
     path: String,
 ) -> Result<GitFileDiffResult, String> {
+    if let Some(settings) = configured_remote_workspace() {
+        let row = crate::remote_workspace::git_file_diff(&settings, &project_path, &path).await?;
+        return serde_json::from_value(row)
+            .map_err(|error| format!("REMOTE_WORKSPACE_RESPONSE_INVALID: {error}"));
+    }
     let project = normalize_fs_path(&project_path);
     let target = normalize_fs_path(&path);
     if project.is_empty() || target.is_empty() {
@@ -3621,6 +3829,11 @@ fn join_project_rel(project: &str, rel: &str) -> String {
 /// Soft-fails when git is missing or the path is not a repo.
 #[tauri::command]
 pub async fn git_status(project_path: String) -> Result<GitStatusResult, String> {
+    if let Some(settings) = configured_remote_workspace() {
+        let row = crate::remote_workspace::git_status(&settings, &project_path).await?;
+        return serde_json::from_value(row)
+            .map_err(|error| format!("REMOTE_WORKSPACE_RESPONSE_INVALID: {error}"));
+    }
     let project = normalize_fs_path(&project_path);
     if project.is_empty() {
         return Ok(GitStatusResult {
@@ -3835,6 +4048,11 @@ fn parse_numstat_line(line: &str) -> Option<(u32, u32, String)> {
 
 #[tauri::command]
 pub async fn git_numstat(project_path: String) -> Result<GitNumstatResult, String> {
+    if let Some(settings) = configured_remote_workspace() {
+        let row = crate::remote_workspace::git_numstat(&settings, &project_path).await?;
+        return serde_json::from_value(row)
+            .map_err(|error| format!("REMOTE_WORKSPACE_RESPONSE_INVALID: {error}"));
+    }
     let project = normalize_fs_path(&project_path);
     if project.is_empty() {
         return Ok(GitNumstatResult {
@@ -3965,6 +4183,11 @@ fn run_git(project: &str, args: &[&str]) -> Result<GitOpResult, String> {
 /// `git add -- <paths>` (paths are repo-relative). Empty paths = stage all.
 #[tauri::command]
 pub async fn git_stage(project_path: String, paths: Vec<String>) -> Result<GitOpResult, String> {
+    if let Some(settings) = configured_remote_workspace() {
+        let row = crate::remote_workspace::git_stage(&settings, &project_path, &paths).await?;
+        return serde_json::from_value(row)
+            .map_err(|error| format!("REMOTE_WORKSPACE_RESPONSE_INVALID: {error}"));
+    }
     let project = normalize_fs_path(&project_path);
     if project.is_empty() {
         return Err("empty path".into());
@@ -3984,6 +4207,11 @@ pub async fn git_stage(project_path: String, paths: Vec<String>) -> Result<GitOp
 /// `git reset -q HEAD -- <paths>` (unstage). Empty = unstage all.
 #[tauri::command]
 pub async fn git_unstage(project_path: String, paths: Vec<String>) -> Result<GitOpResult, String> {
+    if let Some(settings) = configured_remote_workspace() {
+        let row = crate::remote_workspace::git_unstage(&settings, &project_path, &paths).await?;
+        return serde_json::from_value(row)
+            .map_err(|error| format!("REMOTE_WORKSPACE_RESPONSE_INVALID: {error}"));
+    }
     let project = normalize_fs_path(&project_path);
     if project.is_empty() {
         return Err("empty path".into());
@@ -4003,6 +4231,11 @@ pub async fn git_unstage(project_path: String, paths: Vec<String>) -> Result<Git
 /// `git commit -m <message>`. Fails softly when there is nothing to commit.
 #[tauri::command]
 pub async fn git_commit(project_path: String, message: String) -> Result<GitOpResult, String> {
+    if let Some(settings) = configured_remote_workspace() {
+        let row = crate::remote_workspace::git_commit(&settings, &project_path, &message).await?;
+        return serde_json::from_value(row)
+            .map_err(|error| format!("REMOTE_WORKSPACE_RESPONSE_INVALID: {error}"));
+    }
     let project = normalize_fs_path(&project_path);
     if project.is_empty() {
         return Err("empty path".into());
@@ -4017,6 +4250,11 @@ pub async fn git_commit(project_path: String, message: String) -> Result<GitOpRe
 /// `git push`. Auth / no-remote / non-fast-forward surface as `ok: false`.
 #[tauri::command]
 pub async fn git_push(project_path: String) -> Result<GitOpResult, String> {
+    if let Some(settings) = configured_remote_workspace() {
+        let row = crate::remote_workspace::git_push(&settings, &project_path).await?;
+        return serde_json::from_value(row)
+            .map_err(|error| format!("REMOTE_WORKSPACE_RESPONSE_INVALID: {error}"));
+    }
     let project = normalize_fs_path(&project_path);
     if project.is_empty() {
         return Err("empty path".into());
@@ -4034,6 +4272,13 @@ pub async fn git_discard(
     tracked: Vec<String>,
     untracked: Vec<String>,
 ) -> Result<GitOpResult, String> {
+    if let Some(settings) = configured_remote_workspace() {
+        let row =
+            crate::remote_workspace::git_discard(&settings, &project_path, &tracked, &untracked)
+                .await?;
+        return serde_json::from_value(row)
+            .map_err(|error| format!("REMOTE_WORKSPACE_RESPONSE_INVALID: {error}"));
+    }
     let project = normalize_fs_path(&project_path);
     if project.is_empty() {
         return Err("empty path".into());
@@ -4083,6 +4328,11 @@ pub async fn git_show_file(
     project_path: String,
     path: String,
 ) -> Result<GitShowFileResult, String> {
+    if let Some(settings) = configured_remote_workspace() {
+        let row = crate::remote_workspace::git_show_file(&settings, &project_path, &path).await?;
+        return serde_json::from_value(row)
+            .map_err(|error| format!("REMOTE_WORKSPACE_RESPONSE_INVALID: {error}"));
+    }
     let project = normalize_fs_path(&project_path);
     let target = normalize_fs_path(&path);
     if project.is_empty() || target.is_empty() {
@@ -4332,8 +4582,31 @@ pub fn parse_worktree_porcelain(raw: &str) -> Vec<GitWorktreeEntry> {
 }
 
 /// List linked git worktrees for a project folder. Soft-fails without git / non-repo.
+fn list_git_worktrees(project: &str) -> Result<Vec<GitWorktreeEntry>, String> {
+    let out = std::process::Command::new("git")
+        .args(["-C", project, "worktree", "list", "--porcelain"])
+        .output()
+        .map_err(|error| error.to_string())?;
+    if !out.status.success() {
+        return Err(String::from_utf8_lossy(&out.stderr)
+            .trim()
+            .chars()
+            .take(300)
+            .collect());
+    }
+    Ok(parse_worktree_porcelain(&String::from_utf8_lossy(
+        &out.stdout,
+    )))
+}
+
+/// List linked git worktrees for a project folder. Soft-fails without git / non-repo.
 #[tauri::command]
 pub async fn git_worktrees_list(project_path: String) -> Result<GitWorktreesResult, String> {
+    if let Some(settings) = configured_remote_workspace() {
+        let row = crate::remote_workspace::git_worktrees_list(&settings, &project_path).await?;
+        return serde_json::from_value(row)
+            .map_err(|error| format!("REMOTE_WORKSPACE_RESPONSE_INVALID: {error}"));
+    }
     let project = normalize_fs_path(&project_path);
     if project.is_empty() {
         return Ok(GitWorktreesResult {
@@ -4773,6 +5046,24 @@ pub struct GitWorktreeRemoveResult {
     pub forced: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitWorktreeDiffResult {
+    pub path: String,
+    pub branch: Option<String>,
+    pub diff: String,
+    pub status: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitWorktreeAdoptResult {
+    pub merged: bool,
+    pub branch: Option<String>,
+    pub removed: Vec<String>,
+    pub cleanup_errors: Vec<String>,
+}
+
 // from PR #77
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -5073,6 +5364,17 @@ pub async fn git_worktree_add(
     name: String,
     start_point: Option<String>,
 ) -> Result<GitWorktreeAddResult, String> {
+    if let Some(settings) = configured_remote_workspace() {
+        let row = crate::remote_workspace::git_worktree_add(
+            &settings,
+            &project_path,
+            &name,
+            start_point.as_deref(),
+        )
+        .await?;
+        return serde_json::from_value(row)
+            .map_err(|error| format!("REMOTE_WORKSPACE_RESPONSE_INVALID: {error}"));
+    }
     let project = normalize_fs_path(&project_path);
     if project.is_empty() {
         return Err("empty path".into());
@@ -5196,6 +5498,18 @@ pub async fn git_worktree_gc(
     force: Option<bool>,
     max_age: Option<String>,
 ) -> Result<GitWorktreeGcResult, String> {
+    if let Some(settings) = configured_remote_workspace() {
+        let row = crate::remote_workspace::git_worktree_gc(
+            &settings,
+            &project_path,
+            dry_run,
+            force.unwrap_or(false),
+            max_age.as_deref(),
+        )
+        .await?;
+        return serde_json::from_value(row)
+            .map_err(|error| format!("REMOTE_WORKSPACE_RESPONSE_INVALID: {error}"));
+    }
     let project = normalize_fs_path(&project_path);
     if project.is_empty() {
         return Err("empty path".into());
@@ -5292,6 +5606,17 @@ pub async fn git_worktree_remove(
     worktree_path: String,
     force: Option<bool>,
 ) -> Result<GitWorktreeRemoveResult, String> {
+    if let Some(settings) = configured_remote_workspace() {
+        let row = crate::remote_workspace::git_worktree_remove(
+            &settings,
+            &project_path,
+            &worktree_path,
+            force.unwrap_or(false),
+        )
+        .await?;
+        return serde_json::from_value(row)
+            .map_err(|error| format!("REMOTE_WORKSPACE_RESPONSE_INVALID: {error}"));
+    }
     let project = normalize_fs_path(&project_path);
     if project.is_empty() {
         return Err("empty path".into());
@@ -5374,6 +5699,234 @@ pub async fn git_worktree_remove(
     Ok(GitWorktreeRemoveResult {
         path: remove_path,
         forced,
+    })
+}
+
+/// Read the real diff produced in a linked worktree. This intentionally
+/// includes staged and unstaged tracked changes (`diff HEAD`) so comparison is
+/// about the repository artefact, not only the assistant transcript.
+#[tauri::command]
+pub async fn git_worktree_diff(
+    project_path: String,
+    worktree_path: String,
+) -> Result<GitWorktreeDiffResult, String> {
+    if let Some(settings) = configured_remote_workspace() {
+        let row =
+            crate::remote_workspace::git_worktree_diff(&settings, &project_path, &worktree_path)
+                .await?;
+        return serde_json::from_value(row)
+            .map_err(|error| format!("REMOTE_WORKSPACE_RESPONSE_INVALID: {error}"));
+    }
+    let project = normalize_fs_path(&project_path);
+    let target = normalize_fs_path(&worktree_path);
+    if project.is_empty() || target.is_empty() {
+        return Err("empty project or worktree path".into());
+    }
+    git_probe_work_tree(&project)?;
+    let listed = list_git_worktrees(&project)?;
+    let entry = listed
+        .iter()
+        .find(|worktree| worktree_paths_equal(&worktree.path, &target))
+        .ok_or_else(|| "worktree not registered for this repository".to_string())?;
+    if entry.is_main {
+        return Err("main worktree cannot be compared as a candidate".into());
+    }
+    let diff = std::process::Command::new("git")
+        .args(["-C", &target, "diff", "HEAD", "--binary"])
+        .output()
+        .map_err(|error| error.to_string())?;
+    if !diff.status.success() {
+        return Err(String::from_utf8_lossy(&diff.stderr)
+            .trim()
+            .chars()
+            .take(400)
+            .collect());
+    }
+    let mut diff_text = String::from_utf8_lossy(&diff.stdout).to_string();
+    let empty_file = if cfg!(windows) { "NUL" } else { "/dev/null" };
+    let untracked = std::process::Command::new("git")
+        .args(["-C", &target, "ls-files", "--others", "--exclude-standard"])
+        .output()
+        .map_err(|error| error.to_string())?;
+    for relative in String::from_utf8_lossy(&untracked.stdout).lines() {
+        let path = std::path::PathBuf::from(&target).join(relative);
+        let added = std::process::Command::new("git")
+            .args(["diff", "--no-index", "--binary", empty_file])
+            .arg(&path)
+            .output()
+            .map_err(|error| error.to_string())?;
+        if !added.stdout.is_empty() {
+            diff_text.push_str(&String::from_utf8_lossy(&added.stdout));
+        }
+    }
+    let status = std::process::Command::new("git")
+        .args(["-C", &target, "status", "--short", "--untracked-files=all"])
+        .output()
+        .map_err(|error| error.to_string())?;
+    Ok(GitWorktreeDiffResult {
+        path: target,
+        branch: entry.branch.clone(),
+        diff: diff_text.chars().take(1_000_000).collect(),
+        status: String::from_utf8_lossy(&status.stdout)
+            .chars()
+            .take(50_000)
+            .collect(),
+    })
+}
+
+/// Adopt one best-of-N worktree after an explicit UI confirmation.
+///
+/// The candidate is committed on its own branch, merged into the requested
+/// project, then only the paths listed by the confirmed UI are removed. No
+/// force removal is used and cleanup errors are returned instead of hiding
+/// them. This keeps dirty or independently locked worktrees recoverable.
+#[tauri::command]
+pub async fn git_worktree_adopt(
+    project_path: String,
+    worktree_path: String,
+    cleanup_paths: Vec<String>,
+) -> Result<GitWorktreeAdoptResult, String> {
+    if let Some(settings) = configured_remote_workspace() {
+        let row = crate::remote_workspace::git_worktree_adopt(
+            &settings,
+            &project_path,
+            &worktree_path,
+            &cleanup_paths,
+        )
+        .await?;
+        return serde_json::from_value(row)
+            .map_err(|error| format!("REMOTE_WORKSPACE_RESPONSE_INVALID: {error}"));
+    }
+    let project = normalize_fs_path(&project_path);
+    let target = normalize_fs_path(&worktree_path);
+    if project.is_empty() || target.is_empty() {
+        return Err("empty project or worktree path".into());
+    }
+    git_probe_work_tree(&project)?;
+    let listed = list_git_worktrees(&project)?;
+    let candidate = listed
+        .iter()
+        .find(|worktree| worktree_paths_equal(&worktree.path, &target))
+        .ok_or_else(|| "worktree not registered for this repository".to_string())?;
+    if candidate.is_main {
+        return Err("main worktree cannot be adopted as a candidate".into());
+    }
+    let branch = candidate
+        .branch
+        .clone()
+        .ok_or_else(|| "candidate worktree is detached".to_string())?;
+
+    // Merging into a dirty main worktree can silently combine the candidate
+    // with unrelated user edits, and a conflict would leave the app's active
+    // project half-merged. Keep the candidate intact and ask the user to
+    // commit or stash the main worktree first.
+    let main_status = std::process::Command::new("git")
+        .args([
+            "-C",
+            &project,
+            "status",
+            "--porcelain",
+            "--untracked-files=all",
+        ])
+        .output()
+        .map_err(|error| error.to_string())?;
+    if !main_status.status.success() {
+        return Err("could not inspect the main worktree".into());
+    }
+    if !main_status.stdout.is_empty() {
+        return Err("main worktree has local changes; commit or stash them before adoption".into());
+    }
+
+    let add = std::process::Command::new("git")
+        .args(["-C", &target, "add", "-A"])
+        .output()
+        .map_err(|error| error.to_string())?;
+    if !add.status.success() {
+        return Err(String::from_utf8_lossy(&add.stderr)
+            .trim()
+            .chars()
+            .take(400)
+            .collect());
+    }
+    let commit = std::process::Command::new("git")
+        .args([
+            "-C",
+            &target,
+            "-c",
+            "user.name=Pi App",
+            "-c",
+            "user.email=pi-app@localhost",
+            "commit",
+            "-m",
+            "Pi App: adopt best-of-N result",
+        ])
+        .output()
+        .map_err(|error| error.to_string())?;
+    let no_changes = !commit.status.success()
+        && String::from_utf8_lossy(&commit.stdout).contains("nothing to commit");
+    if !commit.status.success() && !no_changes {
+        return Err(String::from_utf8_lossy(&commit.stderr)
+            .trim()
+            .chars()
+            .take(500)
+            .collect());
+    }
+
+    let merge = std::process::Command::new("git")
+        .args(["-C", &project, "merge", "--no-edit", "--no-ff", &branch])
+        .output()
+        .map_err(|error| error.to_string())?;
+    if !merge.status.success() {
+        // A failed merge can leave conflict markers and an in-progress merge
+        // in the main worktree. Roll it back before returning the error so the
+        // user is never stranded in a partially adopted state.
+        let _ = std::process::Command::new("git")
+            .args(["-C", &project, "merge", "--abort"])
+            .output();
+        return Err(String::from_utf8_lossy(&merge.stderr)
+            .trim()
+            .chars()
+            .take(800)
+            .collect());
+    }
+
+    let mut removed = Vec::new();
+    let mut cleanup_errors = Vec::new();
+    for raw_path in cleanup_paths {
+        let cleanup = normalize_fs_path(&raw_path);
+        if cleanup.is_empty() || worktree_paths_equal(&cleanup, &project) {
+            continue;
+        }
+        if !listed
+            .iter()
+            .any(|worktree| worktree_paths_equal(&worktree.path, &cleanup))
+        {
+            cleanup_errors.push(format!("not registered: {cleanup}"));
+            continue;
+        }
+        let out = std::process::Command::new("git")
+            .args(["-C", &project, "worktree", "remove", &cleanup])
+            .output()
+            .map_err(|error| error.to_string())?;
+        if out.status.success() {
+            removed.push(cleanup);
+        } else {
+            cleanup_errors.push(format!(
+                "{}: {}",
+                cleanup,
+                String::from_utf8_lossy(&out.stderr)
+                    .trim()
+                    .chars()
+                    .take(240)
+                    .collect::<String>()
+            ));
+        }
+    }
+    Ok(GitWorktreeAdoptResult {
+        merged: true,
+        branch: Some(branch),
+        removed,
+        cleanup_errors,
     })
 }
 

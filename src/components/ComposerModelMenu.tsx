@@ -36,7 +36,7 @@ import {
 } from "@/components/icons";
 import { useFloatingMenu, type FloatingPos } from "@/lib/floatingMenu";
 
-type Nested = "model" | "effort" | null;
+type Nested = "model" | "effort" | "compare" | null;
 
 function usePortalMenu(estHeight = 220, _width = 300, nestedKey?: string) {
   const [open, setOpen] = useState(false);
@@ -193,10 +193,24 @@ export interface ComposerModelMenuProps {
     effort: string;
     effortHigh: string;
     effortMedium: string;
-    effortLow: string;
+  effortLow: string;
+    compare: string;
+    compareHint: string;
+    compareRun: string;
+    compareWorktrees: string;
+    customProvider: string;
+    healthLatency: string;
+    healthFailure: string;
   };
   onModel: (id: string) => void;
   onEffort: (id: string) => void;
+  onCompare?: (ids: string[]) => void;
+  onCompareWorktrees?: (ids: string[]) => void;
+  /** Recent measured health, keyed by exact model id. */
+  modelHealth?: Record<
+    string,
+    { averageLatencyMs: number | null; failureRate: number | null }
+  >;
 }
 
 function resolveEffortLabel(
@@ -219,12 +233,16 @@ export function ComposerModelMenu({
   labels,
   onModel,
   onEffort,
+  onCompare,
+  onCompareWorktrees,
+  modelHealth = {},
 }: ComposerModelMenuProps) {
   const [nested, setNested] = useState<Nested>(null);
   const menu = usePortalMenu(240, 280, nested ?? "root");
   const modelList = models.length > 0 ? models : PI_FALLBACK_MODELS;
   const activeModel = findModel(modelId, modelList);
   const effortList = effortsForModel(activeModel);
+  const [compareIds, setCompareIds] = useState<string[]>([]);
 
   useEffect(() => {
     if (!menu.open) setNested(null);
@@ -262,7 +280,7 @@ export function ComposerModelMenu({
     >
       {nested === null ? (
         <>
-          <button
+      <button
             type="button"
             className="cmm__row"
             onClick={() => setNested("model")}
@@ -284,6 +302,19 @@ export function ComposerModelMenu({
               <IconChevronRight size={14} />
             </span>
           </button>
+          {onCompare && modelList.length > 1 ? (
+            <button
+              type="button"
+              className="cmm__row"
+              onClick={() => {
+                setCompareIds([modelId].filter(Boolean));
+                setNested("compare");
+              }}
+            >
+              <span>{labels.compare}</span>
+              <span className="cmm__row-val">{modelList.length > 4 ? "2–4" : modelList.length}</span>
+            </button>
+          ) : null}
         </>
       ) : (
         <div className="cmm__nested">
@@ -292,7 +323,11 @@ export function ComposerModelMenu({
             className="cmm__back"
             onClick={() => setNested(null)}
           >
-            {nested === "model" ? labels.model : labels.effort}
+            {nested === "model"
+              ? labels.model
+              : nested === "effort"
+                ? labels.effort
+                : labels.compare}
           </button>
           {nested === "model" &&
             (modelList.length === 0 ? (
@@ -303,51 +338,128 @@ export function ComposerModelMenu({
               </div>
             ) : (
               modelList.map((m) => (
-                <button
-                  key={m.id}
-                  type="button"
-                  className={
-                    "cmm__opt" + (m.id === modelId ? " is-active" : "")
-                  }
-                  onClick={() => {
-                    onModel(m.id);
-                    setNested(null);
-                  }}
-                >
-                  <span className="cmm__opt-main">
-                    <span className="cmm__opt-title">{m.label}</span>
-                  </span>
-                  {m.id === modelId && (
-                    <span className="cmm__opt-check" aria-hidden>
-                      <IconCheck size={16} />
-                    </span>
-                  )}
-                </button>
+                (() => {
+                  const health = modelHealth[m.id];
+                  const healthLabel = health
+                    ? [
+                        health.averageLatencyMs != null
+                          ? labels.healthLatency.replace(
+                              "{n}",
+                              String(Math.round(health.averageLatencyMs)),
+                            )
+                          : null,
+                        health.failureRate != null
+                          ? labels.healthFailure.replace(
+                              "{n}",
+                              String(Math.round(health.failureRate * 100)),
+                            )
+                          : null,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")
+                    : "";
+                  return (
+                    <button
+                      key={m.id}
+                      type="button"
+                      className={
+                        "cmm__opt" + (m.id === modelId ? " is-active" : "")
+                      }
+                      onClick={() => {
+                        onModel(m.id);
+                        setNested(null);
+                      }}
+                    >
+                      <span className="cmm__opt-main">
+                        <span className="cmm__opt-title">{m.label}</span>
+                        {m.source === "custom" ? (
+                          <span className="cmm__opt-desc">{labels.customProvider}</span>
+                        ) : healthLabel ? (
+                          <span className="cmm__opt-desc">{healthLabel}</span>
+                        ) : null}
+                      </span>
+                      {m.id === modelId && (
+                        <span className="cmm__opt-check" aria-hidden>
+                          <IconCheck size={16} />
+                        </span>
+                      )}
+                    </button>
+                  );
+                })()
               ))
             ))}
-          {nested === "effort" &&
-            effortList.map((e) => (
+          {nested === "effort" && effortList.map((e) => (
+            <button
+              key={e.id}
+              type="button"
+              className={"cmm__opt" + (e.id === effort ? " is-active" : "")}
+              onClick={() => {
+                onEffort(e.id);
+                setNested(null);
+              }}
+            >
+              <span className="cmm__opt-main">
+                <span className="cmm__opt-title">
+                  {resolveEffortLabel(e.id, effortList, labels)}
+                </span>
+              </span>
+              {e.id === effort && (
+                <span className="cmm__opt-check" aria-hidden>
+                  <IconCheck size={16} />
+                </span>
+              )}
+            </button>
+          ))}
+          {nested === "compare" && onCompare ? (
+            <div className="cmm__compare">
+              <p className="cmm__hint">{labels.compareHint}</p>
+              {modelList.map((model) => {
+                const checked = compareIds.includes(model.id);
+                const disabled = !checked && compareIds.length >= 4;
+                return (
+                  <label className="cmm__check" key={model.id}>
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      disabled={disabled}
+                      onChange={() =>
+                        setCompareIds((current) =>
+                          checked
+                            ? current.filter((id) => id !== model.id)
+                            : [...current, model.id],
+                        )
+                      }
+                    />
+                    <span>{model.label || model.id}</span>
+                  </label>
+                );
+              })}
               <button
-                key={e.id}
                 type="button"
-                className={"cmm__opt" + (e.id === effort ? " is-active" : "")}
+                className="cmm__run"
+                disabled={compareIds.length < 2}
                 onClick={() => {
-                  onEffort(e.id);
-                  setNested(null);
+                  onCompare(compareIds);
+                  menu.setOpen(false);
                 }}
               >
-                <span className="cmm__opt-main">
-                  <span className="cmm__opt-title">
-                    {resolveEffortLabel(e.id, effortList, labels)}
-                  </span>
-                </span>
-                {e.id === effort && (
-                  <span className="cmm__opt-check" aria-hidden>
-                    <IconCheck size={16} />
-                  </span>
-                )}
+                {labels.compareRun}
               </button>
-            ))}
+              {onCompareWorktrees ? (
+                <button
+                  type="button"
+                  className="cmm__run cmm__run--secondary"
+                  disabled={compareIds.length < 2}
+                  onClick={() => {
+                    onCompareWorktrees(compareIds);
+                    menu.setOpen(false);
+                  }}
+                >
+                  {labels.compareWorktrees}
+                </button>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       )}
     </MenuShell>

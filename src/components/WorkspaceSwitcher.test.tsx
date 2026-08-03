@@ -59,10 +59,9 @@ describe("WorkspaceSwitcher", () => {
     expect(reachable).toHaveLength(1);
   });
 
-  it("says which workspace is not built yet", () => {
+  it("gives every workspace a usable title", () => {
     renderSwitcher();
-    expect(screen.getByTitle("Design · coming soon")).toBeDefined();
-    // The finished ones must not carry the suffix.
+    expect(screen.getByTitle("Design")).toBeDefined();
     expect(screen.getByTitle("Code")).toBeDefined();
     expect(screen.getByTitle("Pull requests")).toBeDefined();
   });
@@ -73,9 +72,9 @@ describe("WorkspaceSwitcher", () => {
     expect(onSelect).toHaveBeenCalledWith("pr");
   });
 
-  it("still reports a coming-soon workspace, so it can explain itself", () => {
+  it("reports the design workspace", () => {
     const { onSelect } = renderSwitcher();
-    fireEvent.click(screen.getByTitle("Design · coming soon"));
+    fireEvent.click(screen.getByTitle("Design"));
     expect(onSelect).toHaveBeenCalledWith("design");
   });
 
@@ -96,7 +95,7 @@ describe("WorkspaceSwitcher", () => {
     cleanup();
 
     const b = renderSwitcher({ active: last });
-    fireEvent.keyDown(screen.getByTitle("Design · coming soon"), {
+    fireEvent.keyDown(screen.getByTitle("Design"), {
       key: "ArrowRight",
     });
     expect(b.onSelect).toHaveBeenCalledWith(first);

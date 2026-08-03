@@ -108,6 +108,17 @@ pub struct SessionSnapshot {
     pub title: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RunningSessionSnapshot {
+    pub session_id: String,
+    pub title: String,
+    pub state: SessionState,
+    pub model_id: Option<String>,
+    pub usage: crate::token_usage::TokenUsage,
+    pub elapsed_secs: u64,
+}
+
 /// One user-prompt checkpoint for the rewind timeline UI.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -149,6 +160,7 @@ struct LiveSession {
     app_session_id: String,
     /// Running token total for this session, cache reads included.
     usage_total: crate::token_usage::TokenUsage,
+    turn_started_at: Instant,
     /// Stable id for the agent process / event pump (not the App session id).
     process_id: ProcessId,
     meta: SessionMeta,
@@ -842,6 +854,8 @@ impl SessionManager {
                 } else {
                     Some(s.stream_thought.clone())
                 },
+                model_id: s.model_id.clone(),
+                effort: s.effort.clone(),
                 created_at: chrono::Utc::now(),
                 is_error: false,
                 attachments: atts,
@@ -1080,6 +1094,7 @@ impl SessionManager {
         Some(LiveSession {
             app_session_id: parked.app_session_id,
             usage_total: crate::token_usage::TokenUsage::default(),
+            turn_started_at: now,
             process_id: parked.process_id,
             meta: parked.meta,
             fsm,
@@ -1232,6 +1247,87 @@ impl SessionManager {
         }
     }
 
+    /// Return a session snapshot without changing focus.
+    ///
+    /// The desktop UI normally asks for the focused snapshot, while background
+    /// automation and the external MCP bridge need to inspect a specific chat
+    /// without stealing focus from the user. Keep this projection host-side so
+    /// callers cannot accidentally read another session's transient state.
+    pub fn snapshot_for(&self, app_session_id: &str) -> Option<SessionSnapshot> {
+        let live_snapshot = |s: &LiveSession| SessionSnapshot {
+            session_id: Some(s.app_session_id.clone()),
+            agent_session_id: s.meta.agent_session_id.clone(),
+            state: s.fsm.state(),
+            last_error: s.fsm.last_error().cloned(),
+            streaming_message_id: s.streaming_message_id.clone(),
+            backend: s.backend.clone(),
+            model_id: s.model_id.clone(),
+            project_path: s.project_path.clone(),
+            title: s.meta.title.clone(),
+        };
+
+        {
+            let guard = self.inner.lock();
+            if let Some(s) = guard
+                .as_ref()
+                .filter(|s| s.app_session_id == app_session_id)
+            {
+                return Some(live_snapshot(s));
+            }
+        }
+        {
+            let guard = self.background.lock();
+            if let Some(s) = guard.get(app_session_id) {
+                return Some(live_snapshot(s));
+            }
+        }
+        self.parked
+            .lock()
+            .get(app_session_id)
+            .map(|s| SessionSnapshot {
+                session_id: Some(s.app_session_id.clone()),
+                agent_session_id: s.meta.agent_session_id.clone(),
+                state: SessionState::Ready,
+                last_error: None,
+                streaming_message_id: None,
+                backend: s.backend.clone(),
+                model_id: s.model_id.clone(),
+                project_path: s.project_path.clone(),
+                title: s.meta.title.clone(),
+            })
+    }
+
+    pub fn running_sessions(&self) -> Vec<RunningSessionSnapshot> {
+        let now = Instant::now();
+        let mut rows = Vec::new();
+        let push = |session: &LiveSession, rows: &mut Vec<RunningSessionSnapshot>| {
+            if !matches!(
+                session.fsm.state(),
+                SessionState::Streaming | SessionState::AwaitingPermission
+            ) {
+                return;
+            }
+            rows.push(RunningSessionSnapshot {
+                session_id: session.app_session_id.clone(),
+                title: session.meta.title.clone(),
+                state: session.fsm.state(),
+                model_id: session.model_id.clone(),
+                usage: session.usage_total,
+                elapsed_secs: now
+                    .saturating_duration_since(session.turn_started_at)
+                    .as_secs(),
+            });
+        };
+        if let Some(session) = self.inner.lock().as_ref() {
+            push(session, &mut rows);
+        }
+        for session in self.background.lock().values() {
+            push(session, &mut rows);
+        }
+        rows.sort_by(|a, b| a.session_id.cmp(&b.session_id));
+        rows
+    }
+
     /// Runtime diagnostics for a session export package (live or parked).
     /// Returns `None` when the session is not currently attached to a process.
     pub fn diagnostic_runtime_for(&self, app_session_id: &str) -> Option<serde_json::Value> {
@@ -1320,18 +1416,91 @@ impl SessionManager {
         let _ = app.emit("session://state", snap);
     }
 
+    /// Close the automation run owned by this session and update the existing
+    /// automation summary. The run ledger is append-only; the session metadata
+    /// only holds the one active run so ordinary user turns are not attached
+    /// to an old scheduled task.
+    fn settle_automation_run(
+        s: &mut LiveSession,
+        app: &AppHandle,
+        status: &str,
+        error: Option<&str>,
+    ) {
+        let Some(run_id) = s.meta.active_automation_run_id.take() else {
+            return;
+        };
+        let duration_ms = s.turn_started_at.elapsed().as_millis().try_into().ok();
+        match crate::automation_ledger::finish(&run_id, status, duration_ms, error) {
+            Ok(row) => {
+                if let Err(summary_error) = crate::store::mark_automation_run_outcome(
+                    &row.automation_id,
+                    row.started_at,
+                    &row.status,
+                    row.error.as_deref(),
+                ) {
+                    tracing::warn!(
+                        run_id = %run_id,
+                        "automation summary update failed: {summary_error}"
+                    );
+                }
+                let _ = app.emit(
+                    "automation://run-updated",
+                    serde_json::json!({
+                        "automationId": row.automation_id,
+                        "runId": row.id,
+                        "sessionId": row.session_id,
+                        "status": row.status,
+                        "durationMs": row.duration_ms,
+                        "error": row.error,
+                        "triage": row.triage,
+                    }),
+                );
+            }
+            Err(ledger_error) => {
+                tracing::warn!(run_id = %run_id, "automation ledger finish failed: {ledger_error}");
+            }
+        }
+        let _ = crate::store::update_session_meta(&s.meta);
+    }
+
     /// Persist + push a chat-visible error for a failed turn (retries exhausted, RPC fail, …).
     /// Updates UI via `session://turn_error` so the optimistic thinking bubble becomes a record.
     ///
     /// Content is intentionally short (code + compact reason). The UI maps codes to i18n copy
     /// and must not dump raw RPC/MCP stderr into the chat bubble.
     fn record_turn_error(s: &mut LiveSession, app: &AppHandle, err: &AgentError) {
+        Self::settle_automation_run(s, app, "failed", Some(err.message.as_str()));
         let mid = s
             .streaming_message_id
             .clone()
             .unwrap_or_else(|| Uuid::new_v4().to_string());
         let code = err.code.as_str();
         let detail = sanitize_error_detail(err.message.trim());
+        let latency_ms = s.turn_started_at.elapsed().as_millis().try_into().ok();
+        if crate::store::load_settings().crash_reporting_enabled {
+            if let Err(report_error) = crate::crash_reporting::append(
+                &s.app_session_id,
+                s.model_id.as_deref(),
+                code,
+                &detail,
+                latency_ms,
+            ) {
+                tracing::warn!("local crash report append failed: {report_error}");
+            }
+        }
+        if let Err(ledger_error) = crate::usage_ledger::append_with_metadata(
+            &s.app_session_id,
+            s.meta.project_id.as_deref(),
+            s.model_id.as_deref(),
+            crate::token_usage::TokenUsage::default(),
+            latency_ms,
+            "failure",
+        ) {
+            tracing::warn!(
+                "usage ledger failure append failed for session {}: {ledger_error}",
+                s.app_session_id
+            );
+        }
         // Persist machine-readable code first so the frontend can i18n the summary.
         let content = if detail.is_empty() {
             format!("**{code}**")
@@ -1345,6 +1514,8 @@ impl SessionManager {
                 role: "assistant".into(),
                 content: content.clone(),
                 thought: None,
+                model_id: s.model_id.clone(),
+                effort: s.effort.clone(),
                 created_at: chrono::Utc::now(),
                 is_error: true,
                 attachments: None,
@@ -1377,11 +1548,12 @@ impl SessionManager {
         self: &Arc<Self>,
         app: AppHandle,
         project_path: Option<String>,
+        remote_path: Option<String>,
         app_session_id: Option<String>,
         mock_mode: Option<String>,
     ) -> Result<SessionSnapshot, String> {
         let _connect_guard = self.connect_lock.lock().await;
-        self.connect_inner(app, project_path, app_session_id, mock_mode)
+        self.connect_inner(app, project_path, remote_path, app_session_id, mock_mode)
             .await
     }
 
@@ -1389,6 +1561,7 @@ impl SessionManager {
         self: &Arc<Self>,
         app: AppHandle,
         project_path: Option<String>,
+        remote_path: Option<String>,
         app_session_id: Option<String>,
         mock_mode: Option<String>,
     ) -> Result<SessionSnapshot, String> {
@@ -1396,10 +1569,34 @@ impl SessionManager {
         let max_concurrent = normalize_max_concurrent(settings.max_concurrent_agents);
         self.sweep_dead_parked();
 
+        // Resolve the session before choosing cwd so a remote worktree survives
+        // a focus switch or application restart. The explicit request wins;
+        // otherwise the session's persisted remote cwd wins over the runtime
+        // root configured in Settings.
+        let mut meta = if let Some(id) = app_session_id {
+            store::load_sessions_index()
+                .into_iter()
+                .find(|s| s.id == id)
+                .unwrap_or_else(|| {
+                    store::create_session(None, Some("New chat".into()), false)
+                        .expect("create session")
+                })
+        } else {
+            store::create_session(None, Some("New chat".into()), false)?
+        };
+        let requested_remote_path = remote_path
+            .or_else(|| meta.remote_cwd.clone())
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty());
+
         // Orphan chats (no project): use $HOME, never process cwd.
         // Dock-launched macOS apps often have cwd `/`, which confuses the agent.
         let cwd = if settings.remote_runtime.enabled {
-            std::path::PathBuf::from(settings.remote_runtime.cwd.trim())
+            std::path::PathBuf::from(
+                requested_remote_path
+                    .as_deref()
+                    .unwrap_or(settings.remote_runtime.cwd.trim()),
+            )
         } else {
             project_path
                 .clone()
@@ -1414,17 +1611,16 @@ impl SessionManager {
                 })
         };
 
-        // Ensure app session meta
-        let mut meta = if let Some(id) = app_session_id {
-            store::load_sessions_index()
-                .into_iter()
-                .find(|s| s.id == id)
-                .unwrap_or_else(|| {
-                    store::create_session(None, Some("New chat".into()), false)
-                        .expect("create session")
-                })
+        // Keep the selected remote worktree with the chat. This is deliberately
+        // independent from the local project registry.
+        if settings.remote_runtime.enabled && meta.remote_cwd != requested_remote_path {
+            meta.remote_cwd = requested_remote_path.clone();
+            store::update_session_meta(&meta)?;
+        }
+        let effective_project_path = if settings.remote_runtime.enabled {
+            requested_remote_path.clone()
         } else {
-            store::create_session(None, Some("New chat".into()), false)?
+            project_path.clone()
         };
 
         // Resolve model / effort / permission / mode for this project+session scope.
@@ -1438,7 +1634,7 @@ impl SessionManager {
             let mut guard = self.inner.lock();
             if let Some(s) = guard.as_mut() {
                 if s.app_session_id == meta.id
-                    && s.project_path == project_path
+                    && s.project_path == effective_project_path
                     && s.acp.as_ref().is_some_and(|c| c.is_alive())
                     && matches!(s.fsm.state(), SessionState::Ready)
                     && s.streaming_message_id.is_none()
@@ -1480,7 +1676,7 @@ impl SessionManager {
                 live.effort = Some(prefs.effort.clone());
                 live.product_mode = Some(prefs.mode.clone());
                 live.policy = policy;
-                live.project_path = project_path.clone();
+                live.project_path = effective_project_path.clone();
                 live.meta.model_id = Some(prefs.model_id.clone());
                 live.meta.mode = Some(prefs.mode.clone());
                 live.meta.effort = Some(prefs.effort.clone());
@@ -1489,6 +1685,9 @@ impl SessionManager {
                 if let Some(acp) = live.acp.clone() {
                     if let Err(e) = acp.set_model(&agent_model).await {
                         tracing::warn!("acp set_model on unpark soft-fail: {e}");
+                    }
+                    if let Err(e) = acp.set_thinking_level(&prefs.effort).await {
+                        tracing::warn!("acp set_thinking_level on unpark soft-fail: {e}");
                     }
                     if let Err(e) = acp.set_mode(&prefs.mode).await {
                         tracing::warn!("acp set_mode on unpark soft-fail: {e}");
@@ -1515,7 +1714,7 @@ impl SessionManager {
             if same_focus || settings.remote_runtime.enabled {
                 None
             } else {
-                Self::take_reusable_acp(&self.inner, &cwd, &project_path, &prefs, policy)
+                Self::take_reusable_acp(&self.inner, &cwd, &effective_project_path, &prefs, policy)
             }
         };
 
@@ -1577,6 +1776,7 @@ impl SessionManager {
             *self.inner.lock() = Some(LiveSession {
                 app_session_id: meta.id.clone(),
                 usage_total: crate::token_usage::TokenUsage::default(),
+                turn_started_at: now,
                 process_id: process_id.clone(),
                 meta: meta.clone(),
                 fsm,
@@ -1591,7 +1791,7 @@ impl SessionManager {
                 model_id: Some(prefs.model_id.clone()),
                 effort: Some(prefs.effort.clone()),
                 product_mode: Some(prefs.mode.clone()),
-                project_path: project_path.clone(),
+                project_path: effective_project_path.clone(),
                 allow_cache: SessionAllowCache::default(),
                 policy,
                 provider_retry_attempt: 0,
@@ -1689,10 +1889,18 @@ impl SessionManager {
             let spawn_opts = crate::acp_client::SpawnOptions {
                 model_id: Some(agent_model.clone()),
                 effort: Some(prefs.effort.clone()),
+                remote_cwd: settings
+                    .remote_runtime
+                    .enabled
+                    .then(|| cwd.to_string_lossy().to_string()),
             };
 
             let spawned = if direct_remote {
-                AcpClient::connect_direct(settings.remote_runtime.clone()).await
+                AcpClient::connect_direct(
+                    settings.remote_runtime.clone(),
+                    Some(cwd.to_string_lossy().to_string()),
+                )
+                .await
             } else {
                 AcpClient::spawn_with_options(cli_path, cwd, spawn_opts)
             };
@@ -1738,6 +1946,9 @@ impl SessionManager {
                 // Align live agent model / product mode with active channel.
                 if let Err(e) = client.set_model(&agent_model).await {
                     tracing::warn!("acp set_model after session open soft-fail: {e}");
+                }
+                if let Err(e) = client.set_thinking_level(&prefs.effort).await {
+                    tracing::warn!("acp set_thinking_level after session open soft-fail: {e}");
                 }
                 if let Err(e) = client.set_mode(&prefs.mode).await {
                     tracing::warn!("acp set_mode after session open soft-fail: {e}");
@@ -1820,7 +2031,8 @@ impl SessionManager {
         if !client.is_alive() {
             return None;
         }
-        // Effort is a spawn flag — mismatch requires cold respawn.
+        // A thinking-level change can be applied over Pi RPC, so it no longer
+        // requires discarding an otherwise reusable process.
         if s.effort.as_deref() != Some(prefs.effort.as_str()) {
             return None;
         }
@@ -1916,20 +2128,39 @@ impl SessionManager {
             AcpEvent::Usage { usage } => {
                 // Accumulate per session so the UI can show a running total and
                 // a cache hit rate that means something across a long chat.
-                let (app_sid, total) = {
+                let (app_sid, total, project_id, model_id, latency_ms) = {
                     let mut guard = self.inner.lock();
                     match guard.as_mut() {
                         Some(s) => {
                             s.usage_total.add(&usage);
-                            (s.meta.id.clone(), s.usage_total)
+                            (
+                                s.meta.id.clone(),
+                                s.usage_total,
+                                s.meta.project_id.clone(),
+                                s.model_id.clone(),
+                                s.turn_started_at.elapsed().as_millis().try_into().ok(),
+                            )
                         }
                         None => return,
                     }
                 };
+                if let Err(error) = crate::usage_ledger::append_with_metadata(
+                    &app_sid,
+                    project_id.as_deref(),
+                    model_id.as_deref(),
+                    usage,
+                    latency_ms,
+                    "success",
+                ) {
+                    tracing::warn!(
+                        "usage ledger latency append failed for session {app_sid}: {error}"
+                    );
+                }
                 let _ = app.emit(
                     "session://usage",
                     serde_json::json!({
                         "sessionId": app_sid,
+                        "modelId": model_id,
                         "turn": usage,
                         "total": total,
                         "cacheHitRate": total.cache_hit_rate(),
@@ -2051,6 +2282,12 @@ impl SessionManager {
                         None
                     }
                 };
+                if empty_run.is_some() {
+                    let mut guard = self.inner.lock();
+                    if let Some(s) = guard.as_mut() {
+                        Self::settle_automation_run(s, app, "completed", None);
+                    }
+                }
                 Self::emit_state(app, &self.snapshot());
                 Self::emit_empty_run_if_any(app, empty_run);
             }
@@ -2123,6 +2360,12 @@ impl SessionManager {
                                 None
                             }
                         };
+                        if empty.is_some() {
+                            let mut guard = self.inner.lock();
+                            if let Some(s) = guard.as_mut() {
+                                Self::settle_automation_run(s, app, "completed", None);
+                            }
+                        }
                         Self::emit_empty_run_if_any(app, empty);
                     }
                 } else if auto_deny {
@@ -2147,6 +2390,12 @@ impl SessionManager {
                                 None
                             }
                         };
+                        if empty.is_some() {
+                            let mut guard = self.inner.lock();
+                            if let Some(s) = guard.as_mut() {
+                                Self::settle_automation_run(s, app, "completed", None);
+                            }
+                        }
                         Self::emit_empty_run_if_any(app, empty);
                     }
                 } else {
@@ -2232,6 +2481,12 @@ impl SessionManager {
                         (String::new(), None)
                     }
                 };
+                if empty_run.is_some() {
+                    let mut guard = self.inner.lock();
+                    if let Some(s) = guard.as_mut() {
+                        Self::settle_automation_run(s, app, "completed", None);
+                    }
+                }
                 Self::emit_empty_run_if_any(app, empty_run);
 
                 // Live tool activity for UI — prefer human call text over bare "tool".
@@ -2303,6 +2558,8 @@ impl SessionManager {
                                 role: "tool".into(),
                                 content,
                                 thought: None,
+                                model_id: None,
+                                effort: None,
                                 created_at: chrono::Utc::now(),
                                 is_error: matches!(st, "failed" | "error"),
                                 attachments: None,
@@ -2424,6 +2681,8 @@ impl SessionManager {
                                     role: "tool".into(),
                                     content: content.clone(),
                                     thought: None,
+                                    model_id: None,
+                                    effort: None,
                                     created_at: chrono::Utc::now(),
                                     is_error: true,
                                     attachments: None,
@@ -2439,6 +2698,12 @@ impl SessionManager {
                                     "reason": "agent_exit",
                                     "content": content,
                                 }),
+                            );
+                            Self::settle_automation_run(
+                                s,
+                                app,
+                                "interrupted",
+                                Some("agent process exited while the run was active"),
                             );
                         }
                         // During Connecting, leave error to initialize/connect_failed
@@ -2615,6 +2880,8 @@ impl SessionManager {
                         role: "tool".into(),
                         content: content.clone(),
                         thought: None,
+                        model_id: None,
+                        effort: None,
                         created_at: chrono::Utc::now(),
                         is_error: false,
                         attachments: None,
@@ -2648,6 +2915,42 @@ impl SessionManager {
         ev: AcpEvent,
     ) {
         match ev {
+            AcpEvent::Usage { usage } => {
+                let (app_sid, total, project_id, model_id, latency_ms) = {
+                    let mut bg = self.background.lock();
+                    let Some(s) = bg.get_mut(app_session_id) else {
+                        return;
+                    };
+                    s.usage_total.add(&usage);
+                    (
+                        s.app_session_id.clone(),
+                        s.usage_total,
+                        s.meta.project_id.clone(),
+                        s.model_id.clone(),
+                        s.turn_started_at.elapsed().as_millis().try_into().ok(),
+                    )
+                };
+                if let Err(error) = crate::usage_ledger::append_with_metadata(
+                    &app_sid,
+                    project_id.as_deref(),
+                    model_id.as_deref(),
+                    usage,
+                    latency_ms,
+                    "success",
+                ) {
+                    tracing::warn!("usage ledger append failed for session {app_sid}: {error}");
+                }
+                let _ = app.emit(
+                    "session://usage",
+                    serde_json::json!({
+                        "sessionId": app_sid,
+                        "modelId": model_id,
+                        "turn": usage,
+                        "total": total,
+                        "cacheHitRate": total.cache_hit_rate(),
+                    }),
+                );
+            }
             AcpEvent::Stream {
                 kind,
                 text,
@@ -2738,6 +3041,7 @@ impl SessionManager {
                             s.fsm.state(),
                             SessionState::Streaming | SessionState::AwaitingPermission
                         ) {
+                            Self::settle_automation_run(s, app, "completed", None);
                             let _ = s.fsm.end_stream();
                         }
                         s.streaming_message_id = None;
@@ -2884,6 +3188,18 @@ impl SessionManager {
             AcpEvent::ProcessExited => {
                 let mut bg = self.background.lock();
                 if let Some(mut s) = bg.remove(app_session_id) {
+                    let was_busy = matches!(
+                        s.fsm.state(),
+                        SessionState::Streaming | SessionState::AwaitingPermission
+                    );
+                    if was_busy {
+                        Self::settle_automation_run(
+                            &mut s,
+                            app,
+                            "interrupted",
+                            Some("agent process exited while the run was active"),
+                        );
+                    }
                     let _ = s.fsm.crash("Agent process exited (background)");
                     s.acp = None;
                 }
@@ -2927,10 +3243,23 @@ impl SessionManager {
     pub async fn rewind_drop_last_user_turn(
         self: &Arc<Self>,
         app: AppHandle,
+        requested_session_id: Option<String>,
     ) -> Result<SessionSnapshot, String> {
         let (backend, app_sid, acp, user_prompt_count) = {
             let guard = self.inner.lock();
             let s = guard.as_ref().ok_or("no active session")?;
+            if let Some(requested) = requested_session_id
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+            {
+                if requested != s.app_session_id {
+                    return Err(format!(
+                        "active session mismatch: requested {requested}, active {}",
+                        s.app_session_id
+                    ));
+                }
+            }
             if s.fsm.state() == SessionState::Streaming
                 || s.fsm.state() == SessionState::AwaitingPermission
             {
@@ -3181,12 +3510,29 @@ impl SessionManager {
         text: String,
         display_text: Option<String>,
         attachments: Option<Vec<MessageAttachmentStored>>,
+        session_id: Option<String>,
     ) -> Result<SessionSnapshot, String> {
         let text = text.trim().to_string();
         if text.is_empty() {
             return Err("empty message".into());
         }
         let _send_guard = self.send_lock.lock().await;
+        // Target selection and prompt submission share one lock. A batch can
+        // therefore never connect one session and send to another because the
+        // focused session changed in between.
+        if let Some(target) = session_id.as_deref() {
+            let focused = self
+                .inner
+                .lock()
+                .as_ref()
+                .map(|s| s.app_session_id == target)
+                .unwrap_or(false);
+            if !focused {
+                self.connect(app.clone(), None, None, Some(target.to_string()), None)
+                    .await
+                    .map_err(|error| format!("cannot target session {target}: {error}"))?;
+            }
+        }
         let turn_id = Uuid::new_v4().to_string();
         let checkpoint_context = {
             let guard = self.inner.lock();
@@ -3254,6 +3600,7 @@ impl SessionManager {
                 return Err("active session changed while capturing turn checkpoint".into());
             }
             s.fsm.begin_stream().map_err(|e| e.to_string())?;
+            s.turn_started_at = Instant::now();
             Self::touch_stream_progress_locked(s);
             let mid = Uuid::new_v4().to_string();
             s.streaming_message_id = Some(mid.clone());
@@ -3296,6 +3643,8 @@ impl SessionManager {
                     role: "user".into(),
                     content: journal_content.clone(),
                     thought: None,
+                    model_id: s.model_id.clone(),
+                    effort: s.effort.clone(),
                     created_at: chrono::Utc::now(),
                     is_error: false,
                     attachments: (!stored_attachments.is_empty())
@@ -3345,6 +3694,7 @@ impl SessionManager {
                         let para = is_paragraph_break(&chunk.text);
                         SessionManager::maybe_flush_stream_journal(s, chunk.done, para);
                         if chunk.done {
+                            SessionManager::settle_automation_run(s, &app_done, "completed", None);
                             s.stream_buf.clear();
                             s.journal_throttle.reset();
                             s.last_stall_emit = None;
@@ -3389,10 +3739,26 @@ impl SessionManager {
         Ok(self.snapshot())
     }
 
-    pub async fn stop(self: &Arc<Self>, app: AppHandle) -> Result<SessionSnapshot, String> {
+    pub async fn stop(
+        self: &Arc<Self>,
+        app: AppHandle,
+        requested_session_id: Option<String>,
+    ) -> Result<SessionSnapshot, String> {
         let acp = {
             let mut guard = self.inner.lock();
             let s = guard.as_mut().ok_or("no active session")?;
+            if let Some(requested) = requested_session_id
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+            {
+                if requested != s.app_session_id {
+                    return Err(format!(
+                        "active session mismatch: requested {requested}, active {}",
+                        s.app_session_id
+                    ));
+                }
+            }
             if let Some(h) = s.mock_stream.take() {
                 h.request_stop();
             }
@@ -3419,6 +3785,8 @@ impl SessionManager {
                         role: "tool".into(),
                         content: content.clone(),
                         thought: None,
+                        model_id: None,
+                        effort: None,
                         created_at: chrono::Utc::now(),
                         is_error: false,
                         attachments: None,
@@ -3437,6 +3805,7 @@ impl SessionManager {
                 );
             }
             if was_busy {
+                Self::settle_automation_run(s, &app, "cancelled", Some("stopped by user"));
                 let _ = s.fsm.end_stream();
             }
             s.streaming_message_id = None;
@@ -3707,8 +4076,9 @@ impl SessionManager {
         }
     }
 
-    /// Record desired effort. CLI has no mid-session set_effort RPC; soft-drop the
-    /// live agent so the next connect re-spawns with `--reasoning-effort`.
+    /// Record and apply the desired thinking level. The CLI flag covers cold
+    /// starts; Pi RPC keeps warm processes in sync without relying on metadata
+    /// alone. If the live transport rejects the command, fall back to respawn.
     pub async fn set_effort_and_respawn_needed(
         &self,
         app: &AppHandle,
@@ -3718,20 +4088,22 @@ impl SessionManager {
         if !matches!(effort.as_str(), "high" | "medium" | "low") {
             return Err(format!("invalid effort: {effort}"));
         }
-        let need = {
+        let acp = {
             let mut guard = self.inner.lock();
             if let Some(s) = guard.as_mut() {
-                let same = s.effort.as_deref() == Some(effort.as_str());
                 s.effort = Some(effort.clone());
-                s.meta.effort = Some(effort);
+                s.meta.effort = Some(effort.clone());
                 let _ = store::update_session_meta(&s.meta);
-                !same && s.acp.is_some()
+                s.acp.clone()
             } else {
-                false
+                None
             }
         };
-        if need {
-            self.soft_respawn(app).await;
+        if let Some(acp) = acp {
+            if let Err(e) = acp.set_thinking_level(&effort).await {
+                tracing::warn!("acp set_thinking_level failed, soft-respawn: {e}");
+                self.soft_respawn(app).await;
+            }
         }
         Ok(())
     }
@@ -3906,7 +4278,7 @@ impl SessionManager {
                 None => (None, None),
             }
         };
-        self.connect(app, project, sid, None).await
+        self.connect(app, project, None, sid, None).await
     }
 }
 

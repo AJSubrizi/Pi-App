@@ -20,7 +20,7 @@ function normalizedDay(day: UsageDay | undefined, date: string): UsageDay {
   return {
     date,
     activities: day?.activities ?? 0,
-    estimatedTokens: day?.estimatedTokens ?? 0,
+    estimatedTokens: day?.tokens ?? day?.estimatedTokens ?? 0,
   };
 }
 
@@ -52,7 +52,7 @@ export function buildUsageTimeline(
     let estimatedTokens = 0;
     return daily.map((day) => {
       activities += day.activities;
-      estimatedTokens += day.estimatedTokens;
+      estimatedTokens += day.estimatedTokens ?? 0;
       return { ...day, activities, estimatedTokens };
     });
   }
@@ -71,7 +71,8 @@ export function buildUsageTimeline(
       estimatedTokens: 0,
     };
     total.activities += day.activities;
-    total.estimatedTokens += day.estimatedTokens;
+    total.estimatedTokens =
+      (total.estimatedTokens ?? 0) + (day.estimatedTokens ?? 0);
     weeklyTotals.set(key, total);
   }
 

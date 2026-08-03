@@ -27,6 +27,27 @@ export const SHORTCUTS: ShortcutRow[] = [
     win: "Ctrl K",
   },
   {
+    id: "switchPinnedSession",
+    labelKey: "shortcuts.switchPinnedSession",
+    group: "workbench",
+    mac: "⌘ 1…9",
+    win: "Ctrl 1…9",
+  },
+  {
+    id: "switchModel",
+    labelKey: "shortcuts.switchModel",
+    group: "workbench",
+    mac: "⌘ ⇧ M",
+    win: "Ctrl Shift M",
+  },
+  {
+    id: "findInChat",
+    labelKey: "shortcuts.findInChat",
+    group: "workbench",
+    mac: "⌘ F",
+    win: "Ctrl F",
+  },
+  {
     id: "newChat",
     labelKey: "shortcuts.newChat",
     group: "workbench",

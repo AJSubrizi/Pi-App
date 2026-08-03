@@ -79,11 +79,12 @@ It is a **sister project** to [pi.dev](https://pi.dev) — community-built, MIT,
 | **Sessions** | Stream chat with the real Pi process — create, resume, abort, compact |
 | **Models** | Pick model and thinking level from what Pi exposes |
 | **Projects** | Trusted folders, multi-session sidebar, workbench around your repo |
-| **Usage** | Private local activity profile with estimated tokens, streaks and tool history |
+| **Usage** | Private local activity profile with measured tokens and spend, streaks and tool history |
 | **Resources** | Files, previews, git changes (stage / discard / commit & push), embedded browser and project terminal |
 | **Packages** | Install Pi packages from npm, git or a local path (user or project scope) |
 | **Extensions** | Native UI for Pi `select` / `confirm` / `input` / `editor` and status widgets |
 | **Remote runtime** | Run Pi through system OpenSSH or an authenticated managed WSS gateway |
+| **External control** | Optional local MCP bridge for trusted projects and addressed tasks |
 | **Setup** | First-run detection and install path for the Pi CLI |
 
 ---
@@ -140,6 +141,17 @@ open /Applications/Pi.app
 
 ---
 
+## Install (Windows)
+
+The community release is currently unsigned on Windows. SmartScreen may show
+an unrecognised-app warning because an OV/EV signing certificate has not been
+configured. Verify the download came from the official Releases page before
+choosing the Windows confirmation action. The release workflow will gain
+certificate-backed signing when a Windows code-signing certificate is funded
+and added as a repository secret.
+
+---
+
 ## Develop
 
 ```bash
@@ -179,6 +191,48 @@ For remote work, SSH is the recommended default. Advanced deployments can use
 the documented [Direct RPC gateway protocol](docs/direct-rpc.md); access tokens
 stay in the operating-system keychain.
 
+### External MCP control
+
+Pi Desktop can expose an optional local MCP control plane for clients such as
+Codex, Claude or other MCP hosts. Enable it only for a desktop process you
+intend to control, then launch Pi Desktop with `PI_APP_ENABLE_MCP=1` and
+configure the client to launch the bundled executable with:
+
+```text
+pi-app mcp serve
+```
+
+The adapter speaks MCP over stdio and connects only to the desktop process on
+`127.0.0.1`. It does not open a WAN port, accept arbitrary filesystem paths or
+create an untrusted project. External task starts require an existing trusted
+project and use `ask` permissions by default, so tool approvals still appear
+in the normal Pi Desktop flow. The initial tools cover overview, trusted
+projects, session listing/reading, task start/wait and cancellation.
+
+The desktop writes a short-lived authenticated endpoint and a redacted audit
+trail in its app-data directory. The audit contains operation, project/session
+ids and outcomes; prompts, provider keys and bearer tokens are not written to
+it. Treat any MCP client configured this way as a trusted local process because
+it can read the sessions belonging to projects that are already trusted in Pi.
+
+To invalidate the current endpoint immediately while leaving the desktop open,
+run `pi-app mcp revoke`; `pi-app mcp unrevoke` clears that local marker. A future
+desktop launch always rotates the endpoint token.
+
+### Unattended automation
+
+If the desktop process is fully quit, the same local scheduler can run as an
+explicit background process:
+
+```text
+pi-app automation daemon
+```
+
+It uses the existing app-data directory, Pi authentication and append-only
+automation ledger. It has no UI and opens no network listener. Run it under the
+user's normal service manager when unattended schedules must survive a full
+desktop quit.
+
 ---
 
 ## Packages
@@ -195,10 +249,19 @@ Plan modes, gates, sub-agents and other workflows should come from packages — 
 
 ## Acknowledgements
 
+Pi Desktop is an independent implementation. No source code or product assets
+from external desktop applications are bundled with this project.
+
 Agent activity animations are powered by
 [Thinking Orbs](https://orbs.jakubantalik.com/) by
 [Jakub Antalik](https://github.com/JakubAntalik), distributed under the
 [MIT License](https://github.com/JakubAntalik/thinking-orbs/blob/main/LICENSE).
+
+Product workflow research also considered the public documentation of
+[T3 Code](https://github.com/pingdotgg/t3code) and
+[Synara](https://github.com/Emanuele-web04/synara). Pi Desktop remains an
+independent implementation: no source code or product assets from those
+projects are bundled here.
 
 ---
 

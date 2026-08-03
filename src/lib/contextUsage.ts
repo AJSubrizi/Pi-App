@@ -283,6 +283,8 @@ export interface ContextUsageDisplay {
    * Null when there is no visible content to attribute.
    */
   breakdown: ContextUsageBreakdown | null;
+  windowTokens?: number;
+  windowPercent?: number;
 }
 
 function breakdownOrNull(
@@ -299,6 +301,7 @@ function breakdownOrNull(
 export function resolveContextUsageDisplay(
   state: ContextUsageState,
   messages: ContextUsageMessage[],
+  windowTokens?: number,
 ): ContextUsageDisplay {
   const lastCompact = state.lastCompact;
   // Breakdown always from full visible transcript (host history not rewritten).
@@ -325,6 +328,10 @@ export function resolveContextUsageDisplay(
       label: formatContextChipLabel(tokens, source),
       lastCompact,
       breakdown,
+      windowTokens,
+      windowPercent: windowTokens
+        ? Math.min(100, Math.round((tokens / windowTokens) * 100))
+        : undefined,
     };
   }
 
@@ -337,6 +344,7 @@ export function resolveContextUsageDisplay(
       lastCompact,
       // Still surface visible role split as estimated (honest ~).
       breakdown,
+      windowTokens,
     };
   }
 
@@ -349,6 +357,7 @@ export function resolveContextUsageDisplay(
       label: formatContextChipLabel(null, "unknown"),
       lastCompact: null,
       breakdown: null,
+      windowTokens,
     };
   }
   return {
