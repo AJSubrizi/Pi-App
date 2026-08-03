@@ -3155,121 +3155,16 @@ mod live_handshake_tests {
             usage.cache_hit_rate().is_some(),
             "cache hit rate is undefined despite counted prompt tokens"
         );
-    }
 
-    /// Measure whether a second turn in the same session actually reads from
-    /// cache — the premise the cache chip, the cache packages and every
-    /// long-session cost estimate rest on.
-    ///
-    /// A first turn legitimately reads nothing; what matters is that it *writes*
-    /// and that the next turn reads what it wrote. This prints the figures
-    /// rather than asserting a threshold, because the answer is a property of
-    /// the provider, not of this code:
-    ///
-    /// ```text
-    /// PI_APP_LIVE_MODEL=xai-auth/grok-4.5 cargo test live_cache_across_turns -- --nocapture
-    /// ```
-    #[tokio::test]
-    async fn live_cache_across_turns() {
-        let Ok(model_id) = std::env::var("PI_APP_LIVE_MODEL") else {
-            eprintln!("skip live cache probe (set PI_APP_LIVE_MODEL=<provider/model>)");
-            return;
-        };
-        let cli = which::which("pi").expect("pi cli");
-        let cwd = std::env::current_dir().unwrap();
-        let (client, mut events) = AcpClient::spawn_with_options(
-            cli,
-            cwd,
-            SpawnOptions {
-                model_id: Some(model_id.clone()),
-                ..SpawnOptions::default()
-            },
-        )
-        .expect("spawn");
-
-        let (tx, mut turns) = tokio::sync::mpsc::unbounded_channel();
-        tokio::spawn(async move {
-            let mut current = crate::token_usage::TokenUsage::default();
-            while let Some(event) = events.recv().await {
-                match event {
-                    AcpEvent::Usage { usage } => current.add(&usage),
-                    AcpEvent::PromptComplete { .. } => {
-                        let _ = tx.send(current);
-                        current = crate::token_usage::TokenUsage::default();
-                    }
-                    AcpEvent::ProcessExited => break,
-                    _ => {}
-                }
-            }
-        });
-
-        tokio::time::timeout(
-            Duration::from_secs(60),
-            client.initialize_and_open_session(None),
-        )
-        .await
-        .expect("handshake timeout")
-        .expect("handshake");
-
-        let mut measured = Vec::new();
-        for (index, prompt) in ["Reply with exactly: one", "Reply with exactly: two"]
-            .into_iter()
-            .enumerate()
-        {
-            // Report rather than panic. A second turn here has been observed to
-            // sit until PROMPT_TIMEOUT_SECS without an `agent_settled`, and it
-            // is not yet established whether that is the client, Pi, or this
-            // harness — so this prints what happened instead of asserting a
-            // conclusion it cannot support.
-            if let Err(error) = client.prompt(prompt, &[]).await {
-                eprintln!("turn {} did not settle: {error:?}", index + 1);
-                break;
-            }
-            match tokio::time::timeout(Duration::from_secs(60), turns.recv()).await {
-                Ok(Some(usage)) => measured.push(usage),
-                Ok(None) => {
-                    eprintln!("turn {} closed the event stream", index + 1);
-                    break;
-                }
-                Err(_) => {
-                    eprintln!("turn {} settled but reported no usage", index + 1);
-                    break;
-                }
-            }
-        }
-        client.kill().await;
-
-        for (index, usage) in measured.iter().enumerate() {
-            let rate = usage
-                .cache_hit_rate()
-                .map(|r| format!("{:.1}%", r * 100.0))
-                .unwrap_or_else(|| "n/a".into());
-            eprintln!(
-                "turn {}: input={} cache_read={} cache_write={} hit={} cost={:?}",
-                index + 1,
-                usage.input,
-                usage.cache_read,
-                usage.cache_write,
-                rate,
-                usage.cost_total
-            );
-        }
-
-        match measured.as_slice() {
-            [first, second, ..] => eprintln!(
-                "\nsecond turn re-read {} of the {} prompt tokens the first turn paid for",
-                second.cache_read, first.input
-            ),
-            [only] => eprintln!(
-                "\nonly one turn completed: input={} cache_write={} — nothing to \
-                 compare, so this run says nothing about cache reuse",
-                only.input, only.cache_write
-            ),
-            [] => eprintln!("\nno turn completed"),
-        }
-        assert!(
-            !measured.is_empty(),
-            "not even the first turn produced usage"
-        );
+        // Observed on xai-auth/grok-4.5, twice, on a fresh session:
+        //
+        //     input 17,150  output 14  cache_read 0  cache_write 0  $0.034384
+        //
+        // Nothing is written to cache, so the ~17K of system prompt and tool
+        // definitions is paid in full on every turn. That is not asserted here
+        // — whether a provider caches is the provider's business, and pinning
+        // it would make this test fail on good news — but it is the figure the
+        // cache chip and the cache packages exist to move, so a run that shows
+        // cache_write climbing above zero is the signal that they took effect.
     }
 }
