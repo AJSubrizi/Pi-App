@@ -10,31 +10,12 @@ import {
   type MouseEvent as ReactMouseEvent,
 } from "react";
 import { createPortal } from "react-dom";
-import defaultWallpaperUrl from "@/assets/land-default.jpg";
 import { useFloatingMenu } from "@/lib/floatingMenu";
 import {
-  applyNativeWindowTheme,
-  applyThemeToDocument,
-  loadTheme,
-  saveTheme,
   toggleTheme,
-  type Theme,
 } from "@/lib/theme";
 import {
-  applySkinToDocument,
   isThemeSkinId,
-  applyWallpaperFlag,
-  applyWallpaperScrimToDocument,
-  clearWallpaper,
-  loadSkin,
-  loadWallpaperRecord,
-  loadWallpaperScrim,
-  saveSkin,
-  saveWallpaper,
-  saveWallpaperScrim,
-  skinPreferredTheme,
-  type ThemeSkinId,
-  type WallpaperRecord,
 } from "@/lib/themeSkin";
 import {
   DEFAULT_LAYOUT,
@@ -291,6 +272,7 @@ import {
   useWorktreeDialogs,
   type WorktreeDialogsDeps,
 } from "@/hooks/useWorktreeDialogs";
+import { useAppearance } from "@/hooks/useAppearance";
 import { useAutomationRunner } from "@/hooks/useAutomationRunner";
 import { useRewindDialogs } from "@/hooks/useRewindDialogs";
 import { useSessionActions } from "@/hooks/useSessionActions";
@@ -305,14 +287,10 @@ import {
   loadWorkspace,
   saveWorkspace,
   isComingSoon,
-  loadWorkspaceSkins,
-  saveWorkspaceSkins,
   loadPrReviewModel,
   savePrReviewModel,
-  setWorkspaceSkin,
   workspaceSkin,
   type WorkspaceId,
-  type WorkspaceSkins,
 } from "@/lib/workspace";
 import type { SettingsSectionId } from "@/components/SettingsPage";
 import { buildSettingsLabels } from "@/lib/settingsLabels";
@@ -395,23 +373,7 @@ type AppDialog =
 type PlanState = SessionPlanState;
 
 export default function App() {
-  const [theme, setTheme] = useState<Theme>(() => loadTheme(localStorage));
   const [userName, setUserName] = useState("");
-  const [skin, setSkin] = useState<ThemeSkinId>(() => {
-    const perWorkspace = loadWorkspaceSkins(localStorage, isThemeSkinId)[
-      loadWorkspace(localStorage)
-    ];
-    return isThemeSkinId(perWorkspace) ? perWorkspace : loadSkin(localStorage);
-  });
-  const [wallpaperRecord, setWallpaperRecord] = useState<WallpaperRecord | null>(
-    null,
-  );
-  const [wallpaperUrl, setWallpaperUrl] = useState<string>(defaultWallpaperUrl);
-  // Holds the current blob: URL so we can revoke it when replacing/clearing.
-  const wallpaperUrlRef = useRef<string | null>(null);
-  const [wallpaperScrim, setWallpaperScrim] = useState(() =>
-    loadWallpaperScrim(localStorage),
-  );
   const [layout, setLayout] = useState(() => {
     const saved = loadLayout(localStorage);
     if (window.matchMedia(NARROW_WORKBENCH_QUERY).matches) {
@@ -612,10 +574,6 @@ export default function App() {
     previousUsageRef.current = null;
   }, [session.sessionId]);
 
-  /** Each workspace wears its own colour skin (Settings → Appearance). */
-  const [workspaceSkins, setWorkspaceSkins] = useState<WorkspaceSkins>(() =>
-    loadWorkspaceSkins(localStorage, isThemeSkinId),
-  );
   const [settingsSection, setSettingsSection] =
     useState<SettingsSectionId>("general");
   /** Conversation is guiding the user to create a scheduled task. */
@@ -963,43 +921,6 @@ export default function App() {
   /** Self-drawn chrome when OS title bar is disabled (Windows release config). */
   const useCustomWindowChrome = platform === "win" || platform === "other";
   const [windowMaximized, setWindowMaximized] = useState(false);
-
-  useEffect(() => {
-    applyThemeToDocument(theme);
-    void applyNativeWindowTheme(theme);
-  }, [theme]);
-
-  useEffect(() => {
-    applySkinToDocument(skin);
-  }, [skin]);
-
-  // Cold-load persisted wallpaper from IndexedDB (blob is async-only) and
-  // create the object URL for the media layer. The data-wallpaper flag is
-  // already set synchronously in main.tsx so the shell is transparent now.
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      const rec = await loadWallpaperRecord();
-      if (cancelled || !rec) return;
-      const url = URL.createObjectURL(rec.blob);
-      wallpaperUrlRef.current = url;
-      setWallpaperRecord(rec);
-      setWallpaperUrl(url);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  // Keep the data-wallpaper flag in sync when the user uploads / clears.
-  useEffect(() => {
-    applyWallpaperFlag(wallpaperUrl !== null);
-  }, [wallpaperUrl]);
-
-  // Scrim strength only dims the wallpaper overlay (::after), not chrome.
-  useEffect(() => {
-    applyWallpaperScrimToDocument(wallpaperScrim);
-  }, [wallpaperScrim]);
 
   useEffect(() => {
     document.documentElement.classList.remove(
@@ -2271,86 +2192,6 @@ export default function App() {
       cleanups.forEach((u) => u());
     };
   }, [patchSessionMessages, tryApplyAutomationFromSession]);
-
-  const toggleThemeBtn = () => {
-    setTheme((t) => {
-      const n = toggleTheme(t);
-      saveTheme(localStorage, n);
-      applyThemeToDocument(n);
-      void applyNativeWindowTheme(n);
-      return n;
-    });
-  };
-
-  const applyThemeChoice = (next: Theme) => {
-    saveTheme(localStorage, next);
-    applyThemeToDocument(next);
-    void applyNativeWindowTheme(next);
-    setTheme(next);
-  };
-
-  /** Apply a skin to the shell without changing which workspace owns it. */
-  const applySkinOnly = (next: ThemeSkinId) => {
-    saveSkin(localStorage, next);
-    applySkinToDocument(next);
-    setSkin(next);
-    const preferred = skinPreferredTheme(next);
-    if (preferred && preferred !== theme) {
-      applyThemeChoice(preferred);
-    }
-  };
-
-  /**
-   * User picked a skin in Appearance: apply it and record it as the skin of
-   * `owner` (the active workspace by default).
-   *
-   * `owner` is explicit because switching workspace applies a skin *before*
-   * `setWorkspace` has committed — passing the destination avoids writing the
-   * new skin onto the workspace being left.
-   */
-  const applySkinChoice = (next: ThemeSkinId, owner: WorkspaceId = workspace) => {
-    applySkinOnly(next);
-    setWorkspaceSkins((prev) => {
-      const updated = setWorkspaceSkin(prev, owner, next);
-      saveWorkspaceSkins(localStorage, updated);
-      return updated;
-    });
-  };
-
-  const applyWallpaperChoice = async (record: WallpaperRecord | null) => {
-    if (!record) {
-      try {
-        await clearWallpaper();
-      } catch (e) {
-        showToast(String(e), 4000);
-        return;
-      }
-      if (wallpaperUrlRef.current) {
-        URL.revokeObjectURL(wallpaperUrlRef.current);
-        wallpaperUrlRef.current = null;
-      }
-      setWallpaperRecord(null);
-      setWallpaperUrl(defaultWallpaperUrl);
-      return;
-    }
-    try {
-      await saveWallpaper(record);
-    } catch (e) {
-      showToast(String(e), 4000);
-      return;
-    }
-    const url = URL.createObjectURL(record.blob);
-    if (wallpaperUrlRef.current) URL.revokeObjectURL(wallpaperUrlRef.current);
-    wallpaperUrlRef.current = url;
-    setWallpaperRecord(record);
-    setWallpaperUrl(url);
-  };
-
-  const applyWallpaperScrimChoice = (value: number) => {
-    saveWallpaperScrim(localStorage, value);
-    applyWallpaperScrimToDocument(value);
-    setWallpaperScrim(value);
-  };
 
   const navigateWorkbench = useCallback(() => {
     setAppView("workbench");
@@ -4091,6 +3932,24 @@ export default function App() {
       setToast((cur) => (cur === msg ? null : cur));
     }, ms);
   }, []);
+
+  const {
+    theme,
+    skin,
+    workspaceSkins,
+    wallpaperRecord,
+    wallpaperUrl,
+    wallpaperScrim,
+    applyThemeChoice,
+    applySkinOnly,
+    applySkinChoice,
+    applyWallpaperChoice,
+    applyWallpaperScrimChoice,
+  } = useAppearance({ workspace, onError: (message) => showToast(message, 4000) });
+
+  // Persistence and document side effects live in the hook; this only picks
+  // the other theme.
+  const toggleThemeBtn = () => applyThemeChoice(toggleTheme(theme));
 
   const runAutomation = useAutomationRunner({
     projects,

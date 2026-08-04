@@ -223,7 +223,7 @@ Everything else in this document has shipped. What has not:
 
 | | | Why it is still open |
 |---|---|---|
-| `0.5` | `App.tsx` at **9,344** lines | Target is under 6,000. Ten hooks extracted so far, each with coverage. Strictly incremental. |
+| `0.5` | `App.tsx` at **9,205** lines | Target is under 6,000. Eleven hooks extracted so far, each with coverage. Strictly incremental. |
 | `6.5` | Localisation | Closed as won't-do for this release. English stays the single source of truth. |
 | `7.4` | Design workspace | 46 lines around `EmbeddedBrowser` — option 2 was chosen, but it is a placeholder, not the live preview loop described. |
 | `8.1` / `8.2` | macOS notarization, Windows signing | Purchase decisions, not engineering ones. Until then the README's `xattr` instruction is the honest answer. |
@@ -258,8 +258,8 @@ after.
 
 ## Verification
 
-Frontend: 88 test files, 756 tests, typecheck clean, production build clean.
-Rust: 331 tests, `clippy --all-targets -D warnings` clean.
+Frontend: 89 test files, 764 tests, typecheck clean, production build clean.
+Rust: 338 tests, `clippy --all-targets -D warnings` clean.
 
 ---
 
