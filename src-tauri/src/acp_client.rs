@@ -3267,15 +3267,20 @@ mod live_handshake_tests {
             "cache hit rate is undefined despite counted prompt tokens"
         );
 
-        // Observed on xai-auth/grok-4.5, twice, on a fresh session:
+        // Measured on the same prompt, minutes apart:
         //
-        //     input 17,150  output 14  cache_read 0  cache_write 0  $0.034384
+        //   xai-auth/grok-4.5        input 17,022  cache_read    128   0.8%  $0.034
+        //   stepfun/step-3.7-flash   input    394  cache_read 10,496  96.4%  $0.000
         //
-        // Nothing is written to cache, so the ~17K of system prompt and tool
-        // definitions is paid in full on every turn. That is not asserted here
-        // — whether a provider caches is the provider's business, and pinning
-        // it would make this test fail on good news — but it is the figure the
-        // cache chip and the cache packages exist to move, so a run that shows
-        // cache_write climbing above zero is the signal that they took effect.
+        // `cache_write` is 0 for both, so it is not the signal it looks like —
+        // these providers report reads only. `cache_read` against
+        // `input + cache_read` is the figure that means anything, which is what
+        // `cache_hit_rate` already computes.
+        //
+        // Caching plainly works on this path; xai-auth is the outlier, re-paying
+        // ~17K of system prompt and tool definitions on every turn while an
+        // equivalent stepfun turn costs nothing. None of this is asserted —
+        // whether a provider caches is the provider's business, and pinning a
+        // threshold would fail the test on good news.
     }
 }
