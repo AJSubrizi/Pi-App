@@ -16,6 +16,8 @@ mistaken for an unfinished feature.
 
 - [The thesis](#the-thesis)
 - [Where we actually are](#where-we-actually-are)
+- [What driving it against real providers found](#what-driving-it-against-real-providers-found--2026-08-04)
+- [Still open](#still-open)
 - [Phase 0 — Debts that block everything else](#phase-0--debts-that-block-everything-else)
 - [Phase 1 — Attribution: know what each model did, and what it cost](#phase-1--attribution-know-what-each-model-did-and-what-it-cost)
 - [Phase 2 — Routing: the right model without thinking about it](#phase-2--routing-the-right-model-without-thinking-about-it)
@@ -70,7 +72,7 @@ The remaining items are deliberately explicit:
   `useComposer.ts`, and `useInlineEdit.ts`, each with regression coverage.
   The activity-center event wiring is now extracted into
   `src/hooks/useActivityCenter.ts` with focused regression coverage. `App.tsx`
-  is still above the roadmap's eventual 6,000-line target at 9,391 lines;
+  is still above the roadmap's eventual 6,000-line target at 9,344 lines;
   further extraction remains incremental and does not change the UI surface.
 - Scheduled automation failures now consume their due slot and persist a sanitized
   last-error marker. Runs now also have an append-only lifecycle ledger with
@@ -100,9 +102,164 @@ The remaining items are deliberately explicit:
   than risking a snapshot in the similarly named local repository. Remote Git
   status, diffs, writes and worktree operations use the SSH bridge.
 
-All verification runs for this state are green: 87 frontend test files / 738
-tests, TypeScript typecheck, UI production build, 319 Rust tests, Rust build,
-formatting, and `git diff --check`.
+---
+
+## What driving it against real providers found — 2026-08-04
+
+Everything above was verified by test suite. This section is what changed once
+real, billed turns were driven through the host against the models actually in
+use. Four of the five defects below were invisible to a green suite, and the
+fifth was a wrong conclusion of my own.
+
+A live test now exists for this. It is opt-in because it spends money:
+
+```bash
+PI_APP_LIVE_MODEL=xai-auth/grok-4.5 cargo test live_model_turn -- --nocapture
+```
+
+### Every context window was wrong
+
+`5.1` shipped, but sourced the window by guessing from the model id against a
+table naming only claude, gpt-5, grok and gemini. On a catalog of xai, qwen,
+minimax, kimi, glm, mimo and stepfun models, **all 34 entries were wrong**:
+grok-4.5 reported 131,072 against a real 500K, and everything unlisted fell to
+a 128,000 default — including several 1M-context models.
+
+That number drives `contextWindowPercent`, which drives the compaction prompt.
+Understating it by 4-8x asked the user to compact — losing context and paying
+for a summarization turn — on sessions nowhere near full.
+
+`pi --list-models` reports the real figure in the `context` column of the line
+already being parsed for the thinking flag. It now reads it. Fixed in `a071e1a`.
+
+**Lesson, and it recurred twice more below: derive from what the tool reports,
+never from a table of names.** A name table is wrong the moment a provider ships
+a model nobody added to it, and it fails silently.
+
+### Provider errors were swallowed whole
+
+Selecting a model with no balance produced *silence*. No message, no error, zero
+usage — the turn simply ended after ~20s of invisible retries.
+
+Pi does not report a refused turn as an RPC error. It reports it inside the
+assistant message and closes with `agent_end`:
+
+```json
+{"type":"agent_end","willRetry":false,"messages":[{
+  "stopReason":"error",
+  "errorMessage":"429: {\"code\":\"1113\",\"message\":\"Insufficient balance…\"}"}]}
+```
+
+`agent_end` had no arm, so the catch-all dropped it. `classify_rpc_error`
+already maps 429 to `QuotaExceeded` — it was simply never called.
+
+The real cost was not the missing message. **The `2.4` fallback chain keys off
+`AcpEvent::Error`, so it never fired for the quota and rate-limit failures it
+was built to cover.** The one case where automatic model switching is the entire
+point, and it was unreachable. Fixed in `f1a1e44`.
+
+### A cold cache reads as a broken one — `5.2`
+
+The chip called any rate under a third "cold" and captioned it *most of the
+prompt is being resent*. On a first turn that is unavoidable: xAI keys its cache
+to `prompt_cache_key`, which `pi-xai-oauth` derives from the session id, so a
+new chat routes to a cold server by design.
+
+I misread exactly this and spent an afternoon concluding a healthy channel was
+broken. Measured properly — three turns inside one persistent session:
+
+| | requests | hits | cached | rate |
+|---|---|---|---|---|
+| single-turn sessions | 1 | 0 | 0 | 0.0% |
+| one warm session | 4 | 4 | 45,184 | 74.7% |
+
+Discounting the unavoidably cold first turn, turns 2-4 reused 45,184 of 45,456
+prompt tokens — **99.4%**. Nothing was wrong.
+
+`cacheNote` now separates `opening` (first turn, nothing to reuse), `broken`
+(was warm, dropped sharply) and `notEngaging` (several turns in, still cold),
+and the note leads the tooltip instead of trailing the alarming band caption.
+It also joins the aria-label, where the explanation was missing entirely.
+Shipped in `9e1b189`.
+
+### Three defects in shipped code, found by reading it
+
+- **`costPreview`** priced `gpt-4o-mini` at the `gpt-4` rate — a first-match
+  lookup, overstating it 33x. Most-specific match now wins, as
+  `resolveTaskModel` already did. It was the only new module with no tests.
+- **The fallback chain could bill forever.** The attempted-model list was
+  rebuilt on every send, including the fallback's own resend, so two roles
+  naming each other handed a turn back and forth indefinitely with a real call
+  per hop. The exclusion moved into `nextFallbackModel`, where it is testable.
+- **`automation_headless`** recorded `ran_late` as false on the success path,
+  erasing the catch-up marker in the common case, and returned past
+  `client.kill()` on a drain timeout, orphaning a `pi` process per occurrence.
+
+### What was measured, and what it means
+
+| | input | cache_read | rate | cost/turn |
+|---|---|---|---|---|
+| `xai-auth/grok-4.5`, cold turn | 17,022 | 128 | 0.8% | $0.034 |
+| `xai-auth/grok-4.5`, warm session | — | — | 99.4% | — |
+| `stepfun/step-3.7-flash`, cold turn | 394 | 10,496 | 96.4% | $0.000 |
+
+`cache_write` is 0 on every provider measured — these report reads only, so it
+is never the signal. `cache_read / (input + cache_read)` is.
+
+stepfun hits on a *cold* turn because it caches on prefix rather than session
+affinity. That is a real difference in cold-start behaviour, not a mark against
+xAI, and it is the origin of the open item below.
+
+`pi-cache-optimizer` was installed and measured against a four-run baseline: no
+change to the hit rate, but ~2,100 fewer prompt tokens — a real 12% off each
+turn, by slimming rather than reuse. Worth keeping, for a different reason than
+the one it is filed under.
+
+---
+
+## Still open
+
+Everything else in this document has shipped. What has not:
+
+| | | Why it is still open |
+|---|---|---|
+| `0.5` | `App.tsx` at **9,344** lines | Target is under 6,000. Ten hooks extracted so far, each with coverage. Strictly incremental. |
+| `6.5` | Localisation | Closed as won't-do for this release. English stays the single source of truth. |
+| `7.4` | Design workspace | 46 lines around `EmbeddedBrowser` — option 2 was chosen, but it is a placeholder, not the live preview loop described. |
+| `8.1` / `8.2` | macOS notarization, Windows signing | Purchase decisions, not engineering ones. Until then the README's `xattr` instruction is the honest answer. |
+
+### New — session-opening cost is real and unsurfaced
+
+Not a defect; a consequence of design worth acting on. On a session-keyed
+provider, **every new chat pays the full prompt prefix again** — ~15K tokens on
+grok. Opening three chats for three related tasks costs three times the prefix;
+continuing in one costs it once. On prefix-cached providers like stepfun it does
+not apply.
+
+`5.2` now explains this when it happens. What it does not do is help *before*:
+nothing suggests continuing in an existing chat when that would be materially
+cheaper, and the parallel task batch — which deliberately opens a fresh session
+per task — has never accounted for it. Whether it should is a real trade-off:
+isolation is the point of a batch, and paying a prefix for it may simply be
+correct. It should be a measured decision rather than an unnoticed one.
+
+### New — the model menu knows which models cannot run
+
+Half this catalog is listed and selectable while having no balance. That was
+silent before `f1a1e44`; it now produces a clear error, but only *after* a turn
+has been spent waiting on retries.
+
+`2.5` shipped provider health from ledger data. It has never had entitlement
+failures to draw on, because they were being swallowed. It does now — so the
+menu can mark a channel that last refused for balance before it is chosen, not
+after.
+
+---
+
+## Verification
+
+Frontend: 88 test files, 756 tests, typecheck clean, production build clean.
+Rust: 331 tests, `clippy --all-targets -D warnings` clean.
 
 ---
 
