@@ -199,6 +199,8 @@ export interface ComposerModelMenuProps {
     compareRun: string;
     compareWorktrees: string;
     customProvider: string;
+    /** Shown on a model whose last turn was refused for balance. */
+    blocked: string;
     healthLatency: string;
     healthFailure: string;
   };
@@ -363,8 +365,13 @@ export function ComposerModelMenu({
                       key={m.id}
                       type="button"
                       className={
-                        "cmm__opt" + (m.id === modelId ? " is-active" : "")
+                        "cmm__opt" +
+                        (m.id === modelId ? " is-active" : "") +
+                        (m.blocked ? " is-blocked" : "")
                       }
+                      // Marked, never disabled: this reads the *last* turn, and
+                      // the user may have just topped the account up. Refusing
+                      // the click would make a stale inference unoverridable.
                       onClick={() => {
                         onModel(m.id);
                         setNested(null);
@@ -372,7 +379,11 @@ export function ComposerModelMenu({
                     >
                       <span className="cmm__opt-main">
                         <span className="cmm__opt-title">{m.label}</span>
-                        {m.source === "custom" ? (
+                        {m.blocked ? (
+                          <span className="cmm__opt-desc cmm__opt-desc--blocked">
+                            {labels.blocked}
+                          </span>
+                        ) : m.source === "custom" ? (
                           <span className="cmm__opt-desc">{labels.customProvider}</span>
                         ) : healthLabel ? (
                           <span className="cmm__opt-desc">{healthLabel}</span>

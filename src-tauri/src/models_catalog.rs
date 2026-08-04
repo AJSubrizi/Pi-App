@@ -25,10 +25,15 @@ pub struct AvailableModel {
     pub label: String,
     /// Catalog source, usually a Pi provider id or "custom" for app-configured providers.
     pub source: String,
-    /// Context window in tokens. Pi CLI does not expose this consistently, so
-    /// the host fills a small conservative table for known families.
+    /// Context window in tokens, read from the CLI's own `context` column.
+    /// Falls back to a small table only for entries the CLI does not list,
+    /// such as app-configured custom providers.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context_window: Option<u64>,
+    /// The last turn on this model was refused for balance or entitlement, so
+    /// choosing it will cost a wait and another refusal rather than an answer.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub blocked: bool,
     #[serde(default)]
     pub is_default: bool,
     /// Per-model reasoning efforts from CLI `info.reasoning_efforts` (may be empty).
@@ -52,6 +57,8 @@ pub struct AvailableModelsResult {
 /// for an official catalog model.
 pub fn list_available_models() -> AvailableModelsResult {
     let settings = store::load_settings();
+    // Read once: the ledger is a file, and the catalog can hold many models.
+    let blocked = crate::usage_ledger::blocked_models();
     let mut by_id: BTreeMap<String, AvailableModel> = BTreeMap::new();
     by_id.insert(
         "auto".into(),
@@ -60,6 +67,8 @@ pub fn list_available_models() -> AvailableModelsResult {
             label: "Pi default".into(),
             source: "pi".into(),
             context_window: Some(context_window_for("auto")),
+            // `auto` is whatever Pi picks; there is no single channel to block.
+            blocked: false,
             is_default: true,
             reasoning_efforts: pi_thinking_efforts(),
         },
@@ -100,6 +109,7 @@ pub fn list_available_models() -> AvailableModelsResult {
                             label: model.to_string(),
                             source: provider.to_string(),
                             context_window: Some(context_window),
+                            blocked: blocked.contains(&id),
                             is_default: false,
                             reasoning_efforts: if reasoning {
                                 pi_thinking_efforts()
@@ -141,6 +151,7 @@ pub fn list_available_models() -> AvailableModelsResult {
                 label: format!("{} · {}", provider.name, provider.model),
                 source: "custom".into(),
                 context_window: Some(context_window_for(&provider.id)),
+                blocked: blocked.contains(&provider.id),
                 is_default: provider.is_default,
                 reasoning_efforts: pi_thinking_efforts(),
             });

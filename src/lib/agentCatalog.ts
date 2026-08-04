@@ -24,6 +24,12 @@ export interface ModelOption {
   /** Catalog source; `custom` marks a configured provider in the composer. */
   source?: string;
   contextWindow?: number;
+  /**
+   * The last turn on this model was refused for balance or entitlement. A hint
+   * about the present, not a verdict: the account may have been topped up since,
+   * so the menu marks the model rather than refusing to select it.
+   */
+  blocked?: boolean;
   /** Per-model reasoning efforts from CLI cache; empty/undefined → static fallback. */
   reasoningEfforts?: EffortOption[];
 }

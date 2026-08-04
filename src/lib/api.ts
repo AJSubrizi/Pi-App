@@ -1292,6 +1292,8 @@ export interface AvailableModel {
   label: string;
   source: string;
   contextWindow?: number;
+  /** Last turn on this model was refused for balance or entitlement. */
+  blocked?: boolean;
   isDefault?: boolean;
   /** Per-model efforts from CLI models_cache; omit/empty → static fallback. */
   reasoningEfforts?: ReasoningEffort[];

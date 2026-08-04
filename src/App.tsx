@@ -1141,6 +1141,7 @@ export default function App() {
                 label: m.label || m.id,
                 source: m.source,
                 contextWindow: m.contextWindow,
+                blocked: m.blocked,
                 isDefault: m.isDefault,
                 reasoningEfforts: efforts,
               };
@@ -8006,6 +8007,7 @@ export default function App() {
                     compareRun: tr("composer.compareRun"),
                     compareWorktrees: tr("composer.compareWorktrees"),
                     customProvider: tr("composer.customProvider"),
+                  blocked: tr("composer.modelBlocked"),
                     healthLatency: tr("composer.healthLatency"),
                     healthFailure: tr("composer.healthFailure"),
                   }}

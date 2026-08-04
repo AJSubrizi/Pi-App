@@ -10241,6 +10241,17 @@ html[data-theme="light"] .ui-check.is-mixed .ui-check__box {
   font-weight: 400;
 }
 
+/* A channel whose last turn was refused for balance. Dimmed and warned, not
+   disabled: the account may have been topped up since it was recorded. */
+.cmm__opt--blocked-title,
+.cmm__opt.is-blocked .cmm__opt-title {
+  opacity: 0.62;
+}
+
+.cmm__opt-desc--blocked {
+  color: var(--warning, #d98a2b);
+}
+
 .cmm__opt-check {
   display: inline-flex;
   flex-shrink: 0;

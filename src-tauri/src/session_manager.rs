@@ -1488,13 +1488,14 @@ impl SessionManager {
                 tracing::warn!("local crash report append failed: {report_error}");
             }
         }
-        if let Err(ledger_error) = crate::usage_ledger::append_with_metadata(
+        if let Err(ledger_error) = crate::usage_ledger::append_failure_aware(
             &s.app_session_id,
             s.meta.project_id.as_deref(),
             s.model_id.as_deref(),
             crate::token_usage::TokenUsage::default(),
             latency_ms,
             "failure",
+            Some(code),
         ) {
             tracing::warn!(
                 "usage ledger failure append failed for session {}: {ledger_error}",
