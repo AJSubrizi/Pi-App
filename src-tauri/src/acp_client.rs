@@ -1124,6 +1124,11 @@ impl AcpClient {
                     error: AgentError::new(AgentErrorCode::AgentCrashed, detail),
                 });
             }
+            "agent_end" => {
+                if let Some(error) = pi_agent_end_error(&msg) {
+                    let _ = self.event_tx.send(AcpEvent::Error { error });
+                }
+            }
             _ => debug!("pi rpc event ignored type={event_type}"),
         }
     }
@@ -2120,6 +2125,80 @@ pub fn wire_pi_prompt_params(text: &str, images: &[(String, String)]) -> Value {
 }
 
 #[cfg(test)]
+mod agent_end_error_tests {
+    use super::*;
+
+    /// Captured verbatim from `pi --mode rpc` against a provider with no
+    /// balance. The turn ends with `willRetry: false` after several retries.
+    const REFUSED: &str = r#"{
+        "type": "agent_end",
+        "willRetry": false,
+        "messages": [
+            {"role":"user","content":[{"type":"text","text":"hi"}]},
+            {"role":"assistant","provider":"zai","model":"glm-4.7",
+             "content":[],"stopReason":"error",
+             "errorMessage":"429: {\"code\":\"1113\",\"message\":\"Insufficient balance or no resource package. Please recharge.\"}",
+             "usage":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"totalTokens":0}}
+        ]
+    }"#;
+
+    #[test]
+    fn surfaces_a_refused_turn_as_a_quota_error() {
+        let msg: Value = serde_json::from_str(REFUSED).unwrap();
+        let error = pi_agent_end_error(&msg).expect("refusal must surface");
+        assert_eq!(error.code, AgentErrorCode::QuotaExceeded);
+        assert!(
+            error.message.contains("Insufficient balance"),
+            "the provider's own wording must reach the user: {}",
+            error.message
+        );
+    }
+
+    /// Reporting an attempt Pi still intends to retry would raise one error per
+    /// backoff step for a failure that may yet resolve.
+    #[test]
+    fn stays_quiet_while_pi_is_still_retrying() {
+        let mut msg: Value = serde_json::from_str(REFUSED).unwrap();
+        msg["willRetry"] = Value::Bool(true);
+        assert!(pi_agent_end_error(&msg).is_none());
+    }
+
+    #[test]
+    fn a_successful_turn_reports_nothing() {
+        let msg: Value = serde_json::from_str(
+            r#"{"type":"agent_end","willRetry":false,"messages":[
+                 {"role":"assistant","content":[{"type":"text","text":"ready"}],
+                  "stopReason":"end_turn"}]}"#,
+        )
+        .unwrap();
+        assert!(pi_agent_end_error(&msg).is_none());
+    }
+
+    #[test]
+    fn an_empty_error_message_is_not_an_error() {
+        let msg: Value = serde_json::from_str(
+            r#"{"type":"agent_end","willRetry":false,"messages":[
+                 {"role":"assistant","errorMessage":"   "}]}"#,
+        )
+        .unwrap();
+        assert!(pi_agent_end_error(&msg).is_none());
+    }
+
+    /// The fallback chain only retries on codes it considers transient, so the
+    /// classification — not just the visibility — is what makes routing work.
+    #[test]
+    fn a_rate_limit_classifies_so_the_fallback_chain_can_act() {
+        let msg: Value = serde_json::from_str(
+            r#"{"type":"agent_end","willRetry":false,"messages":[
+                 {"role":"assistant","errorMessage":"rate limit exceeded, retry later"}]}"#,
+        )
+        .unwrap();
+        let error = pi_agent_end_error(&msg).expect("rate limit must surface");
+        assert_eq!(error.code, AgentErrorCode::QuotaExceeded);
+    }
+}
+
+#[cfg(test)]
 mod tool_filter_tests {
     use super::*;
 
@@ -2792,6 +2871,38 @@ fn format_jsonrpc_error(err: &Value) -> String {
         Some(d) => format!("{message} (code {code}, data: {d})"),
         None => format!("{message} (code {code})"),
     }
+}
+
+/// Extract a final provider failure from Pi's `agent_end` event.
+///
+/// Pi does not report a refused turn as an RPC error. It reports it *inside*
+/// the assistant message — `stopReason: "error"` with an `errorMessage` — and
+/// nothing here handled `agent_end`, so the whole thing was dropped by the
+/// catch-all. Selecting a model with no balance produced silence: no message,
+/// no error, zero usage, and a turn that simply ended.
+///
+/// Worse, the provider fallback chain keys off [`AcpEvent::Error`], so it never
+/// fired for the quota and rate-limit failures it exists to cover.
+///
+/// `willRetry` marks an attempt Pi intends to make again; reporting those would
+/// raise one error per backoff step for a failure that may still resolve. Only
+/// the final attempt is surfaced.
+fn pi_agent_end_error(msg: &Value) -> Option<AgentError> {
+    if msg.get("willRetry").and_then(Value::as_bool).unwrap_or(false) {
+        return None;
+    }
+    let detail = msg
+        .get("messages")
+        .and_then(Value::as_array)?
+        .iter()
+        .rev()
+        .find_map(|message| {
+            message
+                .get("errorMessage")
+                .and_then(Value::as_str)
+                .filter(|text| !text.trim().is_empty())
+        })?;
+    Some(classify_rpc_error(detail))
 }
 
 fn classify_rpc_error(e: &str) -> AgentError {
