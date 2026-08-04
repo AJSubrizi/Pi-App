@@ -3267,36 +3267,34 @@ mod live_handshake_tests {
             "cache hit rate is undefined despite counted prompt tokens"
         );
 
-        // Measured on the same prompt, minutes apart:
+        // **This test measures a cold first turn, and cannot say anything about
+        // cache reuse.** Read that before drawing a conclusion from its output.
         //
-        //   xai-auth/grok-4.5        input 17,022  cache_read    128   0.8%  $0.034
-        //   stepfun/step-3.7-flash   input    394  cache_read 10,496  96.4%  $0.000
+        // Each run opens a fresh session, and xAI keys its cache on
+        // `prompt_cache_key` — which `pi-xai-oauth` derives from the session id
+        // — so a new session is routed to a different server with a cold cache
+        // by design. Repeated runs here showed `cache_read` of 0-128 against
+        // ~15K of input, which looks like a provider that never caches. It is
+        // not: it is turn one, measured seven times.
         //
-        // `cache_write` is 0 for both, so it is not the signal it looks like —
-        // these providers report reads only. `cache_read` against
-        // `input + cache_read` is the figure that means anything, which is what
-        // `cache_hit_rate` already computes.
+        // Measured properly, three turns inside one persistent session
+        // (`pi --session-id <id>`), per `pi-cache-optimizer`'s own stats:
         //
-        // Caching plainly works on this path; xai-auth is the outlier, re-paying
-        // ~15K of system prompt and tool definitions on every turn while an
-        // equivalent stepfun turn costs nothing. None of this is asserted —
-        // whether a provider caches is the provider's business, and pinning a
-        // threshold would fail the test on good news.
+        //   single-turn sessions   1 request    0 hits        0 cached    0.0%
+        //   one warm session       4 requests   4 hits   45,184 cached   74.7%
         //
-        // Installing `pi-cache-optimizer` (Settings -> Packages -> Cache) was
-        // measured against that baseline, four runs before and three after:
+        // Discounting the unavoidably cold first turn, turns 2-4 reused 45,184
+        // of 45,456 prompt tokens — 99.4%. The channel is healthy.
         //
-        //                     input     cache_read   hit    cost/turn
-        //   before           17,022        128       0.75%   $0.0342
-        //   after            14,929        128       0.85%   $0.0300
+        // stepfun/step-3.7-flash does hit ~96% on a cold first turn, because it
+        // caches on prefix rather than session affinity. That is a real
+        // difference in cold-start behaviour, not evidence against xAI.
         //
-        // It does not fix caching here — the hit rate is unchanged inside noise.
-        // What it does is shorten the prompt by ~2,100 tokens, which is a real
-        // 12% off every turn, but by slimming rather than reuse. The cache gap
-        // is upstream of it; the package's own README notes that third-party
-        // OpenAI-compatible channels can hide cache usage, and grok reaches xAI
-        // through the `pi-xai-oauth` package rather than a native provider.
-        // `/cache-optimizer doctor` reports a low-hit diagnosis, but only in an
-        // interactive session — it returns nothing under `pi -p`.
+        // `cache_write` stays 0 everywhere: these providers report reads only,
+        // so it is never the signal. `cache_read / (input + cache_read)` is,
+        // which is what `cache_hit_rate` computes.
+        //
+        // None of this is asserted — whether a provider caches is the
+        // provider's business, and a threshold would fail on good news.
     }
 }
