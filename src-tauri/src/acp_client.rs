@@ -3278,9 +3278,25 @@ mod live_handshake_tests {
         // `cache_hit_rate` already computes.
         //
         // Caching plainly works on this path; xai-auth is the outlier, re-paying
-        // ~17K of system prompt and tool definitions on every turn while an
+        // ~15K of system prompt and tool definitions on every turn while an
         // equivalent stepfun turn costs nothing. None of this is asserted —
         // whether a provider caches is the provider's business, and pinning a
         // threshold would fail the test on good news.
+        //
+        // Installing `pi-cache-optimizer` (Settings -> Packages -> Cache) was
+        // measured against that baseline, four runs before and three after:
+        //
+        //                     input     cache_read   hit    cost/turn
+        //   before           17,022        128       0.75%   $0.0342
+        //   after            14,929        128       0.85%   $0.0300
+        //
+        // It does not fix caching here — the hit rate is unchanged inside noise.
+        // What it does is shorten the prompt by ~2,100 tokens, which is a real
+        // 12% off every turn, but by slimming rather than reuse. The cache gap
+        // is upstream of it; the package's own README notes that third-party
+        // OpenAI-compatible channels can hide cache usage, and grok reaches xAI
+        // through the `pi-xai-oauth` package rather than a native provider.
+        // `/cache-optimizer doctor` reports a low-hit diagnosis, but only in an
+        // interactive session — it returns nothing under `pi -p`.
     }
 }
