@@ -49,6 +49,72 @@ export function cacheBreakCause(
   return "unknown";
 }
 
+/**
+ * What the chip should say about the rate beyond the number itself.
+ *
+ * - `opening` — first measured turn of a session. Cold here is structural, not
+ *   a fault, and saying so is the whole point of this lint.
+ * - `broken`  — it was warm and dropped sharply; `cause` names the suspect.
+ * - `notEngaging` — several turns in and still cold, which is worth looking at.
+ */
+export type CacheNote =
+  | { kind: "opening" }
+  | { kind: "broken"; cause: CacheBreakCause }
+  | { kind: "notEngaging" };
+
+/**
+ * True when this payload is the session's first measured turn.
+ *
+ * The running total equals the turn when nothing has been folded into it yet,
+ * so no extra plumbing — no turn counter threaded through the host — is needed
+ * to know it.
+ */
+function isFirstMeasuredTurn(payload: UsagePayload): boolean {
+  const turn = payload.turn.input + payload.turn.cacheRead;
+  const total = payload.total.input + payload.total.cacheRead;
+  return turn > 0 && turn === total;
+}
+
+/**
+ * Explain a cache rate the user would otherwise misread.
+ *
+ * This exists because the misreading is real and expensive: a first turn shows
+ * near-0% on any provider that keys its cache per session — xAI routes on
+ * `prompt_cache_key`, so a fresh session lands on a cold server by design — and
+ * the chip's "cold" band makes that look like a broken channel. Measuring first
+ * turns repeatedly is precisely how one concludes a healthy provider never
+ * caches, when the next three turns in the same session reuse over 99%.
+ *
+ * Order matters. `opening` is checked before `broken` so the first turn of a
+ * session is never blamed on a model switch that also happened to occur.
+ *
+ * Returns `null` when the figures speak for themselves.
+ */
+export function cacheNote(
+  previous: UsagePayload | null,
+  current: UsagePayload,
+  signals: { attachmentsChanged?: boolean; promptChanged?: boolean } = {},
+): CacheNote | null {
+  const rate = current.cacheHitRate;
+  if (rate === null) return null;
+
+  if (isFirstMeasuredTurn(current)) {
+    return cacheStanding(rate) === "cold" ? { kind: "opening" } : null;
+  }
+
+  const cause = cacheBreakCause(previous, current, signals);
+  if (cause) return { kind: "broken", cause };
+
+  return cacheStanding(rate) === "cold" ? { kind: "notEngaging" } : null;
+}
+
+/** i18n key for a note, so the caller does not rebuild the mapping. */
+export function cacheNoteKey(note: CacheNote): string {
+  return note.kind === "broken"
+    ? `cache.break.${note.cause}`
+    : `cache.note.${note.kind}`;
+}
+
 /** How the chip should read the rate. */
 export type CacheStanding = "cold" | "warming" | "good";
 

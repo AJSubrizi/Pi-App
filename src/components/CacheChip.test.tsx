@@ -123,4 +123,38 @@ describe("CacheChip", () => {
       "Cost",
     );
   });
+
+  /**
+   * The cold band tip says the prompt is being resent, which on a session's
+   * first turn describes something unavoidable. Leading with it and appending
+   * the explanation is how a healthy provider gets read as broken.
+   */
+  it("lets a note replace the alarming band tip rather than trail it", () => {
+    const { unmount } = render(
+      <CacheChip
+        viewedSessionId="s1"
+        usage={payload({ cacheHitRate: 0.01 })}
+        labels={labels}
+      />,
+    );
+    // Without a note the band tip is what explains the number.
+    expect(screen.getByLabelText(/Cache/).getAttribute("aria-label")).toContain(
+      "Cache barely paying off",
+    );
+    unmount();
+
+    render(
+      <CacheChip
+        viewedSessionId="s1"
+        usage={payload({ cacheHitRate: 0.01 })}
+        breakHint="First turn of this chat"
+        labels={labels}
+      />,
+    );
+    const aria = screen.getByLabelText(/Cache/).getAttribute("aria-label") ?? "";
+    expect(aria).toContain("First turn of this chat");
+    expect(aria).not.toContain("Cache barely paying off");
+    // The figures are still announced alongside it.
+    expect(aria).toContain("Prompt");
+  });
 });

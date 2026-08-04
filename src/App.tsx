@@ -281,7 +281,7 @@ import { UserMenu } from "@/components/UserMenu";
 import { WorkspaceSwitcher } from "@/components/WorkspaceSwitcher";
 import { PrTree } from "@/components/PrTree";
 import { CacheChip } from "@/components/CacheChip";
-import { cacheBreakCause, type UsagePayload } from "@/lib/cacheUsage";
+import { cacheNote, cacheNoteKey, type UsagePayload } from "@/lib/cacheUsage";
 import {
   usePrWorkspace,
   type PrWorkspaceDeps,
@@ -1700,8 +1700,10 @@ export default function App() {
             // Keep only the viewed session's figures; a background task's
             // usage would otherwise overwrite the chip you are looking at.
             if (payload.sessionId !== viewingSessionIdRef.current) return;
-            const cause = cacheBreakCause(previousUsageRef.current, payload);
-            setCacheBreakHint(cause ? trRef.current(`cache.break.${cause}`) : null);
+            const note = cacheNote(previousUsageRef.current, payload);
+            setCacheBreakHint(
+              note ? trRef.current(cacheNoteKey(note) as MessageKey) : null,
+            );
             previousUsageRef.current = payload;
             setSessionUsage(payload);
             // The provider just told us exactly how full the window was, so

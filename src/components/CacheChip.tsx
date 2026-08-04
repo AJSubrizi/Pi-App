@@ -50,16 +50,25 @@ export function CacheChip({
     `${labels.cached}: ${view.cachedTokens}`,
     `${labels.output}: ${view.outputTokens}`,
     view.costLabel ? `${labels.cost}: ${view.costLabel}` : null,
-    breakHint || null,
   ]
     .filter(Boolean)
     .join(" · ");
 
+  // A note leads, replacing the band tip rather than trailing it. The cold tip
+  // reads "most of the prompt is being resent" — true but alarming, and on a
+  // session's first turn it describes something unavoidable. Leaving it in
+  // front and appending the explanation is how a healthy provider gets read as
+  // broken, which is the misreading this note exists to prevent.
+  const headline = breakHint || tip;
+
   return (
-    <Tip label={`${tip}\n${detail}`}>
+    <Tip label={`${headline}\n${detail}`}>
       <span
         className={`cache-chip cache-chip--${view.standing}`}
-        aria-label={`${labels.title} ${view.rateLabel} — ${detail}`}
+        // The headline belongs here too, not only in the hover tooltip: it is
+        // the part that explains the number, and a screen reader (or anyone not
+        // hovering) would otherwise get the figures with none of the meaning.
+        aria-label={`${labels.title} ${view.rateLabel} — ${headline} — ${detail}`}
       >
         <IconActivity size={13} />
         <span className="cache-chip__rate">{view.rateLabel}</span>

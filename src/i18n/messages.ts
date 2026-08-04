@@ -1955,6 +1955,8 @@ const en = {
   "cache.break.attachments": "Cache rate dropped sharply: attachment order or set changed (heuristic)",
   "cache.break.prompt": "Cache rate dropped sharply: prompt prefix changed (heuristic)",
   "cache.break.unknown": "Cache rate dropped sharply: prompt, tools, or provider cache key changed (heuristic)",
+  "cache.note.opening": "First turn of this chat — nothing to reuse yet. Some providers key their cache to the session, so a new chat starts cold and warms up from the next turn.",
+  "cache.note.notEngaging": "Still resending most of the prompt after several turns — the cache is not engaging in this chat",
   "cache.prompt": "Prompt",
   "cache.cached": "Cached",
   "cache.output": "Output",

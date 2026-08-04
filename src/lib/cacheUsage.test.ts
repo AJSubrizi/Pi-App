@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   cacheChipView,
   cacheBreakCause,
+  cacheNote,
+  cacheNoteKey,
   cacheStanding,
   formatCacheRate,
   formatCost,
@@ -161,5 +163,112 @@ describe("cacheChipView", () => {
     expect(v.rateLabel).toBe("0%");
     expect(v.standing).toBe("cold");
     expect(v.costLabel).toBeNull();
+  });
+});
+
+describe("cacheNote", () => {
+  /** A turn whose figures are the whole session total — i.e. the first one. */
+  function firstTurn(input: number, cacheRead: number): UsagePayload {
+    const usage = {
+      input,
+      output: 20,
+      cacheRead,
+      cacheWrite: 0,
+      totalTokens: input + cacheRead + 20,
+    };
+    return {
+      sessionId: "s1",
+      turn: usage,
+      total: { ...usage },
+      cacheHitRate: cacheRead / (input + cacheRead),
+    };
+  }
+
+  /** A later turn: the session total already carries earlier turns. */
+  function laterTurn(
+    input: number,
+    cacheRead: number,
+    over: Partial<UsagePayload> = {},
+  ): UsagePayload {
+    const usage = {
+      input,
+      output: 20,
+      cacheRead,
+      cacheWrite: 0,
+      totalTokens: input + cacheRead + 20,
+    };
+    return {
+      sessionId: "s1",
+      turn: usage,
+      total: {
+        ...usage,
+        input: input + 15_000,
+        cacheRead: cacheRead + 40_000,
+        totalTokens: 0,
+      },
+      cacheHitRate: cacheRead / (input + cacheRead),
+      ...over,
+    };
+  }
+
+  /**
+   * The regression this whole lint exists for. Measuring first turns over and
+   * over is how a healthy session-keyed provider looks like one that never
+   * caches — xAI routes on `prompt_cache_key`, so a fresh chat starts on a cold
+   * server, and the next turns in that same chat reused over 99%.
+   */
+  it("calls a cold first turn the cost of opening a session, not a fault", () => {
+    const note = cacheNote(null, firstTurn(15_057, 0));
+    expect(note).toEqual({ kind: "opening" });
+  });
+
+  it("says nothing when the first turn is already warm", () => {
+    // A prefix-caching provider can hit on turn one; that needs no excuse.
+    expect(cacheNote(null, firstTurn(394, 10_496))).toBeNull();
+  });
+
+  /** Opening is checked first, so a cold turn one is never blamed on a switch. */
+  it("does not blame a model switch for the first turn being cold", () => {
+    const previous = laterTurn(100, 9000, { modelId: "a" });
+    const note = cacheNote(previous, {
+      ...firstTurn(15_057, 0),
+      modelId: "b",
+    });
+    expect(note).toEqual({ kind: "opening" });
+  });
+
+  it("blames a sharp drop on the model switch that caused it", () => {
+    const previous = laterTurn(1000, 9000, { modelId: "a" });
+    const current = laterTurn(9000, 1000, { modelId: "b" });
+    expect(cacheNote(previous, current)).toEqual({
+      kind: "broken",
+      cause: "model",
+    });
+  });
+
+  it("flags a session that is still cold several turns in", () => {
+    const previous = laterTurn(9000, 500);
+    expect(cacheNote(previous, laterTurn(9000, 400))).toEqual({
+      kind: "notEngaging",
+    });
+  });
+
+  it("stays quiet on a healthy warm session", () => {
+    const previous = laterTurn(500, 9500);
+    expect(cacheNote(previous, laterTurn(400, 9600))).toBeNull();
+  });
+
+  it("says nothing before anything has been measured", () => {
+    expect(
+      cacheNote(null, { ...firstTurn(0, 0), cacheHitRate: null }),
+    ).toBeNull();
+  });
+
+  it("maps each note to its own message", () => {
+    expect(cacheNoteKey({ kind: "opening" })).toBe("cache.note.opening");
+    expect(cacheNoteKey({ kind: "notEngaging" })).toBe("cache.note.notEngaging");
+    expect(cacheNoteKey({ kind: "broken", cause: "model" })).toBe(
+      "cache.break.model",
+    );
   });
 });
