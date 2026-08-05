@@ -13,7 +13,6 @@ afterEach(cleanup);
 const labels = {
   code: "Code",
   pr: "Pull requests",
-  design: "Design",
 };
 
 function renderSwitcher(over: Partial<Parameters<typeof WorkspaceSwitcher>[0]> = {}) {
@@ -61,21 +60,21 @@ describe("WorkspaceSwitcher", () => {
 
   it("gives every workspace a usable title", () => {
     renderSwitcher();
-    expect(screen.getByTitle("Design")).toBeDefined();
     expect(screen.getByTitle("Code")).toBeDefined();
     expect(screen.getByTitle("Pull requests")).toBeDefined();
+  });
+
+  /** The Design workspace was removed; nothing should still offer it. */
+  it("offers no workspace beyond the ones it was given", () => {
+    renderSwitcher();
+    expect(screen.queryByTitle("Design")).toBeNull();
+    expect(screen.getAllByRole("tab")).toHaveLength(Object.keys(labels).length);
   });
 
   it("reports the clicked workspace", () => {
     const { onSelect } = renderSwitcher();
     fireEvent.click(screen.getByTitle("Pull requests"));
     expect(onSelect).toHaveBeenCalledWith("pr");
-  });
-
-  it("reports the design workspace", () => {
-    const { onSelect } = renderSwitcher();
-    fireEvent.click(screen.getByTitle("Design"));
-    expect(onSelect).toHaveBeenCalledWith("design");
   });
 
   it("moves along the list with the arrow keys", () => {
@@ -95,7 +94,7 @@ describe("WorkspaceSwitcher", () => {
     cleanup();
 
     const b = renderSwitcher({ active: last });
-    fireEvent.keyDown(screen.getByTitle("Design"), {
+    fireEvent.keyDown(screen.getByTitle("Pull requests"), {
       key: "ArrowRight",
     });
     expect(b.onSelect).toHaveBeenCalledWith(first);

@@ -11,7 +11,7 @@
 
 export const WORKSPACE_STORAGE_KEY = "pi-app.workspace";
 
-export const WORKSPACE_IDS = ["code", "pr", "design"] as const;
+export const WORKSPACE_IDS = ["code", "pr"] as const;
 export type WorkspaceId = (typeof WORKSPACE_IDS)[number];
 
 export const DEFAULT_WORKSPACE: WorkspaceId = "code";
@@ -27,7 +27,6 @@ export type WorkspaceMeta = {
 export const WORKSPACES: WorkspaceMeta[] = [
   { id: "code", labelKey: "workspace.code", comingSoon: false },
   { id: "pr", labelKey: "workspace.pr", comingSoon: false },
-  { id: "design", labelKey: "workspace.design", comingSoon: false },
 ];
 
 export function isWorkspaceId(value: unknown): value is WorkspaceId {
@@ -55,9 +54,9 @@ export interface WorkspaceStorage {
 /**
  * Read the persisted workspace.
  *
- * Anything unrecognised — a hand-edited value, or an id from a newer build the
- * user rolled back from — falls back to `code` rather than leaving the shell in
- * a workspace it cannot render.
+ * Anything unrecognised — a hand-edited value, an id from a newer build the user
+ * rolled back from, or the removed `design` workspace — falls back to `code`
+ * rather than leaving the shell in a workspace it cannot render.
  */
 export function loadWorkspace(storage: WorkspaceStorage): WorkspaceId {
   try {
@@ -79,12 +78,7 @@ export function saveWorkspace(
   }
 }
 
-/**
- * Resolve the workspace to activate when the user clicks an icon.
- *
- * Coming-soon workspaces are still selectable so the placeholder can explain
- * what is planned; the caller decides what to render.
- */
+/** Resolve the workspace to activate when the user clicks an icon. */
 export function nextWorkspace(
   current: WorkspaceId,
   clicked: WorkspaceId,
@@ -99,9 +93,9 @@ export const WORKSPACE_SKINS_STORAGE_KEY = "pi-app.workspace-skins";
 /**
  * Which colour skin each workspace wears.
  *
- * Switching workspace re-skins the shell, so the three contexts are
- * recognisable at a glance. Defaults are distinct on purpose; the user can
- * override any of them in Settings → Appearance.
+ * Switching workspace re-skins the shell, so the contexts are recognisable at a
+ * glance. Defaults are distinct on purpose; the user can override either of
+ * them in Settings → Appearance.
  *
  * The skin id type is owned by `themeSkin.ts` — kept as a plain string here so
  * this module stays free of that dependency and remains trivially testable.
@@ -111,7 +105,6 @@ export type WorkspaceSkins = Record<WorkspaceId, string>;
 export const DEFAULT_WORKSPACE_SKINS: WorkspaceSkins = {
   code: "default",
   pr: "ocean",
-  design: "rose",
 };
 
 /**

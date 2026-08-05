@@ -4298,29 +4298,6 @@ html.platform-mac[data-theme="light"] .settings-page__content {
   white-space: nowrap;
 }
 
-.design-workspace {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  min-height: 0;
-  height: 100%;
-  padding: 24px;
-  gap: 18px;
-}
-
-.design-workspace__head {
-  display: flex;
-  align-items: end;
-  justify-content: space-between;
-  gap: 24px;
-}
-
-.design-workspace__head h2 { margin: 0 0 6px; }
-.design-workspace__head p { margin: 0; color: var(--text-tertiary, #858585); }
-.design-workspace__head form { display: flex; gap: 8px; min-width: min(440px, 100%); }
-.design-workspace__head input { flex: 1; min-width: 0; }
-.design-workspace__browser { min-height: 0; border: 1px solid color-mix(in srgb, currentColor 15%, transparent); }
-.design-workspace__empty { display: grid; place-items: center; color: var(--text-tertiary, #858585); border: 1px dashed color-mix(in srgb, currentColor 18%, transparent); }
-
 .search-panel__filters {
   display: flex;
   gap: 6px;
@@ -8660,7 +8637,6 @@ html[data-theme="light"] .ui-check.is-mixed .ui-check__box {
   color: var(--text-primary);
 }
 
-
 .composer__spacer {
   flex: 1;
   min-width: 8px;
@@ -12217,7 +12193,6 @@ textarea::-webkit-scrollbar-thumb:active,
   max-width: 28rem;
 }
 
-
 .rp-chrome__badge {
   position: absolute;
   top: 0;
@@ -14911,7 +14886,6 @@ div.composer__input:empty::before {
   margin-top: 1px;
   opacity: 0.8;
 }
-
 
 /* ── Project inspect (Settings → Runtime) ───────────────────────────────── */
 

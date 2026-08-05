@@ -230,7 +230,6 @@ import {
   IconMic,
 } from "@/components/icons";
 import { AutomationsPage } from "@/components/AutomationsPage";
-import { DesignWorkspace } from "@/components/DesignWorkspace";
 import { OpenLocationButton } from "@/components/OpenLocationButton";
 import { ContextMenu, type ContextMenuItem } from "@/components/ContextMenu";
 import {
@@ -287,6 +286,7 @@ import {
   loadWorkspace,
   saveWorkspace,
   isComingSoon,
+  WORKSPACE_IDS,
   loadPrReviewModel,
   savePrReviewModel,
   workspaceSkin,
@@ -3004,7 +3004,7 @@ export default function App() {
           void newChat(project);
         },
       })),
-      ...(["code", "pr", "design"] as const).map((id) => ({
+      ...WORKSPACE_IDS.map((id) => ({
         id: `workspace:${id}`,
         label: `${tr("palette.switchWorkspace")} · ${tr(`workspace.${id}`)}`,
         run: () => {
@@ -6521,7 +6521,6 @@ export default function App() {
             labels={{
               code: tr("workspace.code"),
               pr: tr("workspace.pr"),
-              design: tr("workspace.design"),
             }}
             comingSoonSuffix={tr("workspace.comingSoon")}
           />
@@ -6932,12 +6931,7 @@ export default function App() {
             }}
           />
 
-          {workspace === "design" ? (
-            <DesignWorkspace
-              locale={locale}
-              t={(key, vars) => tr(key as MessageKey, vars)}
-            />
-          ) : isComingSoon(workspace) ? (
+          {isComingSoon(workspace) ? (
             <div className="ws-soon">
               <h2 className="ws-soon__title">{tr("workspace.soonTitle")}</h2>
               <p className="ws-soon__body">{tr("workspace.soonBody")}</p>

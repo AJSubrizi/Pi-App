@@ -1,5 +1,5 @@
 /**
- * Workspace switcher — the three icons at the foot of the sidebar, above the
+ * Workspace switcher — the icons at the foot of the sidebar, above the
  * profile row.
  *
  * Presentational only: it renders the workspaces it is given and reports
@@ -9,7 +9,6 @@
 
 import {
   IconWorkspaceCode,
-  IconWorkspaceDesign,
   IconWorkspacePr,
 } from "@/components/icons";
 import { WORKSPACES, type WorkspaceId } from "@/lib/workspace";
@@ -20,7 +19,6 @@ const ICONS: Record<
 > = {
   code: IconWorkspaceCode,
   pr: IconWorkspacePr,
-  design: IconWorkspaceDesign,
 };
 
 export function WorkspaceSwitcher({

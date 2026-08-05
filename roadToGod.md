@@ -25,7 +25,7 @@ mistaken for an unfinished feature.
 - [Phase 4 — Parallelism you can trust](#phase-4--parallelism-you-can-trust)
 - [Phase 5 — Context and cache economics](#phase-5--context-and-cache-economics)
 - [Phase 6 — The daily-driver surface](#phase-6--the-daily-driver-surface)
-- [Phase 7 — Workspaces: PR and Design](#phase-7--workspaces-pr-and-design)
+- [Phase 7 — Workspaces: PR](#phase-7--workspaces-pr-and-design)
 - [Phase 8 — Distribution and trust](#phase-8--distribution-and-trust)
 - [Phase 9 — External control](#phase-9--external-control)
 - [Deliberately not doing](#deliberately-not-doing)
@@ -57,7 +57,7 @@ comparison and adoption, isolated worktree runs, the running-task dock,
 notifications and interrupted-turn recovery, model-aware context and cache
 diagnostics, pre-send cost previews, the command palette and keyboard
 switching, cross-session comparison, PR review comments and multi-model review,
-the live Design workspace, verified update manifests, opt-in local crash
+verified update manifests, opt-in local crash
 reports, an SSH workspace bridge for Files, Changes, terminal and Git
 worktree operations, an opt-in loopback MCP bridge for external control, and an
 optional headless automation daemon for fully-quit desktop deployments.
@@ -72,7 +72,7 @@ The remaining items are deliberately explicit:
   `useComposer.ts`, and `useInlineEdit.ts`, each with regression coverage.
   The activity-center event wiring is now extracted into
   `src/hooks/useActivityCenter.ts` with focused regression coverage. `App.tsx`
-  is still above the roadmap's eventual 6,000-line target at 9,344 lines;
+  is still above the roadmap's eventual 6,000-line target at 9,200 lines;
   further extraction remains incremental and does not change the UI surface.
 - Scheduled automation failures now consume their due slot and persist a sanitized
   last-error marker. Runs now also have an append-only lifecycle ledger with
@@ -223,10 +223,25 @@ Everything else in this document has shipped. What has not:
 
 | | | Why it is still open |
 |---|---|---|
-| `0.5` | `App.tsx` at **9,205** lines | Target is under 6,000. Eleven hooks extracted so far, each with coverage. Strictly incremental. |
+| `0.5` | `App.tsx` at **9,200** lines | Target is under 6,000. Eleven hooks extracted so far, each with coverage. Strictly incremental. |
 | `6.5` | Localisation | Closed as won't-do for this release. English stays the single source of truth. |
-| `7.4` | Design workspace | 46 lines around `EmbeddedBrowser` — option 2 was chosen, but it is a placeholder, not the live preview loop described. |
 | `8.1` / `8.2` | macOS notarization, Windows signing | Purchase decisions, not engineering ones. Until then the README's `xattr` instruction is the honest answer. |
+
+### `7.4` — resolved by removal
+
+The Design workspace is gone: the icon, the placeholder component, its i18n,
+its skin and its command-palette entry. Option 3 of the three listed below.
+
+It shipped as 46 lines around `EmbeddedBrowser` and had been "coming soon" for
+two releases. A third of the switcher was spent advertising something that did
+nothing, and a permanent placeholder is worse than an absence — it asks the
+user to keep noticing an unkept promise. Nothing is lost that was not already
+absent, and the section below still records what it could become.
+
+`loadWorkspace` already fell back to `code` for any unrecognised id, so anyone
+sitting in Design when it was removed migrates on next launch rather than
+opening into a workspace the shell can no longer render. That is now pinned by
+a test rather than left to the fallback's good intentions.
 
 ### New — session-opening cost is real and unsurfaced
 
@@ -258,7 +273,7 @@ after.
 
 ## Verification
 
-Frontend: 89 test files, 764 tests, typecheck clean, production build clean.
+Frontend: 89 test files, 765 tests, typecheck clean, production build clean.
 Rust: 338 tests, `clippy --all-targets -D warnings` clean.
 
 ---

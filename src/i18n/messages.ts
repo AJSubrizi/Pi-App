@@ -851,10 +851,6 @@ const en = {
   "browser.forward": "Forward",
   "browser.address": "Address",
   "browser.soon": "Soon",
-  "design.title": "Design preview",
-  "design.description": "Open a local or remote preview and inspect it as a first-class design surface.",
-  "design.urlPlaceholder": "localhost:3000 or https://…",
-  "design.empty": "Enter a preview URL to start the visual loop.",
   "composer.advanced": "Advanced",
   "composer.permissionTitle":
     "Aligned with Pi: default Ask; accept edits; session allow; dontAsk; YOLO bypass.",
@@ -2003,7 +1999,6 @@ const en = {
   "pr.multiReviewNeedModels": "Select at least two available models before starting a multi-model review.",
   "workspace.code": "Code",
   "workspace.pr": "Pull requests",
-  "workspace.design": "Design",
   "workspace.comingSoon": "coming soon",
   "workspace.soonTitle": "Design workspace",
   "workspace.soonBody":

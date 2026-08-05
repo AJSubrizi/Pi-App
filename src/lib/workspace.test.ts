@@ -52,7 +52,8 @@ describe("workspace ids", () => {
   it("accepts only known ids", () => {
     expect(isWorkspaceId("code")).toBe(true);
     expect(isWorkspaceId("pr")).toBe(true);
-    expect(isWorkspaceId("design")).toBe(true);
+    // Removed workspace: an id that used to be valid must not still be.
+    expect(isWorkspaceId("design")).toBe(false);
     expect(isWorkspaceId("nope")).toBe(false);
     expect(isWorkspaceId("")).toBe(false);
     expect(isWorkspaceId(null)).toBe(false);
@@ -72,7 +73,6 @@ describe("workspace ids", () => {
   });
 
   it("marks all declared workspaces as available", () => {
-    expect(isComingSoon("design")).toBe(false);
     expect(isComingSoon("code")).toBe(false);
     expect(isComingSoon("pr")).toBe(false);
   });
@@ -101,6 +101,16 @@ describe("persistence", () => {
     expect(loadWorkspace(s)).toBe("code");
   });
 
+  /**
+   * Anyone sitting in the Design workspace when it was removed has `design`
+   * persisted. Without this they would reopen the app into a workspace the
+   * shell can no longer render.
+   */
+  it("migrates a user out of the removed design workspace", () => {
+    const s = memoryStorage({ [WORKSPACE_STORAGE_KEY]: "design" });
+    expect(loadWorkspace(s)).toBe("code");
+  });
+
   it("survives storage throwing", () => {
     const s = throwingStorage();
     expect(loadWorkspace(s)).toBe("code");
@@ -117,8 +127,8 @@ describe("nextWorkspace", () => {
     expect(nextWorkspace("pr", "pr")).toBe("pr");
   });
 
-  it("allows selecting the design workspace", () => {
-    expect(nextWorkspace("code", "design")).toBe("design");
+  it("allows selecting another workspace", () => {
+    expect(nextWorkspace("code", "pr")).toBe("pr");
   });
 });
 
@@ -137,10 +147,9 @@ describe("per-workspace skins", () => {
   });
 
   it("changing one workspace leaves the others alone", () => {
-    const next = setWorkspaceSkin(DEFAULT_WORKSPACE_SKINS, "design", "mist");
-    expect(next.design).toBe("mist");
+    const next = setWorkspaceSkin(DEFAULT_WORKSPACE_SKINS, "pr", "mist");
+    expect(next.pr).toBe("mist");
     expect(next.code).toBe(DEFAULT_WORKSPACE_SKINS.code);
-    expect(next.pr).toBe(DEFAULT_WORKSPACE_SKINS.pr);
   });
 
   it("fills gaps from defaults rather than returning undefined", () => {
@@ -150,20 +159,19 @@ describe("per-workspace skins", () => {
     const skins = loadWorkspaceSkins(s);
     expect(skins.pr).toBe("gothic");
     expect(skins.code).toBe(DEFAULT_WORKSPACE_SKINS.code);
-    expect(skins.design).toBe(DEFAULT_WORKSPACE_SKINS.design);
   });
 
   it("rejects entries the skin system would not recognise", () => {
     const s = memoryStorage({
       [WORKSPACE_SKINS_STORAGE_KEY]: JSON.stringify({
         pr: "from-a-newer-build",
-        design: 42,
+        code: 42,
       }),
     });
     const known = (v: unknown) => v === "ocean" || v === "rose";
     const skins = loadWorkspaceSkins(s, known);
     expect(skins.pr).toBe(DEFAULT_WORKSPACE_SKINS.pr);
-    expect(skins.design).toBe(DEFAULT_WORKSPACE_SKINS.design);
+    expect(skins.code).toBe(DEFAULT_WORKSPACE_SKINS.code);
   });
 
   it("survives malformed or absent JSON", () => {
@@ -176,7 +184,7 @@ describe("per-workspace skins", () => {
 
   it("reads a single workspace with a default fallback", () => {
     expect(workspaceSkin(DEFAULT_WORKSPACE_SKINS, "pr")).toBe("ocean");
-    expect(workspaceSkin({} as never, "design")).toBe("rose");
+    expect(workspaceSkin({} as never, "code")).toBe("default");
   });
 });
 
